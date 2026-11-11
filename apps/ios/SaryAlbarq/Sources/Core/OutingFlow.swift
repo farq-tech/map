@@ -160,7 +160,8 @@ enum OutingCTA: String, Equatable {
     var title: String {
         switch self {
         case .startOuting: return "ابدأ الطلعة"
-        case .waitLeader: return "بانتظار بدء الطلعة"
+        /* The member's ONE waiting message (the header and the sheet stay quiet about it). */
+        case .waitLeader: return "ننتظر أمير الطلعة"
         case .whereTo: return "وين رايحين؟"
         case .startLeg: return "ابدأ المشوار"
         case .changeDestination: return "غيّر الوجهة"
@@ -188,8 +189,13 @@ enum OutingCTA: String, Equatable {
 
 struct OutingFlowInput: Equatable {
     var status: OutingStatus?
+    /// Starts the outing (owner, co-leader or `can_lead`): the server's `requireLeader` for «start».
     var iLead = false
-    /// Ending stays the owner's (the server's rule).
+    /// Ending stays the owner's — the server's `setStatus` runs `requireOwner` for «end» only
+    /// (apps/api/lib/outings/service.js). Every «أنهِ الطلعة» entry uses this same rule:
+    /// this CTA (`endSuggested`), «المزيد» → «الطلعة» (`settingsTab.isLeader` = `iOwn`) and
+    /// `TripPanelUI.canEnd` (`TripPresenterInput.iLead` is filled from `iOwn`). A co-leader can
+    /// start and pause, never end.
     var iOwn = false
     var legs: [OutingLeg] = []
     /// Chosen in «وين رايحين؟», not started yet.
@@ -238,11 +244,13 @@ enum OutingFlow {
         let endFirst = i.endSuggested && i.iOwn
         switch s {
         case .notStarted:
-            return OutingFlowUI(state: s, line: i.iLead ? "ما بدأت الطلعة" : "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها", primary: i.iLead ? .startOuting : .waitLeader)
+            /* The member hears «ننتظر أمير الطلعة» once — on the button; the header only says the state. */
+            return OutingFlowUI(state: s, line: "ما بدأت الطلعة", primary: i.iLead ? .startOuting : .waitLeader)
         case .paused:
             return OutingFlowUI(state: s, line: "الطلعة متوقفة مؤقتًا", primary: nil)
         case .idle:
-            return OutingFlowUI(state: s, line: liveLine(i.liveCount), primary: endFirst ? .endOuting : .whereTo)
+            /* «… مباشر» is the sheet's line (SarySheetSummary): the header does not repeat the count. */
+            return OutingFlowUI(state: s, line: liveLine(0), primary: endFirst ? .endOuting : .whereTo)
         case let .picked(d):
             return OutingFlowUI(state: s, line: "الوجهة \(d.name) · جاهزين؟", primary: .startLeg)
         case let .onLeg(leg):
@@ -267,6 +275,20 @@ enum OutingFlow {
         if m < 60 { return "\(SaryFormat.number(m)) د" }
         let h = m / 60, r = m % 60
         return r == 0 ? "\(SaryFormat.number(h)) س" : "\(SaryFormat.number(h)) س \(SaryFormat.number(r)) د"
+    }
+}
+
+/// «أنهِ الطلعة»: ONE confirmation everywhere (the CTA, «المزيد» → «الطلعة»), one icon.
+/// `flag.checkered` stays «وصلنا»'s.
+enum EndOutingCopy {
+    static let title = "تنهي الطلعة للكل؟"
+    static let confirm = "أنهِها"
+    static let cancel = "لا"
+    static let systemImage = "house.fill"
+
+    static func message(everyoneArrived: Bool = false) -> String {
+        everyoneArrived ? "وصل الربع كلهم. يوقف إرسال المواقع عند الكل ويطلع ملخص الطلعة."
+                        : "يوقف إرسال المواقع عند الكل ويطلع ملخص الطلعة بكل مشاويرها. ما تقدر ترجعها."
     }
 }
 

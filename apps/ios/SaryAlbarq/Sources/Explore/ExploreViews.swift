@@ -667,12 +667,34 @@ struct ExploreTopBar: View {
             .padding(1)
             .frame(height: 46)
             .saryGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .chrome)
+            /* UI-AUDIT م6: the desert features in the open, not three levels under «الطبقات». */
+            HStack(spacing: 8) {
+                chip("tent.fill", "الكشتة", id: "explore.camp") { controller.performAction("camp") }
+                chip("point.topleft.down.to.point.bottomright.curvepath", "دروب البر", id: "explore.desertRoute") { controller.performAction("desertRoute") }
+                Spacer(minLength: 0)
+            }
             ExploreCoordinateBar(model: controller.exploreReading, format: controller.coordFormat,
                                  toggleFormat: { controller.coordFormat = controller.coordFormat == .decimal ? .dms : .decimal },
                                  copy: controller.copyCrosshair, save: controller.saveCrosshair)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("explore.header")
+    }
+
+    /// «الكشتة» / «دروب البر»: a 44 pt glass capsule under the layer bar.
+    private func chip(_ symbol: String, _ title: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.palette.accentText)
+                Text(title).font(.sary(14, .medium)).foregroundStyle(theme.palette.textPrimary).lineLimit(1)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .saryGlass(Capsule(), role: .chrome, interactive: true)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityIdentifier(id)
     }
 
     private func round(_ symbol: String, label: String, id: String, active: Bool = false, action: @escaping () -> Void) -> some View {

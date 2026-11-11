@@ -127,7 +127,13 @@ extension LiveOutingController {
         }
         cardMessage[id] = nil
         modal = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.navigate(r) }
+        /* Guiding somewhere else: ask first, like «اتجه» («نغيّر الوجهة إلى …؟»); refreshing the same
+         * friend's moved position («حدّث الطريق») does not ask. */
+        let ask = LiveScreenRules.memberGoNeedsConfirm(phase: nav.phase, currentMemberId: nav.target?.memberId, memberId: id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self else { return }
+            if ask, case let .success(t) = r { self.confirm = .retarget(t) } else { self.navigate(r) }
+        }
     }
 
     /// A long press on the map: «ابدأ الملاحة إلى هنا».
@@ -292,21 +298,16 @@ extension LiveOutingController {
 
     // MARK: the control cluster while navigating
 
-    /// The round buttons on the right while guiding (v2, four at most): the camera (compass /
-    /// recentre), «على الطريق» (the nearest station), the voice, «مسارات». SOS keeps its own place.
+    /// The round buttons on the right while guiding (UI-AUDIT م3, two at most): the camera (compass /
+    /// recentre) and «على الطريق» (the nearest station). «الصوت» and «المسارات» are in the pulled-up
+    /// guidance sheet (`NavTripOptions`) only. SOS keeps its own place.
     var navSideItems: [SaryMapControlItem] {
-        var items = [
+        let all = [
             cameraModeItem,
             SaryMapControlItem(id: "nav.search", systemImage: "fuelpump.fill", label: "على الطريق", accessibilityID: "nav.search",
                                hint: "أقرب محطة على طريقك"),
-            SaryMapControlItem(id: "nav.mute", systemImage: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                               label: nav.muted ? "الصوت مكتوم" : "الصوت", accessibilityID: "nav.mute", isActive: nav.muted),
         ]
-        if navCanShowRoutes {
-            items.append(SaryMapControlItem(id: "nav.routes", systemImage: "arrow.triangle.branch", label: "مسارات",
-                                            accessibilityID: "nav.routes", hint: "الطرق البديلة"))
-        }
-        return Array(items.prefix(4))
+        return LiveScreenRules.navSideIDs.compactMap { id in all.first { $0.id == id } }
     }
 
     /// While guiding: the camera button («تتبعني» / «باتجاهي») and «نظرة عامة» (voice and steps sit in the guidance bar).

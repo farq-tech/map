@@ -218,7 +218,8 @@ struct LiveOutingScreen: View {
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller),
                              radio: GroupAudioCenters.of(controller),
                              sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger)),
-                             side: showSide ? AnyView(sideView(side, exploring: exploring, captions: !guidingHUD).chromeFrame("cluster")) : nil)
+                             /* My SOS on (focused mode): no side buttons — the strip, the walkie-talkie and the map. */
+                             side: showSide && !controller.sosFocused ? AnyView(sideView(side, exploring: exploring, captions: !guidingHUD).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
                 if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
                     /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. */
@@ -230,11 +231,8 @@ struct LiveOutingScreen: View {
                     PickingBanner(moving: controller.picking.moving, cancel: controller.cancelPicking)
                         .chromeFrame("picking")
                 }
-                if offersCityRealistic(exploring: exploring, driving: driving) {
-                    RealisticEntryButton(id: "explore.city-realistic", title: "اعرضها بالوضع الواقعي") { openRealistic(atMapCamera: true) }
-                        .chromeFrame("city-realistic")
-                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                }
+                /* «اعرضها بالوضع الواقعي» over a city is the side «واقعي» button itself (one entry): tilted
+                 * over a city it opens at the map's camera (`exploreSide`, `controlTapped`). */
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: 680)
@@ -248,19 +246,30 @@ struct LiveOutingScreen: View {
                 Spacer()
                 if exploring {
                     if controller.sheetDetent == .peek {
-                        Text("اضغط على أي مكان بالخريطة عشان تشوف بريفه")
-                            .font(.sary(12, .regular))
-                            .foregroundStyle(theme.palette.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 200)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .saryGlass(Capsule(), role: .chrome)
-                            .accessibilityIdentifier("explore.hint")
-                            .chromeFrame("dock")
-                            .padding(.bottom, lift + theme.space(.m))
+                        /* The hint in the middle; a small walkie-talkie stays reachable (UI-AUDIT م3). */
+                        HStack(alignment: .center, spacing: theme.space(.s)) {
+                            Spacer(minLength: 0)
+                            Text("اضغط على أي مكان بالخريطة عشان تشوف بريفه")
+                                .font(.sary(12, .regular))
+                                .foregroundStyle(theme.palette.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 200)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .saryGlass(Capsule(), role: .chrome)
+                                .accessibilityIdentifier("explore.hint")
+                                .chromeFrame("dock")
+                            Spacer(minLength: 0)
+                            if !ended {
+                                SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: false, level: controller.pttLevel,
+                                              openChannels: { controller.modal = .pttChannels })
+                                    .chromeFrame("ptt")
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, lift + theme.space(.m))
                     }
                 } else if !ended {
-                    if driving, controller.nav.isActive, controller.sheetDetent == .peek,
+                    if driving, controller.nav.isActive, controller.sheetDetent == .peek, LiveScreenRules.showsConvoyLine(ui.alerts),
                        let line = LiveCalmRules.convoyLine(ui.participantsTab.participants) {
                         ConvoyLinePill(text: line) { controller.selectedTab = .group; controller.sheetDetent = .half }
                             .chromeFrame("convoy")
@@ -276,7 +285,8 @@ struct LiveOutingScreen: View {
                      * («ابدأ الطلعة» / «وين رايحين؟» / «ابدأ المشوار») is big and the walkie-talkie is a round
                      * button beside it; driving — the walkie-talkie is big and «وصلنا» is compact. */
                     let flow = controller.flowUI
-                    let hasCTA = flow.primary != nil
+                    /* My SOS on (focused mode): the CTA steps aside; the SOS strip has «أنا بخير». */
+                    let hasCTA = flow.primary != nil && !controller.sosFocused
                     /* «وصلنا» while driving a leg is the only compact case; any stopped state («وين رايحين؟»,
                      * «ابدأ المشوار»…) keeps the primary big even if the car is still rolling. */
                     let ctaCompact: Bool = {
@@ -305,40 +315,22 @@ struct LiveOutingScreen: View {
                                       channelLabel: controller.session.walkie.showsChannels ? PTTChannels.chipLabel(controller.session.walkie.currentChannel) : nil,
                                       openChannels: { controller.modal = .pttChannels })
                             .chromeFrame("ptt")
-                        if ctaCompact {
+                        if ctaCompact && hasCTA {
                             Spacer(minLength: 0)
                             OutingPrimaryCTA(ui: flow, compact: true, tapped: controller.flowTapped)
                                 .chromeFrame("flow")
                         } else if driving && !hasCTA {
                             Spacer()
                         }
-                        /* Leaders can end the outing from the live map at any stage. Keep this
-                         * separate from the trip CTA and PTT; confirmation prevents an accidental end. */
-                        if controller.tripPanel.canEnd {
-                            Button { controller.legConfirmEnd = true } label: {
-                                Image(systemName: "flag.checkered")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundStyle(theme.palette.emergencyText)
-                                    .frame(width: 48, height: 48)
-                                    .background(theme.palette.emergency.opacity(0.14), in: Circle())
-                                    .overlay(Circle().stroke(theme.palette.emergencyText.opacity(0.32), lineWidth: 1))
-                            }
-                            .buttonStyle(SaryPressStyle())
-                            .accessibilityLabel("أنهِ الطلعة")
-                            .accessibilityHint("ينهي الطلعة عند الجميع بعد التأكيد")
-                            .accessibilityIdentifier("outing-end")
-                            .transition(.scale.combined(with: .opacity))
-                        }
+                        /* UI-AUDIT م3: no red «أنهِ الطلعة» flag on the map. Ending is in «المزيد» → «الطلعة»
+                         * (the owner) and this CTA when «رجعتوا؟» suggests it — one confirmation below. */
                         if guidingHUD && controller.speed.everRead {
                             NavSpeedCluster(ui: controller.speedometerUI, limit: controller.nav.progress?.speedLimitKmh)
                                 .chromeFrame("speed")
                                 .transition(.opacity)
                         }
-                        if rowMode {
-                            SaryControlCluster(items: rowItems(exploring: exploring), axis: .horizontal, action: controlTapped)
-                                .chromeFrame("cluster-row")
-                                .transition(.opacity)
-                        }
+                        /* No side row at the sheet's middle height (UI-AUDIT م3): the camera is on the map,
+                         * «طريق الرجعة» is the side shortcut or «المزيد» → «الطريق». */
                     }
                     .overlay(alignment: .topTrailing) {
                         /* Guiding with no speed read yet: the posted limit alone, where the speed will be. */
@@ -354,13 +346,13 @@ struct LiveOutingScreen: View {
                     .padding(.bottom, lift + theme.space(.s))
                     .opacity(controller.sheetDetent == .full ? 0 : 1)
                     .allowsHitTesting(controller.sheetDetent != .full)
-                    .confirmationDialog("أنهِ الطلعة للكل؟", isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
+                    .confirmationDialog(EndOutingCopy.title, isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
                                         titleVisibility: .visible) {
-                        Button("أنهِ الطلعة للجميع", role: .destructive) { controller.endOutingFlow() }
+                        Button(EndOutingCopy.confirm, role: .destructive) { controller.endOutingFlow() }
                             .accessibilityIdentifier("outing-end-confirm")
-                        Button("لا، نكمل", role: .cancel) {}
+                        Button(EndOutingCopy.cancel, role: .cancel) {}
                     } message: {
-                        Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
+                        Text(EndOutingCopy.message(everyoneArrived: controller.tripPanel.everyoneArrived))
                     }
                 }
             }
@@ -379,6 +371,9 @@ struct LiveOutingScreen: View {
         .animation(theme.animation(.smooth), value: controller.nav.phase)
         .animation(theme.animation(.smooth), value: visuals.cityTilt)
     }
+
+    /// VoiceOver value of «واقعي» while it opens the city at the map's own camera.
+    static let cityRealisticValue = "المدينة بزاوية الخريطة"
 
     /// Exploring, tilted over a city, online, stopped and not guiding (the realistic view's own rules).
     private func offersCityRealistic(exploring: Bool, driving: Bool) -> Bool {
@@ -399,7 +394,9 @@ struct LiveOutingScreen: View {
         [
             SaryMapControlItem(id: "drone", systemImage: "airplane", label: "درون", accessibilityID: "explore-drone",
                                hint: "طيران درون استكشافي حول علامة الوسط"),
-            SaryMapControlItem(id: "realistic", systemImage: "mountain.2", label: "واقعي", accessibilityID: "explore-realistic"),
+            SaryMapControlItem(id: "realistic", systemImage: visuals.cityTilt ? "building.2" : "mountain.2", label: "واقعي", accessibilityID: "explore-realistic",
+                               hint: "اعرضها بالوضع الواقعي",
+                               value: offersCityRealistic(exploring: true, driving: false) ? Self.cityRealisticValue : nil),
         ] + SaryMapControlItem.explore(terrain3D: controller.terrain3D, tracksShown: trackLibrary.shown.count).filter { $0.id == "places" }
             .map { var i = $0; i.label = "أماكني"; return i }
     }
@@ -456,7 +453,7 @@ struct LiveOutingScreen: View {
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
         case "tracks": controller.modal = .tracks
-        case "realistic": openRealistic()
+        case "realistic": openRealistic(atMapCamera: offersCityRealistic(exploring: controller.exploreActive, driving: false))
         case "drone": if let c = controller.exploreReading.reading?.center { MapVisualsHub.shared.fly(to: c) }
         default: controller.navControlTapped(id)
         }
@@ -576,8 +573,9 @@ private struct LiveTopStack: View {
                                 HStack(alignment: .center, spacing: theme.space(.s)) {
                                     SaryAlertLane(alerts: [card], limit: 1, tapped: controller.actions.alertTapped,
                                                   dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent)
-                                    if true {
-                                        /* No header (the guidance banner is the top bar): the history is on the alert itself. */
+                                    if LiveScreenRules.historyBesideCard(bannerOnly: bannerOnly) {
+                                        /* No header (the guidance banner is the top bar): the history is on the alert itself.
+                                         * With the header, its bell is the one way in (was `if true`: two at once). */
                                         AlertHistoryButton(open: controller.bellOpen) { controller.statusExpanded = false; controller.bellOpen.toggle() }
                                     }
                                 }
@@ -643,6 +641,7 @@ private struct LiveTopStack: View {
                        bellTapped: { controller.statusExpanded = false; controller.bellOpen.toggle() },
                        bellOpen: controller.bellOpen,
                        hasHistory: !controller.alertHistory.isEmpty,
+                       showsBell: LiveScreenRules.showsBell(bell: bell, hasHistory: !controller.alertHistory.isEmpty, open: controller.bellOpen),
                        exploreTapped: nil,
                        radio: radio.showsNowPlaying && !ended
                            ? RadioHeaderUI(title: radio.nowItem?.title ?? "", playing: radio.state.playing, muted: radio.muted, open: controller.radioBarOpen)
@@ -650,7 +649,8 @@ private struct LiveTopStack: View {
                        radioTapped: {
                            if driving { radio.open() } else { controller.radioBarOpen.toggle() }
                        },
-                       settingsTapped: { controller.statusExpanded = false; controller.openSettings() })
+                       /* UI-AUDIT م3: no gear in the header — «الإعدادات» is «المزيد» → «الطلعة». */
+                       settingsTapped: nil)
         }
         .task { controller.feedWeather(force: true) }
     }
@@ -813,7 +813,7 @@ struct EndedTripBanner: View {
                     .background(Circle().fill(p.live.opacity(0.2)))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("الرحلة انتهت").font(.sary(16, .bold)).foregroundStyle(p.textPrimary)
+                    Text("انتهت الطلعة").font(.sary(16, .bold)).foregroundStyle(p.textPrimary)
                     Text(subtitle).font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

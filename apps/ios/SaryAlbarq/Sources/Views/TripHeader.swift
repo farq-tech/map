@@ -82,6 +82,8 @@ struct TripHeader: View {
     var bellOpen = false
     /// Past alerts exist: the bell stays reachable (the history) even with nothing queued.
     var hasHistory = false
+    /// UI-AUDIT م3: the history button only with something in it (`LiveScreenRules.showsBell`).
+    var showsBell = true
     /// «استكشاف» (stopped only): the round map button after the header.
     var exploreTapped: (() -> Void)? = nil
     /// «إذاعة الطلعة» plays: a small ♪ in the header instead of a wide bar («تخفيف الزحمة» ٢).
@@ -185,28 +187,30 @@ struct TripHeader: View {
                 .accessibilityIdentifier("weather.chip")
             }
 
-            /* The alerts' history (Lovable): always here; a count while some wait. */
-            Button(action: bellTapped) {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: bellOpen ? "xmark" : "clock.arrow.circlepath")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(p.textPrimary)
-                        .frame(width: hit, height: hit)
-                    if ui.bell > 0 && !bellOpen {
-                        Text(SaryFormat.number(ui.bell))
-                            .font(.sary(10, .heavy))
-                            .foregroundStyle(p.onAccent)
-                            .padding(.horizontal, 4)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .background(Capsule().fill(p.accent))
-                            .saryBadgeOutset(trailing: 2, top: -4)
+            /* The alerts' history (Lovable): with something in it; a count while some wait. */
+            if showsBell {
+                Button(action: bellTapped) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: bellOpen ? "xmark" : "clock.arrow.circlepath")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(p.textPrimary)
+                            .frame(width: hit, height: hit)
+                        if ui.bell > 0 && !bellOpen {
+                            Text(SaryFormat.number(ui.bell))
+                                .font(.sary(10, .heavy))
+                                .foregroundStyle(p.onAccent)
+                                .padding(.horizontal, 4)
+                                .frame(minWidth: 16, minHeight: 16)
+                                .background(Capsule().fill(p.accent))
+                                .saryBadgeOutset(trailing: 2, top: -4)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text(bellOpen ? "أخفِ التنبيهات" : (ui.bell == 0 ? "سجل التنبيهات" : "\(SaryFormat.number(ui.bell)) \(ui.bell == 1 ? "تنبيه" : "تنبيهات")")))
+                .accessibilityIdentifier("alerts.bell")
             }
-            .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text(bellOpen ? "أخفِ التنبيهات" : (ui.bell == 0 ? "سجل التنبيهات" : "\(SaryFormat.number(ui.bell)) \(ui.bell == 1 ? "تنبيه" : "تنبيهات")")))
-            .accessibilityIdentifier("alerts.bell")
 
             if let settingsTapped {
                 Button(action: settingsTapped) {

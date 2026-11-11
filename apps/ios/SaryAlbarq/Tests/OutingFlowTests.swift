@@ -34,9 +34,11 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertEqual(leader.primary?.title, "ابدأ الطلعة")
 
         let member = OutingFlow.ui(input(.created, lead: false))
-        XCTAssertEqual(member.line, "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها")
+        /* UI-AUDIT م3: the member's waiting message is said ONCE — on the button, not in the header too. */
+        XCTAssertEqual(member.line, "ما بدأت الطلعة")
         XCTAssertEqual(member.primary, .waitLeader)
-        XCTAssertEqual(member.primary?.title, "بانتظار بدء الطلعة")
+        XCTAssertEqual(member.primary?.title, "ننتظر أمير الطلعة")
+        XCTAssertFalse(member.line.contains("ننتظر"), "the header does not repeat the button")
     }
 
     func testRunningWithoutALegAsksWhereTo() {
@@ -44,7 +46,9 @@ final class OutingFlowTests: XCTestCase {
         i.liveCount = 4
         let ui = OutingFlow.ui(i)
         XCTAssertEqual(ui.state, .idle)
-        XCTAssertEqual(ui.line, "الطلعة شغّالة · ٤ مباشر")
+        /* «٤ مباشر» is the sheet's line (SarySheetSummary): the header does not repeat the live count. */
+        XCTAssertEqual(ui.line, "الطلعة شغّالة")
+        XCTAssertFalse(ui.line.contains("مباشر"))
         XCTAssertEqual(ui.primary?.title, "وين رايحين؟")
         XCTAssertEqual(OutingFlow.ui(input(.active, lead: false)).primary, .whereTo, "members start their own legs")
     }
@@ -80,6 +84,33 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertEqual(OutingFlow.ui(i).primary, .endOuting, "back near the start after hours: «أنهِ الطلعة» first")
         XCTAssertEqual(OutingFlowUI(state: .idle, line: "", primary: nil).primary, nil)
         XCTAssertEqual(OutingFlow.momentS, 4, "the arrival moment is a 4-second toast")
+    }
+
+    /// UI-AUDIT م3: «أنهِ الطلعة» is the CTA only for the owner (the server ends with `requireOwner`);
+    /// a co-leader who may start never gets it.
+    func testEndSuggestionFollowsTheServersOwnerRule() {
+        var arrived = leg("l1", camp)
+        arrived = LegLifecycle.arrive([arrived], id: "l1", at: t0.addingTimeInterval(-600), distanceM: 34_000)[0]
+        var i = input(.active, legs: [arrived])
+        i.endSuggested = true
+        i.iLead = true
+        i.iOwn = false
+        XCTAssertEqual(OutingFlow.ui(i).primary, .whereTo, "a co-leader cannot end: no «أنهِ الطلعة» CTA")
+        i.iOwn = true
+        XCTAssertEqual(OutingFlow.ui(i).primary, .endOuting)
+        XCTAssertEqual(OutingCTA.endOuting.systemImage, EndOutingCopy.systemImage, "one icon for ending")
+        XCTAssertEqual(OutingCTA.arrived.systemImage, "flag.checkered", "the flag stays «وصلنا»'s")
+        XCTAssertNotEqual(EndOutingCopy.systemImage, OutingCTA.arrived.systemImage)
+    }
+
+    /// ONE confirmation everywhere (UI-AUDIT §٢ word dictionary).
+    func testEndOutingConfirmationCopy() {
+        XCTAssertEqual(EndOutingCopy.title, "تنهي الطلعة للكل؟")
+        XCTAssertEqual(EndOutingCopy.confirm, "أنهِها")
+        XCTAssertEqual(EndOutingCopy.cancel, "لا")
+        XCTAssertEqual(EndOutingCopy.systemImage, "house.fill")
+        XCTAssertFalse(EndOutingCopy.message().contains("الرحلة"), "«الطلعة», never «الرحلة»")
+        XCTAssertNotEqual(EndOutingCopy.message(everyoneArrived: true), EndOutingCopy.message())
     }
 
     func testPausedAndEnded() {

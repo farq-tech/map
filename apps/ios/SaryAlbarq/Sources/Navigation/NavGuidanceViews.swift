@@ -415,6 +415,10 @@ struct NavArrivalCard: View {
 struct NavBottomBar: View {
     @ObservedObject var nav: NavSession
     var end: () -> Void
+    /// «المزيد» while guiding (UI-AUDIT م3: the actions no longer vanish once the car moves).
+    var more: (() -> Void)? = nil
+    /// «غيّر الوجهة» without stopping the guidance first.
+    var changeDestination: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -448,9 +452,16 @@ struct NavBottomBar: View {
                 .accessibilityLabel(Text(label))
                 .accessibilityIdentifier("nav.banner.eta")
                 Spacer(minLength: 0)
+                if let changeDestination {
+                    barIcon("arrow.triangle.swap", label: "غيّر الوجهة", id: "nav.changeDestination", action: changeDestination)
+                }
+                if let more {
+                    barIcon("ellipsis", label: "المزيد", id: "nav.more", action: more)
+                }
                 Button(action: end) {
-                    /* The trip's guidance pauses on this phone only («استأنف» brings it back). */
-                    Text(nav.auto ? "أوقف التوجيه" : "إنهاء")
+                    /* The trip's guidance pauses on this phone only («استأنف» brings it back). One verb for
+                     * both (the word dictionary): «أوقف التوجيه». */
+                    Text("أوقف التوجيه")
                         .font(.sary(theme.drive ? 20 : 18, .heavy))
                         .foregroundStyle(p.onEmergency)
                         .lineLimit(1)
@@ -467,6 +478,23 @@ struct NavBottomBar: View {
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.bottomBar")
+    }
+
+    /// A round 48 pt (56 in drive mode) secondary button of the guidance bar.
+    private func barIcon(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
+        let p = theme.palette
+        let side: CGFloat = theme.drive ? 56 : 48
+        return Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: theme.drive ? 20 : 18, weight: .bold))
+                .foregroundStyle(p.textPrimary)
+                .frame(width: side, height: side)
+                .background(Circle().fill(p.sunken))
+                .contentShape(Circle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text(label))
+        .accessibilityIdentifier(id)
     }
 
     private var label: String {

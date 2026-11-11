@@ -19,8 +19,11 @@ struct LiveSheet: View {
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
             if controller.nav.isActive {
-                /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
-                NavBottomBar(nav: controller.nav, end: controller.endNav)
+                /* Navigating: the peek is the guidance bar (arrival time, what is left, «المزيد»,
+                 * «غيّر الوجهة», «أوقف التوجيه»). */
+                NavBottomBar(nav: controller.nav, end: controller.endNav,
+                             more: { controller.modal = .actions },
+                             changeDestination: controller.navChangeDestination)
                 if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
                     /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة». */
                     NavTripOptions(nav: controller.nav, routes: controller.navCanShowRoutes ? { controller.navShowRoutes() } : nil,
@@ -278,47 +281,76 @@ extension IncomingSOSUI: @retroactive Hashable {
 
 // MARK: - The quick row
 
-/// The sheet's key actions, right under the summary line (UX simplification): the primary
-/// («ملاحة», or «وجّه الكل» for the leader), the chat, the rally point, «أخفِ موقعي»,
-/// «طريق الرجعة» and «المزيد» (everything else). Each was buried in a tab or the tools grid.
+/// The sheet's key actions while stopped, right under the summary line (UI-AUDIT م3, four):
+/// «البر» (camp sites, desert routes, the Qibla, the weather), the chat, the rally point and
+/// «المزيد» (everything else). No accent here: the state's one primary is the CTA over the map.
 struct LiveQuickRow: View {
     @ObservedObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
 
     var body: some View {
         let s = controller.actionState
-        let primary = LiveActionCatalog.primary(s)
-        let hidden = controller.isLocationHidden
-        let card = controller.trailCard
         HStack(alignment: .top, spacing: 4) {
-            item(primary.title, icon: primary.systemImage, id: primary.accessibilityID, accent: true, hint: primary.subtitle) {
-                controller.performAction(primary.id)
-            }
-            if s.chat {
-                item("المحادثة", icon: "bubble.left.and.bubble.right.fill", id: "sheet.chat", badge: controller.chat.totalUnread) {
-                    controller.performAction("chat")
+            ForEach(LiveScreenRules.quickRow(chat: s.chat), id: \.self) { id in
+                switch id {
+                case "desert": desertMenu
+                case "chat":
+                    item("المحادثة", icon: "bubble.left.and.bubble.right.fill", id: "sheet.chat", badge: controller.chat.totalUnread) {
+                        controller.performAction("chat")
+                    }
+                case "rally":
+                    item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: controller.ui.participantsTab.rally != nil) {
+                        controller.performAction("rally")
+                    }
+                default:
+                    item("المزيد", icon: "ellipsis", id: "outing-actions", badge: controller.safety.myStuck != nil ? 1 : 0) {
+                        controller.modal = .actions
+                    }
                 }
-            }
-            item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: controller.ui.participantsTab.rally != nil) {
-                controller.performAction("rally")
-            }
-            if controller.canHideLocation {
-                item(hidden ? HideText.shownButton : HideText.hideButton, icon: hidden ? "eye" : "eye.slash", id: "live.hideLocation", active: hidden,
-                     hint: hidden ? "يرجع موقعك يوصل للربع" : "تبقى في الطلعة بس موقعك ما يوصل") {
-                    controller.toggleHidden()
-                }
-            }
-            item(card.backTrackActive ? "أنهِ الرجعة" : "طريق الرجعة", icon: SaryIcon.backTrack, id: "trail.backtrack", active: card.backTrackActive,
-                 disabled: card.pointCount < 2 && !card.backTrackActive) {
-                card.backTrackActive ? controller.stopBackTrack() : controller.startBackTrack()
-            }
-            item("المزيد", icon: "ellipsis", id: "outing-actions", badge: controller.safety.myStuck != nil ? 1 : 0) {
-                controller.modal = .actions
             }
         }
         .padding(.horizontal, theme.space(.m))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sheet.quickRow")
+    }
+
+    /// «البر» (UI-AUDIT م6): what makes Sary Albarq different, one tap away instead of six.
+    private var desertMenu: some View {
+        Menu {
+            Button { controller.performAction("camp") } label: { Label("اقترح لي مكان كشتة", systemImage: "tent.fill") }
+                .accessibilityIdentifier("desert.camp")
+            Button { controller.performAction("desertRoute") } label: { Label("دروب البر", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
+                .accessibilityIdentifier("desert.routes")
+            Button { controller.performAction("qibla") } label: { Label("القبلة", systemImage: "location.north.circle") }
+                .accessibilityIdentifier("desert.qibla")
+            Button { controller.performAction("weather") } label: { Label("الطقس", systemImage: "sun.max") }
+                .accessibilityIdentifier("desert.weather")
+        } label: {
+            itemLabel("البر", icon: "tent.2.fill")
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("البر"))
+        .accessibilityHint(Text("الكشتة، دروب البر، القبلة، الطقس"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sheet.desert")
+    }
+
+    /// The menu's label: the same circle and caption as `item` (no badge, never active).
+    private func itemLabel(_ title: String, icon: String) -> some View {
+        let p = theme.palette
+        let size: CGFloat = theme.drive ? 54 : 46
+        return VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: theme.drive ? 20 : 17, weight: .semibold))
+                .foregroundStyle(p.accentText)
+                .frame(width: size, height: size)
+                .background(Circle().fill(p.sunken))
+            Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 
     private func item(_ title: String, icon: String, id: String, accent: Bool = false, active: Bool = false, disabled: Bool = false,
@@ -379,17 +411,18 @@ private struct LiveSheetBody: View {
         return false
     }
 
+    /// UI-AUDIT م3: the trip card is the «الوجهة والخطة» panel's (the header opens it); the sheet
+    /// keeps it only after the end, for «طلعة الرجعة» (the summary is the end card's «اعرض الملخص»).
     private var shouldShowTripCard: Bool {
-        controller.showsTripStrip && (arrivedOrOver || (controller.session.view?.iOwn == true && ui.status != .notStarted))
+        controller.showsTripStrip && controller.tripEnded
     }
 
     var body: some View {
         let actions = controller.actions
         Group {
             TripStatusCallout(controller: controller, ui: ui)
-            /* Keep the owner's trip controls visible throughout the outing, including the end action. */
             if shouldShowTripCard {
-                TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+                TripCard(ui: controller.tripPanel, actions: controller.tripActions)
             }
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
@@ -435,28 +468,15 @@ private struct TripStatusCallout: View {
     @AppStorage("sary.live.shareHint.dismissed.v1") private var hintDismissed = false
 
     var body: some View {
-        let v = controller.session.view
         if let r = controller.session.closedReason {
             SaryBanner(text: closedText(r), tone: .warning, systemImage: SaryIcon.warning)
         } else {
             switch ui.status {
             case .notStarted:
-                VStack(spacing: theme.space(.s)) {
-                    SaryBanner(text: v?.iLead == true ? "الطلعة ما بدأت. ابدأها ويشارك الكل مواقعهم." : "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها.", tone: .info)
-                        .accessibilityIdentifier("live.notStarted")
-                    if v?.iLead == true {
-                        Button { controller.startOutingFlow() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
-                            .buttonStyle(.saryPrimary)
-                            .accessibilityIdentifier("live.start")
-                    } else {
-                        Button { controller.refreshWaitingStatus() } label: {
-                            SaryButtonLabel(title: "حدّث حالة الطلعة", systemImage: "arrow.clockwise", busy: controller.session.refreshingWaitingStatus)
-                        }
-                        .buttonStyle(.sary(.secondary))
-                        .disabled(controller.session.refreshingWaitingStatus)
-                        .accessibilityIdentifier("live.refreshWaitingStatus")
-                    }
-                }
+                /* UI-AUDIT م3: nothing here — «ابدأ الطلعة» (or the member's «ننتظر أمير الطلعة») is the
+                 * one CTA over the map; the header says «ما بدأت الطلعة». The sheet is the people and
+                 * «ادعُ ربعك». */
+                EmptyView()
             case .paused:
                 SaryBanner(text: "الطلعة متوقفة مؤقتًا. لا أحد يشارك موقعه الآن.", tone: .warning, systemImage: SaryIcon.pause)
             case .ended:
@@ -563,7 +583,7 @@ struct LivePanelView: View {
     @ViewBuilder
     private func route(_ ui: LiveOutingUIState) -> some View {
         if controller.showsTripStrip, ui.status != .notStarted {
-            TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+            TripCard(ui: controller.tripPanel, actions: controller.tripActions)
         }
         /* «سجل الطلعة»: the legs so far (and a quiet «غيّر الوجهة» while one is picked). */
         if ui.status != .notStarted, !controller.legs.timeline.isEmpty || controller.legPicked != nil {

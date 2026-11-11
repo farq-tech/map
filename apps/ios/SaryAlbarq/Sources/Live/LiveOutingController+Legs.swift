@@ -108,7 +108,11 @@ extension LiveOutingController {
     func flowTapped(_ cta: OutingCTA) {
         switch cta {
         case .startOuting: startOutingFlow()
-        case .waitLeader: toast("تبدأ المشاركة أول ما يبدأ أمير الرحلة الطلعة")
+        case .waitLeader:
+            /* The sheet's «حدّث حالة الطلعة» left with the second and third waiting messages: the one
+             * message (this button) asks the server again. */
+            refreshWaitingStatus()
+            toast("تبدأ المشاركة أول ما يبدأها أمير الطلعة")
         case .whereTo, .changeDestination: modal = .whereTo
         case .startLeg: startLegFlow()
         case .arrived: arrivedTapped()

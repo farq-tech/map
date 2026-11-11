@@ -150,7 +150,10 @@ final class DeclutterTests: XCTestCase {
         let g = LiveActionCatalog.groups(.init())
         XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
-        XCTAssertEqual(Set(ids), ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
+        /* UI-AUDIT م3: «ملاحة» and «طريق الرجعة» are tiles (the quick row has no accent button and no
+         * back-track button any more). */
+        XCTAssertEqual(Set(ids), ["outing-navigate", "outing-route", "outing-search", "trail.backtrack", "outing-invite", "outing-convoy",
+                                  "outing-note-open", "outing-stuck", "outing-enjad",
                                   "outing-timer", "outing-location-tools", "outing-nearest-open", "outing-weather-tools",
                                   "outing-explore", "outing-fit"])
         let nestedIDs = g.flatMap(\.items).flatMap(\.children).map(\.accessibilityID)
@@ -165,17 +168,40 @@ final class DeclutterTests: XCTestCase {
         XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init(following: true)).first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
     }
 
-    /// The quick row's primary: «وجّه الكل» for the leader of a running trip, else «ملاحة».
-    func testQuickRowPrimary() {
-        XCTAssertEqual(LiveActionCatalog.primary(.init()).id, "navigate")
-        XCTAssertEqual(LiveActionCatalog.primary(.init()).accessibilityID, "outing-navigate")
-        let lead = LiveActionCatalog.primary(.init(guideAllTarget: "روضة"))
-        XCTAssertEqual(lead.id, "guideAll")
-        XCTAssertEqual(lead.accessibilityID, "outing-guide-all")
-        XCTAssertEqual(LiveActionCatalog.primary(.init(ended: true, guideAllTarget: "روضة")).id, "navigate", "never «وجّه الكل» after the end")
-        /* The leader still reaches «ملاحة» (to a friend): it moves into «المزيد». */
-        XCTAssertTrue(LiveActionCatalog.groups(.init(guideAllTarget: "روضة")).flatMap(\.items).contains { $0.id == "navigate" })
-        XCTAssertFalse(LiveActionCatalog.groups(.init()).flatMap(\.items).contains { $0.id == "navigate" }, "else it is the quick row's primary")
+    /// UI-AUDIT م3: the quick row has no accent primary any more (the CTA is the state's one primary):
+    /// «ملاحة» is a tile in «المزيد» for everyone; «وجّه الكل» is offered after «ابدأ الطلعة».
+    func testQuickRowHasNoPrimaryAndNavigateIsATile() {
+        XCTAssertEqual(LiveScreenRules.quickRow(chat: true), ["desert", "chat", "rally", "more"])
+        XCTAssertFalse(LiveScreenRules.quickRow(chat: true).contains("navigate"))
+        XCTAssertFalse(LiveScreenRules.quickRow(chat: true).contains("guideAll"))
+        for s in [LiveActionCatalog.State(), .init(guideAllTarget: "روضة")] {
+            let items = LiveActionCatalog.groups(s).flatMap(\.items)
+            XCTAssertTrue(items.contains { $0.id == "navigate" }, "«ملاحة» is in «المزيد» → «الطريق»")
+            XCTAssertFalse(items.contains { $0.id == "guideAll" }, "«وجّه الكل» stays in the start choice")
+        }
+    }
+
+    /// «أخفِ موقعي» moved from the quick row into «المزيد» → «الجماعة»; «طريق الرجعة» leaves «المزيد»
+    /// while it runs (its panel's «إنهاء» is the one stop).
+    func testHideAndBackTrackTiles() {
+        let group = { (s: LiveActionCatalog.State) in LiveActionCatalog.groups(s).first { $0.title == "الجماعة" }?.items ?? [] }
+        XCTAssertFalse(group(.init()).contains { $0.id == "hide" }, "only when I can hide")
+        let hide = group(.init(canHide: true)).first { $0.id == "hide" }
+        XCTAssertEqual(hide?.accessibilityID, "live.hideLocation")
+        XCTAssertEqual(hide?.title, HideText.hideButton)
+        XCTAssertEqual(group(.init(canHide: true, hidden: true)).first { $0.id == "hide" }?.title, HideText.shownButton)
+        XCTAssertTrue(LiveActionCatalog.needsRunningTrip.contains("hide"))
+        let road = { (s: LiveActionCatalog.State) in LiveActionCatalog.groups(s).first { $0.title == "الطريق" }?.items.map(\.id) ?? [] }
+        XCTAssertTrue(road(.init()).contains("backtrack"))
+        XCTAssertFalse(road(.init(backTracking: true)).contains("backtrack"), "no second stop while it runs")
+        XCTAssertTrue(road(.init(ended: true)).contains("backtrack"), "works on the phone after the end too")
+    }
+
+    /// «الطبقات» is only the layers sheet; the tile that enters exploration says so.
+    func testExploreTileIsNotCalledLayers() {
+        let explore = LiveActionCatalog.groups(.init()).flatMap(\.items).first { $0.id == "explore" }
+        XCTAssertEqual(explore?.title, "استكشف الخريطة")
+        XCTAssertEqual(explore?.accessibilityID, "outing-explore")
     }
 
     /// Build 11: an ended trip kept offering «رسالة فوق سيارتي», «غرّزت»… to a group that is gone.

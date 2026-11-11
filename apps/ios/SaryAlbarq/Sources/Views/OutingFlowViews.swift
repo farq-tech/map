@@ -4,7 +4,7 @@ import SwiftUI
 /// outing's state — «ابدأ الطلعة» → «وين رايحين؟» → «ابدأ المشوار» → «وصلنا». ONE at a time.
 /// Stopped, it is the big one (the walkie-talkie shrinks to a round button beside it); driving,
 /// it is `compact` and the walkie-talkie is the big one. Members waiting for the leader see a
-/// calm, non-tappable «انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها».
+/// calm «ننتظر أمير الطلعة» (the one waiting message; a tap refreshes the outing's state).
 struct OutingPrimaryCTA: View {
     var ui: OutingFlowUI
     var compact = false
@@ -16,15 +16,21 @@ struct OutingPrimaryCTA: View {
         if let c = ui.primary {
             Group {
                 if c == .waitLeader {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(c.title).font(.sary(compact ? 14 : 16, .bold)).foregroundStyle(p.textPrimary)
-                            .lineLimit(1).minimumScaleFactor(0.8)
+                    /* Calm (not accent): nothing to do but wait; a tap asks the server again. */
+                    Button { tapped(c) } label: {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(c.title).font(.sary(compact ? 14 : 16, .bold)).foregroundStyle(p.textPrimary)
+                                .lineLimit(1).minimumScaleFactor(0.8)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: compact ? nil : .infinity, minHeight: compact ? 48 : 56)
+                        .saryGlass(Capsule(), role: .chrome)
+                        .contentShape(Capsule())
                     }
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: compact ? nil : .infinity, minHeight: compact ? 48 : 56)
-                    .saryGlass(Capsule(), role: .chrome)
+                    .buttonStyle(SaryPressStyle())
                     .accessibilityElement(children: .combine)
+                    .accessibilityHint(Text("يحدّث حالة الطلعة"))
                 } else if compact {
                     Button { tapped(c) } label: {
                         HStack(spacing: 6) {
@@ -79,8 +85,9 @@ struct WhereToSheet: View {
                      : "مشوارك أنت بس. وجهة الطلعة يحددها أمير الرحلة.")
                     .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                 Button {
-                    controller.modal = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.modal = .plan(.search) }
+                    /* A direct swap: `sheet(item:)` replaces the presented sheet when the item's identity
+                     * changes (no nil → 0.35 s → reopen flicker). */
+                    controller.modal = .plan(.search)
                 } label: { SaryButtonLabel(title: "ابحث عن مكان", systemImage: "magnifyingglass") }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("whereTo.search")

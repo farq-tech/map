@@ -107,11 +107,12 @@ struct TripPeekStrip: View {
     }
 }
 
-/// The full trip card at the top of «المشاركون».
+/// The full trip card: in the «الوجهة والخطة» panel, and in the sheet after the end (for
+/// «طلعة الرجعة»). It never ends the outing (UI-AUDIT م3: «أنهِ الطلعة» is in «المزيد» → «الطلعة»,
+/// and the CTA when «رجعتوا؟» suggests it — one confirmation, `EndOutingCopy`).
 struct TripCard: View {
     var ui: TripPanelUI
     var actions: TripPanelActions
-    @Binding var confirmEnd: Bool
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -139,23 +140,11 @@ struct TripCard: View {
             case .ended:
                 ended
             }
-            if ui.canEnd {
-                Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "house.fill") }
-                    .buttonStyle(.sarySecondary)
-                    .accessibilityIdentifier("trip.end")
-            }
         }
         .padding(theme.space(.m))
         .sarySurface(radius: SaryRadius.l)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("trip.card")
-        .confirmationDialog("تنهي الرحلة للجميع؟", isPresented: $confirmEnd, titleVisibility: .visible) {
-            Button("أنهِ الطلعة للجميع", role: .destructive, action: actions.endTrip)
-            Button("ليس الآن", role: .cancel) {}
-        } message: {
-            Text(ui.everyoneArrived ? "وصل الجميع. تنتهي الطلعة ويتوقف إرسال المواقع، وتقدرون تشوفون ملخص الطلعة."
-                                    : "ما وصل الجميع بعد. تنتهي الطلعة للجميع ويتوقف إرسال المواقع.")
-        }
     }
 
     private var header: some View {
@@ -280,24 +269,23 @@ struct TripCard: View {
         }
         if ui.canEnd {
             if ui.everyoneArrived {
-                Text("وصل الجميع. إذا خلصت الطلعة، أنهِها ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                Text("وصل الربع كلهم. إذا خلصت الطلعة، أنهِها من «المزيد» ← «الطلعة».").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
         } else {
-            Text("أمير الرحلة ينهي الرحلة لما يوصل الجميع.").saryText(.footnote).foregroundStyle(p.textSecondary)
+            Text("أمير الطلعة ينهيها لما يوصل الربع.").saryText(.footnote).foregroundStyle(p.textSecondary)
         }
     }
 
     // MARK: ended
 
+    /// After the end: «طلعة الرجعة» (a new outing back). The summary is the end card's
+    /// «اعرض الملخص» — once on screen.
     @ViewBuilder
     private var ended: some View {
-        Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الطلعة", systemImage: "chart.bar.doc.horizontal") }
-            .buttonStyle(.saryPrimary)
-            .accessibilityIdentifier("trip.summary")
-        Button(action: actions.returnTrip) { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack) }
+        Button(action: actions.returnTrip) { SaryButtonLabel(title: "طلعة الرجعة", systemImage: SaryIcon.backTrack) }
             .buttonStyle(.sarySecondary)
             .accessibilityIdentifier("trip.return")
-        Text("«طريق الرجعة» رحلة جديدة من هنا إلى نقطة بدايتك، على مسارك أو بالملاحة. وبدون نت نرجّعك على مسارك من جوالك.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+        Text("«طلعة الرجعة» طلعة جديدة من هنا إلى نقطة بدايتك، على مسارك أو بالملاحة. وبدون نت نرجّعك على مسارك من جوالك.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 

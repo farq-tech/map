@@ -88,8 +88,9 @@ extension LiveOutingController {
 
     /// «حدّد الوجهة»: the place search (its point card has «اجعلها الوجهة»).
     func chooseTripDestination() {
-        modal = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.modal = .plan(.search) }
+        /* A direct swap (`sheet(item:)` replaces the presented sheet when the item changes): no
+         * nil → 0.35 s → reopen flicker. */
+        modal = .plan(.search)
     }
 
     func markArrived() {
