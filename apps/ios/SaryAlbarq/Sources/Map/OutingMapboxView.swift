@@ -325,6 +325,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
         private var trails = MapTrails()
         private var trailLayerKey: String?
+        /// The friends' lines last sent to `trailFriends` (nil: send again).
+        private var drawnFriends: [MapTrails.Line]?
         let mineDrawer = TrackLineDrawer(id: "sary-track-mine")
         let followDrawer = TrackLineDrawer(id: "sary-track-follow")
         var labels: SatelliteLabels = .standard
@@ -1426,16 +1428,23 @@ struct OutingMapboxView: UIViewRepresentable {
                 addTrailLayers(m, myColor: myColor)
                 trailLayerKey = key
             }
-            m.updateGeoJSONSource(withId: Self.trailFriends, geoJSON: .featureCollection(Self.collection(trails.friends)))
-            /* Build 10: my trail and a followed track in the shared track style (casing, speed gradient, dots). */
-            let ids = m.allLayerIdentifiers.map(\.id)
-            let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
+            /* My trail grows with every fix; the friends' source is only re-sent when their lines changed. */
+            if drawnFriends != trails.friends {
+                m.updateGeoJSONSource(withId: Self.trailFriends, geoJSON: .featureCollection(Self.collection(trails.friends)))
+                drawnFriends = trails.friends
+            }
+            /* Build 10: my trail and a followed track in the shared track style (casing, speed gradient, dots).
+             * The layer order is only read when a drawer (re)adds its layers, not on every new fix. */
+            let below: () -> String? = {
+                let ids = m.allLayerIdentifiers.map(\.id)
+                return ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
+            }
             let w = (theme.drive ? TrackLineStyle.width + 1 : TrackLineStyle.width) + (trails.highlight ? 1.5 : 0)
             mineDrawer.update(m, line: trails.mineTrack, style: TrackLineStyle(width: w, color: myColor, speedColours: true,
                                                                                 casing: Self.casing(for: myColor), showEnds: false,
-                                                                                glow: trails.highlight), below: below)
+                                                                                glow: trails.highlight), below: below())
             followDrawer.update(m, line: trails.followed, style: TrackLineStyle(width: TrackLineStyle.width + 1, glow: true),
-                                below: below)
+                                below: below())
             placeStart(trails.start)
             placeGapLabels(trails.gapLabels)
         }
@@ -1459,6 +1468,8 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         private func addTrailLayers(_ m: MapboxMap, myColor: UInt32) {
+            /* The source may be new (a new style): send the friends' lines again. */
+            drawnFriends = nil
             for id in Self.trailLayerIds where m.layerExists(withId: id) { try? m.removeLayer(withId: id) }
             for src in [Self.trailFriends, Self.trailMine] where !m.sourceExists(withId: src) {
                 var s = GeoJSONSource(id: src)
