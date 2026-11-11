@@ -150,3 +150,12 @@ test('clouds.warm: fetches the Kingdom tiles of the newest frames once, newest f
     clouds._reset();
   }
 });
+
+test('clouds tiles: mid-level cloud is drawn clearly (stronger curve than the outlook\'s), warm ground stays transparent', () => {
+  const px = Buffer.from([50, 50, 50, 255, 140, 140, 140, 255, 190, 190, 190, 255]);
+  const tile = clouds.irToOverlay(px, clouds.TILE_CURVE);
+  const dflt = clouds.irToOverlay(px);
+  assert.equal(tile[3], 0);
+  assert.ok(tile[7] > dflt[7] + 40, `mid cloud alpha ${tile[7]} vs ${dflt[7]}`);
+  assert.ok(tile[11] >= 240);
+});

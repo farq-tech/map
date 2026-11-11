@@ -121,7 +121,7 @@ async function latestImageTime(nowMs = Date.now()) {
 
 async function framesPayload(nowMs = Date.now()) {
   const latest = await latestImageTime(nowMs);
-  const frames = planFrames(latest, nowMs).map((f) => ({ ...f, tile_url: `/api/weather/clouds/tile/${f.id}/{z}/{x}/{y}.png` }));
+  const frames = planFrames(latest, nowMs).map((f) => ({ ...f, tile_url: `/api/weather/clouds/tile/${f.id}/{z}/{x}/{y}.png?v=2` }));
   const year = new Date(nowMs).getUTCFullYear();
   return {
     ok: frames.length > 0,
@@ -145,6 +145,10 @@ async function framesPayload(nowMs = Date.now()) {
  * Grey IR (bright = cold cloud tops) → white with alpha. Below `lo` transparent, above `hi`
  * nearly opaque, smooth between. Pure; tested.
  */
+/* The picture drawn on the map: thin/mid cloud (IR ~75–175) must show on a bright satellite basemap.
+ * (The outlook keeps the default curve: its "dense cloud" thresholds were tuned on it.) */
+const TILE_CURVE = { lo: 75, hi: 175, maxAlpha: 245 };
+
 function irToOverlay(rgba, { lo = 105, hi = 205, maxAlpha = 235 } = {}) {
   const out = Buffer.alloc(rgba.length);
   for (let i = 0; i < rgba.length; i += 4) {
@@ -198,7 +202,7 @@ async function tile(id, z, x, y, nowMs = Date.now()) {
     if (r.status !== 200 || !/png/.test(r.type)) return null;
     const src = PNG.sync.read(r.body);
     const png = new PNG({ width: src.width, height: src.height });
-    png.data = irToOverlay(src.data);
+    png.data = irToOverlay(src.data, TILE_CURVE);
     return PNG.sync.write(png, { colorType: 6 });
   });
   if (!body) return { status: 502 };
@@ -223,7 +227,7 @@ async function warm(nowMs = Date.now(), { frames = 4 } = {}) {
 
 module.exports = {
   LAYER, REGION, MIN_ZOOM, MAX_ZOOM,
-  frameId, parseFrameId, frameAllowed, planFrames, warm, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, tile, riyadhLabel, attribution,
+  frameId, parseFrameId, frameAllowed, planFrames, warm, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, TILE_CURVE, tile, riyadhLabel, attribution,
   _reset() {
     capsCache = { at: 0, latest: null };
   },

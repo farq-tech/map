@@ -24,7 +24,9 @@ struct WeatherOverlayRequest: Equatable {
 @MainActor
 final class WeatherOverlay {
     static let prefix = "sary-weather-"
-    static let opacity: Double = 0.85
+    static let opacity: Double = 0.95
+    /// How much the basemap is darkened under the cloud layer.
+    static let scrimOpacity: Double = 0.38
 
     private weak var map: MapView?
     private let layers: WeatherLayers
@@ -175,6 +177,26 @@ final class WeatherOverlay {
         guard d != drawn || !m.layerExists(withId: Self.prefix + sources[0].0) else { return }
         removeAll(m)
         let below = firstLabelLayer(m)
+        /* Clouds: dim the earth under them so white cloud tops stand out from the bright satellite basemap. */
+        if kind == .clouds {
+            var scrim = BackgroundLayer(id: Self.prefix + "scrim")
+            scrim.backgroundColor = .constant(StyleColor(.black))
+            scrim.backgroundOpacity = .constant(Self.scrimOpacity)
+            do {
+                if let middle = Slot.middle, m.allSlotIdentifiers.contains(middle) {
+                    scrim.slot = middle
+                    try m.addLayer(scrim)
+                } else if let below {
+                    try m.addLayer(scrim, layerPosition: .below(below))
+                } else {
+                    try m.addLayer(scrim)
+                }
+            } catch {
+                #if DEBUG
+                print("[weather] add scrim failed: \(error)")
+                #endif
+            }
+        }
         for (i, (id, url)) in sources.enumerated() {
             var src = RasterSource(id: Self.prefix + id)
             src.tiles = [url]
