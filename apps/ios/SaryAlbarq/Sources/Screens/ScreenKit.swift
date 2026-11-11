@@ -227,9 +227,34 @@ enum AvatarCodec {
         return nil
     }
 
+    /// Views call this from `body` (the home map's avatar, the profile sheet, an outing's members),
+    /// so every redraw used to base64-decode and JPEG-decode the photo again on the main thread.
+    /// Decoded images are kept in a small bounded cache keyed by the data URL itself.
     static func image(from dataURL: String?) -> UIImage? {
         guard let s = dataURL, let comma = s.firstIndex(of: ","), s.hasPrefix("data:image/") else { return nil }
-        return Data(base64Encoded: String(s[s.index(after: comma)...])).flatMap(UIImage.init(data:))
+        _ = memoryWarning
+        let key = s as NSString
+        if let hit = decoded.object(forKey: key) { return hit }
+        guard let img = Data(base64Encoded: String(s[s.index(after: comma)...])).flatMap(UIImage.init(data:)) else { return nil }
+        /* Decode once now, so drawing the cached image never decodes it again. */
+        let ready = img.preparingForDisplay() ?? img
+        decoded.setObject(ready, forKey: key, cost: Int(ready.size.width * ready.size.height * ready.scale * ready.scale) * 4)
+        return ready
+    }
+
+    /// Avatars are at most 192 px squares (`dataURL(from:)`): a few dozen fit in well under 8 MB.
+    private static let decoded: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 64
+        c.totalCostLimit = 8 * 1024 * 1024
+        return c
+    }()
+
+    /// NSCache also evicts under pressure on its own; on a memory warning it is emptied outright.
+    private static let memoryWarning: NSObjectProtocol = NotificationCenter.default.addObserver(
+        forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil
+    ) { _ in
+        AvatarCodec.decoded.removeAllObjects()
     }
 }
 
