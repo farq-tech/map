@@ -1164,8 +1164,8 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     /// «أظهر موقعي» again once a hide that outlasted the wait is off the wire (unless I hid since).
-    private func redoShowAfterInFlightHide(me: String) {
-        let choice = hideChoice
+    /// `choice`: `hideChoice` as it was when the person asked to be shown (read before any await).
+    private func redoShowAfterInFlightHide(me: String, choice: Int) {
         redoAfterInFlight(.hide, stillWanted: { s in s.hideChoice == choice }) { s in
             _ = await s.run("hidden") {
                 let r = try await s.api.setHidden(s.id, hidden: false)
@@ -1338,6 +1338,7 @@ final class OutingSession: ObservableObject, Identifiable {
         guard let me = view?.myId, view?.status != .ended else { return false }
         let t = ActionTrace.begin(on ? "hide" : "show")
         hideChoice &+= 1
+        let choice = hideChoice
         let ok: Bool
         if isLocal || on {
             view?.apply(.memberHidden(userId: me, hidden: on, since: on ? ISODate.string(Date()) : nil, reason: "self"))
@@ -1358,7 +1359,7 @@ final class OutingSession: ObservableObject, Identifiable {
                 let r = try await api.setHidden(id, hidden: on)
                 view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
             }
-            if ok, !cleared { redoShowAfterInFlightHide(me: me) }
+            if ok, !cleared { redoShowAfterInFlightHide(me: me, choice: choice) }
             ActionTrace.uiShown(t)
             ActionTrace.acked(t, ok: ok)
         }
@@ -1406,6 +1407,7 @@ final class OutingSession: ObservableObject, Identifiable {
         defer { ActionTrace.uiShown(t) }
         sosChoice &+= 1
         let choice = sosChoice
+        let hideChoiceAtSOS = hideChoice
         let wasHidden = view?.me?.hidden == true
         defer {
             if wasHidden {
@@ -1466,7 +1468,7 @@ final class OutingSession: ObservableObject, Identifiable {
                 let r = try await api.setHidden(id, hidden: false)
                 view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
             }
-            if !cleared { redoShowAfterInFlightHide(me: me) }
+            if !cleared { redoShowAfterInFlightHide(me: me, choice: hideChoiceAtSOS) }
         }
         ActionTrace.acked(t, ok: ok)
         if !ok {
