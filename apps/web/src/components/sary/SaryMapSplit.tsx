@@ -120,6 +120,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 
 	const [features, setFeatures] = useState<OutdoorFeatureCollection | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [errorAction, setErrorAction] = useState<"search" | "viewport">("viewport");
 	const [query, setQuery] = useState(search.q || "");
 	const [layer, setLayer] = useState<OutdoorLayerId>(search.layer || "around");
 	const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
@@ -193,6 +194,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 				const data = await OutdoorService.features({ bbox, zoom, types });
 				setFeatures(data);
 				setError(null);
+				setErrorAction("viewport");
 				setPhase((p) => {
 					if (p === "loading" || p === "permission") return "explore";
 					if (!data.features.length && (p === "explore" || p === "empty")) return "empty";
@@ -201,6 +203,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 				});
 			} catch {
 				setError(isRTL ? "تعذر تحميل بيانات البر." : "Outdoor data failed to load.");
+				setErrorAction("viewport");
 				setPhase("error");
 				track("outdoor_data_fail", { source: "viewport" });
 			}
@@ -377,8 +380,13 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 			await saveTrip(named);
 			setTrip(named);
 			setPhase("saved");
-			const all = await listTrips();
-			setSavedTrips(all);
+			setError(null);
+			try {
+				const all = await listTrips();
+				setSavedTrips(all);
+			} catch {
+				setError(isRTL ? "حُفظ المسار، لكن تعذر تحديث قائمة المسارات." : "Track saved, but the saved-track list could not refresh.");
+			}
 		} catch {
 			track("trip_save_fail", { source: "idb" });
 			setError(isRTL ? "تعذر حفظ المسار على هذا الجهاز." : "Could not save the track on this device.");
@@ -413,13 +421,19 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 			return;
 		}
 		setSearchHint(null);
+		setError(null);
 		setPhase("search");
 		void OutdoorService.search(q)
 			.then((data) => {
 				setFeatures(data);
+				setError(null);
 				if (!data.features.length) setPhase("empty");
 			})
-			.catch(() => setPhase("error"));
+			.catch(() => {
+				setError(isRTL ? "تعذر البحث الآن. تحقق من الاتصال وحاول مجددًا." : "Search failed. Check your connection and try again.");
+				setErrorAction("search");
+				setPhase("error");
+			});
 	};
 
 	const backToExplore = () => {
@@ -432,19 +446,29 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 		setLayer("trips");
 		setPhase("trips");
 		setSheetSnap("half");
+		setError(null);
 		try {
 			setSavedTrips(await listTrips());
 		} catch {
 			setSavedTrips([]);
+			setError(isRTL ? "تعذر قراءة المسارات المحفوظة من هذا الجهاز." : "Could not read saved tracks from this device.");
 		}
 	};
 
 	const openSaved = async (id: string) => {
-		const row = await loadTrip(id);
-		if (!row) return;
-		setTrip(row);
-		setPhase("trip");
-		patchSearch({ trip: id });
+		setError(null);
+		try {
+			const row = await loadTrip(id);
+			if (!row) {
+				setError(isRTL ? "لم نعثر على هذا المسار المحفوظ." : "This saved track could not be found.");
+				return;
+			}
+			setTrip(row);
+			setPhase("trip");
+			patchSearch({ trip: id });
+		} catch {
+			setError(isRTL ? "تعذر فتح المسار المحفوظ. حاول مجددًا." : "Could not open the saved track. Try again.");
+		}
 	};
 
 	const onSelect = (id: string) => {
@@ -502,9 +526,13 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 			return;
 		}
 		if (phase === "error") {
-			setPhase("loading");
-			fetchedRef.current = "";
-			if (viewRef.current) void loadViewport(viewRef.current.bbox, viewRef.current.zoom);
+			if (errorAction === "search") {
+				submitSearch();
+			} else {
+				setPhase("loading");
+				fetchedRef.current = "";
+				if (viewRef.current) void loadViewport(viewRef.current.bbox, viewRef.current.zoom);
+			}
 		}
 	};
 
@@ -692,6 +720,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 					) : null}
 					{phase === "finish" || phase === "saved" || phase === "trip" ? (
 						<div className="sary-trip-done" data-testid="sary-trip-done">
+							{error ? <p className="sary-error" role="alert" data-testid="sary-save-error">{error}</p> : null}
 							<dl className="sary-stats">
 								<div>
 									<dt>{isRTL ? "المسافة" : "Distance"}</dt>
@@ -746,6 +775,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 					) : null}
 					{phase === "trips" ? (
 						<ul className="sary-trips" data-testid="sary-trips">
+							{error ? <li className="sary-error" role="alert" data-testid="sary-trips-error">{error}</li> : null}
 							{savedTrips.map((row) => (
 								<li key={row.id}>
 									<button type="button" onClick={() => void openSaved(row.id)}>
@@ -777,6 +807,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 							</button>
 						</p>
 					) : null}
+					{phase === "error" && error ? <p className="sary-error" role="alert" data-testid="sary-request-error">{error}</p> : null}
 				</SaryExploreChrome>
 				{!online ? (
 					<p className="sary-offline-badge" role="status" data-testid="sary-offline-badge">

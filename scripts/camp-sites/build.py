@@ -1,6 +1,7 @@
 """Run the camp-site model for one region and write the candidate GeoJSON.
 
 Usage: python -I build.py <region> <cache_dir> <out_dir>
+       python -I build.py --route-layers <region> <cache_dir>   (national tiles: only what routes.py reads)
 Reads  <cache_dir>/<region>/rasters_2.npz and osm.json (fetch_rasters.py, fetch_osm.py)
 Writes <out_dir>/camp-sites-<region>.geojson  (ranked candidates, small: committed + bundled)
        <cache_dir>/<region>/layers.npz         (intermediate layers for render.py / routes)
@@ -220,5 +221,46 @@ def build(region, cache, out_dir, n_sites=60):
     return fc
 
 
+def route_layers(region, cache):
+    """Only the layers routes.py reads, for a national tile (tiles.py). Same rules as `layers`, without
+    the camp-site extras (shelter in 8 winds, sunset horizon, dark sky, ...), which cost most of the
+    time and are not part of the route grid. Writes <cache>/<region>/layers.npz."""
+    bbox = REGIONS[region]["bbox"]
+    s, w, n, e = bbox
+    R = np.load(os.path.join(cache, region, f"rasters_{ANALYSIS_ARCSEC}.npz"))
+    osm = json.load(open(os.path.join(cache, region, "osm.json")))
+    dem = R["dem"].astype("float64")
+    dem = np.where(np.isfinite(dem) & (dem > -1000), dem, np.nanmedian(dem))
+    rows, cols = dem.shape
+    tr = from_bounds(w, s, e, n, cols, rows)
+    dx, dy = M.cell_size_m((s + n) / 2, ANALYSIS_ARCSEC)
+    slope = M.slope_pct(dem, dx, dy)
+    filled = M.priority_flood(dem, eps=1e-5)
+    sink = filled - dem
+    acc = M.d8_accumulation(filled, dx, dy)
+    rough = M.roughness(dem, 2)
+    frac = {c: R[f"wc_frac_{c}"] for c in (10, 20, 30, 50, 80, 90)}
+    wc = R["wc"]
+    s2 = {k: R[f"s2_{k}"].astype("float64") for k in ("blue", "green", "red", "nir", "swir16", "swir22")}
+    for k in s2:
+        s2[k] = np.where(np.isfinite(s2[k]), s2[k], np.nanmedian(s2[k]))
+    G = M.ground_classes(s2, slope, rough, wc, frac)
+    wet = raster_of([swkt.loads(x["wkt"]) for x in osm["wet"]], dem.shape, tr)
+    water_frac = np.maximum(frac[80], wet.astype("float32") * (wc == 80))
+    tracks = [swkt.loads(x["wkt"]) for x in osm["tracks"]]
+    roads = [swkt.loads(x["wkt"]) for x in osm["roads"]]
+    d_military = dist_m(raster_of([swkt.loads(x["wkt"]) for x in osm["military"]], dem.shape, tr), dx, dy)
+    np.savez_compressed(os.path.join(cache, region, "layers.npz"), dem=dem.astype("float32"), slope=slope.astype("float32"),
+                        acc=acc.astype("float32"), sabkha=G["sabkha"] | (wet & (wc != 80)), sand=G["sand"],
+                        channel=M.channel_mask(acc, sink), bbox=np.array(bbox),
+                        d_track=dist_m(raster_of(tracks, dem.shape, tr), dx, dy).astype("float32"),
+                        d_road=dist_m(raster_of(roads, dem.shape, tr), dx, dy).astype("float32"),
+                        built=frac[50] > 0.3, military=d_military < 1.0, water=water_frac > 0.3)
+    print(region, "route layers", dem.shape)
+
+
 if __name__ == "__main__":
-    build(sys.argv[1], sys.argv[2], sys.argv[3])
+    if sys.argv[1] == "--route-layers":
+        route_layers(sys.argv[2], sys.argv[3])
+    else:
+        build(sys.argv[1], sys.argv[2], sys.argv[3])

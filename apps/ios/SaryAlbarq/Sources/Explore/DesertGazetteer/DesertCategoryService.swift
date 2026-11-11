@@ -43,6 +43,9 @@ struct DesertCategoryRouter: DesertCategoryService {
     var gazetteer: DesertCategoryService = GazetteerCategoryService()
     var rainGreen: DesertCategoryService = RainGreenCategoryService()
 
+    /// The app's router, made once (the bundled gazetteer behind it is read on first use).
+    static let shared = DesertCategoryRouter()
+
     func search(_ category: HomeCategory, near: LngLat?) async -> DesertCategoryResult {
         switch category.desertSource {
         case .gazetteer?: return await gazetteer.search(category, near: near)
@@ -54,8 +57,22 @@ struct DesertCategoryRouter: DesertCategoryService {
 
 /// «نفود»، «روضة»، «فيضة»، «مخيمات» from «دليل البر», nearest first, offline.
 struct GazetteerCategoryService: DesertCategoryService {
-    var gazetteer: DesertGazetteer = .bundled
+    /// Read on first search, not when the service is made (the bundled file is large).
+    private let load: () -> DesertGazetteer
+    var gazetteer: DesertGazetteer { load() }
     var limit = 25
+
+    /// The bundled gazetteer, read lazily.
+    init(limit: Int = 25) {
+        load = { DesertGazetteer.bundled }
+        self.limit = limit
+    }
+
+    init(gazetteer: DesertGazetteer, limit: Int = 25) {
+        load = { gazetteer }
+        self.limit = limit
+    }
+
     /// Without a fix the list is ranked from Riyadh (the map opens there too).
     static let fallbackCenter = LngLat(lng: 46.6753, lat: 24.7136)
 

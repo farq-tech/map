@@ -89,7 +89,7 @@ private struct TokensBlocks: View {
                 HStack {
                     Text(SaryFormat.distance(meters: Double(v))).saryText(.title).foregroundStyle(p.textSecondary)
                     Spacer()
-                    Text("Tajawal (متغير)").font(.system(size: 11)).foregroundStyle(p.emergencyText)
+                    Text("Huwiya (متغير)").font(.system(size: 11)).foregroundStyle(p.emergencyText)
                 }
                 Text(SaryFormat.clock(seconds: tick * 7 % 600)).saryNumber(.headline).foregroundStyle(p.textPrimary)
             }

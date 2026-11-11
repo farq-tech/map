@@ -4,7 +4,7 @@ import SwiftUI
 /// outing's state — «ابدأ الطلعة» → «وين رايحين؟» → «ابدأ المشوار» → «وصلنا». ONE at a time.
 /// Stopped, it is the big one (the walkie-talkie shrinks to a round button beside it); driving,
 /// it is `compact` and the walkie-talkie is the big one. Members waiting for the leader see a
-/// calm, non-tappable «بانتظار أمير الرحلة يبدأ».
+/// calm, non-tappable «انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها».
 struct OutingPrimaryCTA: View {
     var ui: OutingFlowUI
     var compact = false
@@ -65,6 +65,8 @@ struct WhereToSheet: View {
     @ObservedObject var controller: LiveOutingController
     @ObservedObject private var saved = SavedPlacesStore.shared
     @Environment(\.sary) private var theme
+    /// Loaded on appear (not in `body`, which re-runs on every location fix), refreshed when renamed.
+    @State private var recent: [OutingDestination] = []
 
     var body: some View {
         let p = theme.palette
@@ -82,7 +84,6 @@ struct WhereToSheet: View {
                 } label: { SaryButtonLabel(title: "ابحث عن مكان", systemImage: "magnifyingglass") }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("whereTo.search")
-                let recent = RecentPlaces.load()
                 if !recent.isEmpty {
                     section("أماكن سابقة", recent.map { ($0, "clock.arrow.circlepath") })
                 }
@@ -94,6 +95,10 @@ struct WhereToSheet: View {
                 }
             }
             .padding(theme.space(.l))
+        }
+        .onAppear { recent = RecentPlaces.load() }
+        .onReceive(NotificationCenter.default.publisher(for: .saryRecentPlacesChanged)) { _ in
+            recent = RecentPlaces.load()
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)

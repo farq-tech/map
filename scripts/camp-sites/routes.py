@@ -108,6 +108,22 @@ def grid_from_layers(region, cache):
     return {"cls": cls, "track": track, "road": road, "big": big, "dem": dem, "ridge": ridge, "coh": coh, "bbox": (s, w, n, e)}
 
 
+def crop(g, bbox):
+    """The part of grid `g` inside `bbox` (both on the 3-arc-second lattice): a national tile cut out of
+    its haloed computation. Every per-cell array is sliced; the bbox becomes `bbox`."""
+    s, w, n, e = g["bbox"]
+    cs, cw, cn, ce = bbox
+    k = 3600 / ROUTE_ARCSEC
+    r0, r1 = round((n - cn) * k), round((n - cs) * k)
+    c0, c1 = round((cw - w) * k), round((ce - w) * k)
+    rows, cols = g["cls"].shape
+    if not (0 <= r0 < r1 <= rows and 0 <= c0 < c1 <= cols):
+        raise ValueError(f"crop {bbox} is outside the grid {g['bbox']}")
+    out = {key: (v[r0:r1, c0:c1] if isinstance(v, np.ndarray) and v.shape[:2] == (rows, cols) else v) for key, v in g.items()}
+    out["bbox"] = (float(cs), float(cw), float(cn), float(ce))
+    return out
+
+
 def write_bin(g, path, region):
     rows, cols = g["cls"].shape
     z0 = float(np.floor(g["dem"].min()))

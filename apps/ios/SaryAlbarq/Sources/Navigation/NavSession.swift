@@ -74,10 +74,16 @@ final class NavSession: ObservableObject {
     @Published private(set) var fallback: NavFallback?
     /// Arrived at the target (the stop / destination logic lives with the trip).
     var onArrived: (NavTarget) -> Void = { _ in }
-    /// Offline fallback: try a road route again this often.
+    /// Offline fallback: the first wait before trying a road route again. Each failed try
+    /// doubles the wait (20 s, 40 s, 80 s …) up to `maxRetryInterval`, so a long stretch without
+    /// signal does not re-run the whole routing chain every 20 s. `retryNow()` (network back)
+    /// still tries at once.
     var retryInterval: TimeInterval = 20
+    /// The longest wait between two automatic retries (never shorter than `retryInterval`).
+    static let maxRetryInterval: TimeInterval = 300
     private var retryTask: Task<Void, Never>?
     private var retryable = false
+    private var retriesEnabled = false
     private var retrying = false
     /// Said before the first instruction of an automatic start («نبدأ التوجيه إلى …»).
     private var autoIntro: NavLine?
@@ -405,6 +411,7 @@ final class NavSession: ObservableObject {
         locator.stop()
         reset()
         auto = true
+        retriesEnabled = true
         target = t
         phase = .planning
         loading = true
@@ -422,6 +429,32 @@ final class NavSession: ObservableObject {
             guard !Task.isCancelled, self.auto, self.phase == .planning, self.target == t else { return }
             self.loading = false
             self.applyAuto(r, origin: origin, target: t)
+            self.start()
+        }
+    }
+
+    /// Start personal guidance to an arbitrary map point without opening route options and
+    /// without marking the outing's shared/automatic guidance as active. A usable hybrid route
+    /// is preferred; if no router can produce one, start the explicitly labelled bearing fallback.
+    func startImmediately(to t: NavTarget) {
+        guard let f = myFix() else { return }
+        fetchTask?.cancel()
+        retryTask?.cancel()
+        if isActive { stopEngine() }
+        locator.stop()
+        reset()
+        retriesEnabled = true
+        target = t
+        phase = .planning
+        loading = true
+        let origin = LngLat(lng: f.lng, lat: f.lat)
+        let heading = Policy.trustedHeading(f.heading, speed: f.speed)
+        fetchTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await self.requestRoutes(origin: origin, heading: heading, target: t)
+            guard !Task.isCancelled, !self.auto, self.phase == .planning, self.target == t else { return }
+            self.loading = false
+            self.applyAuto(result, origin: origin, target: t)
             self.start()
         }
     }
@@ -464,34 +497,46 @@ final class NavSession: ObservableObject {
             retryable = true
         }
         #if DEBUG
-        NavLog.log("auto routes=%d fallback=%@", routes.count, String(describing: fallback))
+        NavLog.log("route result routes=%d fallback=%@", routes.count, String(describing: fallback))
         #endif
     }
 
     private func scheduleRetry() {
         retryTask?.cancel()
-        guard retryable else { return }
-        let every = max(0.01, retryInterval)
+        guard retryable, retriesEnabled else { return }
+        let first = retryInterval
         retryTask = Task { [weak self] in
+            var attempt = 0
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(every * 1_000_000_000))
+                let wait = NavSession.retryDelay(attempt: attempt, base: first)
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 guard !Task.isCancelled, let self else { return }
                 if await self.retryRoute() { return }
+                attempt += 1
             }
         }
+    }
+
+    /// The wait before automatic retry number `attempt` (0-based): `base` doubled per failed
+    /// try, capped at `maxRetryInterval` (or at `base` when that is already longer).
+    static func retryDelay(attempt: Int, base: TimeInterval) -> TimeInterval {
+        let first = max(0.01, base)
+        let cap = max(first, maxRetryInterval)
+        let doublings = min(max(0, attempt), 30)
+        return min(cap, first * pow(2, Double(doublings)))
     }
 
     /// One more try at a road route while the offline bearing guidance runs (on a timer, and
     /// when the network comes back). True when there is nothing left to retry.
     @discardableResult
     func retryRoute() async -> Bool {
-        guard auto, phase == .offRoad, fallback?.retrying == true, retryable else { return true }
+        guard retriesEnabled, phase == .offRoad, fallback?.retrying == true, retryable else { return true }
         guard !retrying, let t = target, let f = myFix() else { return false }
         retrying = true
         defer { retrying = false }
         let origin = LngLat(lng: f.lng, lat: f.lat)
         let r = await requestRoutes(origin: origin, heading: Policy.trustedHeading(f.heading, speed: f.speed), target: t)
-        guard auto, phase == .offRoad, fallback?.retrying == true, target == t else { return true }
+        guard retriesEnabled, phase == .offRoad, fallback?.retrying == true, target == t else { return true }
         switch r {
         case let .success(p) where !p.routes.isEmpty:
             #if DEBUG
@@ -514,7 +559,7 @@ final class NavSession: ObservableObject {
 
     /// The network is back: try the road route now instead of waiting for the timer.
     func retryNow() {
-        guard auto, phase == .offRoad, fallback?.retrying == true, retryable else { return }
+        guard retriesEnabled, phase == .offRoad, fallback?.retrying == true, retryable else { return }
         Task { await retryRoute() }
     }
 
@@ -542,18 +587,18 @@ final class NavSession: ObservableObject {
             if let leg = offRoad {
                 let way = "\(NavText.compassDefinite(leg.bearing))، \(NavText.spokenInDistance(leg.distanceM) ?? "")"
                 let arrow = { (lead: String) in SaryVoiceScript.arrow(lead: lead, bearing: leg.bearing, distanceM: leg.distanceM) }
-                if auto, fallback == .offline {
+                if fallback == .offline {
                     voice.say(intro + NavLine("ما فيه إنترنت لحساب الطريق. اتجه مع السهم \(way). نعيد المحاولة لما يرجع الاتصال", clips: arrow("rr_06")))
-                } else if auto, fallback == .routeFailed {
+                } else if fallback == .routeFailed {
                     voice.say(intro + NavLine("ما قدرنا نحسب الطريق الحين. اتجه مع السهم \(way). نعيد المحاولة", clips: arrow("dir_07")))
-                } else if auto {
+                } else if auto || fallback == .noRoad {
                     /* «ما فيه طريق مزفلت يوصّلك للوجهة» (dir_06), not bar_01: in the v4 set bar_01 says «انتهى الطريق المزفلت», wrong before any road. */
                     voice.say(intro + NavLine("مافي طريق مزفلت يوصّلك للوجهة. كمّل مع السهم \(way)", clips: arrow("dir_06")))
                 } else {
                     voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")", clips: arrow("dir_07"))
                 }
             }
-            if auto { scheduleRetry() }
+            if retriesEnabled { scheduleRetry() }
             UIApplication.shared.isIdleTimerDisabled = true
             return
         }
@@ -567,6 +612,7 @@ final class NavSession: ObservableObject {
         attach(e)
         Task { [weak self] in
             guard let self else { return }
+            var started: NavGuidanceEngine = e
             do {
                 try await e.start(route: r, plan: self.plan, target: t)
             } catch {
@@ -576,10 +622,15 @@ final class NavSession: ObservableObject {
                 /* The SDK could not take this route (e.g. a custom route it cannot parse):
                  * follow it ourselves rather than give up. */
                 e.stop()
+                guard self.engine === e else { return }
                 let local = LocalGuidanceEngine()
                 self.attach(local)
+                started = local
                 try? await local.start(route: r, plan: self.plan, target: t)
             }
+            /* «إنهاء» (or the trip's end) came while the engine was still starting: `end()` stopped it
+             * before it ran, so stop it again now — never a Mapbox trip and its GPS left behind. */
+            guard self.engine === started else { started.stop(); return }
             let opening = self.openingWithETA(intro)
             self.openingVoicePending = false
             if r.steps.count > 1, let line = self.guidanceLine(stepIndex: 1, distanceM: r.steps.first?.distanceM ?? 0, opening: true) {
@@ -734,6 +785,9 @@ final class NavSession: ObservableObject {
         }
     }
 
+    /// Our own location stream (`NavLocator`) is running (tests: it must stop with the guidance).
+    var isLocating: Bool { locator.running }
+
     func end() {
         fetchTask?.cancel()
         retryTask?.cancel()
@@ -773,6 +827,7 @@ final class NavSession: ObservableObject {
         auto = false
         fallback = nil
         retryable = false
+        retriesEnabled = false
         autoIntro = nil
     }
 

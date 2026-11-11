@@ -1,6 +1,7 @@
 """Extract what the camp-site model needs from the Geofabrik GCC extract (OpenStreetMap, ODbL).
 
-Usage: python -I fetch_osm.py <gcc-states-latest.osm.pbf> <cache_dir>
+Usage: python -I fetch_osm.py <gcc-states-latest.osm.pbf> <cache_dir> [region_or_tile ...]
+       (no names: the pilot regions; national tiles: pass the names from `tiles.py list`, or @tiles.txt)
 Writes <cache_dir>/<region>/osm.json with lists of WKT geometries per layer:
   tracks       highway=track, or unpaved unclassified/service/path usable by 4x4 (access)
   roads        paved public roads (noise, light, «قريب من الخط»)
@@ -18,6 +19,7 @@ import sys
 import osmium
 from shapely import wkb
 from shapely.geometry import box
+from shapely.strtree import STRtree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from regions import REGIONS  # noqa: E402
@@ -35,10 +37,14 @@ class H(osmium.SimpleHandler):
         super().__init__()
         self.f = osmium.geom.WKBFactory()
         self.boxes = boxes
+        # Hundreds of national tiles: look the boxes up in an R-tree instead of testing every one.
+        self.names = list(boxes)
+        self.tree = STRtree([boxes[r] for r in self.names]) if len(boxes) > 8 else None
         self.out = {r: {k: [] for k in ("tracks", "roads", "settlements", "protected", "military", "wet", "famous")} for r in boxes}
 
     def put(self, layer, g, props=None):
-        for r, b in self.boxes.items():
+        hits = ((self.names[i], self.boxes[self.names[i]]) for i in self.tree.query(g)) if self.tree is not None else self.boxes.items()
+        for r, b in hits:
             if g.intersects(b):
                 self.out[r][layer].append({"wkt": g.wkt if g.geom_type == "Point" else g.simplify(0.00005).wkt, **(props or {})})
 
@@ -98,8 +104,10 @@ class H(osmium.SimpleHandler):
                                                           "area_km2": round(g.area * 111 * 111 * 0.9, 2)})
 
 
-def main(pbf, cache):
-    boxes = {r: box(v["bbox"][1] - MARGIN, v["bbox"][0] - MARGIN, v["bbox"][3] + MARGIN, v["bbox"][2] + MARGIN) for r, v in REGIONS.items()}
+def main(pbf, cache, names=None):
+    names = names or list(REGIONS)
+    picked = {r: REGIONS[r] for r in names}  # a tile name resolves to its haloed bbox (regions.py)
+    boxes = {r: box(v["bbox"][1] - MARGIN, v["bbox"][0] - MARGIN, v["bbox"][3] + MARGIN, v["bbox"][2] + MARGIN) for r, v in picked.items()}
     h = H(boxes)
     h.apply_file(pbf, locations=True)
     for r, d in h.out.items():
@@ -110,4 +118,7 @@ def main(pbf, cache):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    args = sys.argv[3:]
+    if len(args) == 1 and args[0].startswith("@"):
+        args = [x.strip() for x in open(args[0][1:]) if x.strip()]
+    main(sys.argv[1], sys.argv[2], args or None)

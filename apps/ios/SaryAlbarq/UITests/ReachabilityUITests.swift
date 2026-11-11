@@ -7,9 +7,9 @@ import XCTest
 final class ReachabilityUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    private func launch(context: String = "stopped") -> XCUIApplication {
+    private func launch(context: String = "stopped", extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", context]
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", context] + extra
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -83,6 +83,27 @@ final class ReachabilityUITests: XCTestCase {
         XCTAssertTrue(any(app, "outing-qibla").exists)
         any(app, "outing-weather").tap()
         XCTAssertTrue(any(app, "weather.sheet").waitForExistence(timeout: 5), "«الطقس» opens the weather")
+    }
+
+    func testQiblaDeniedLocationOffersSettingsAndFailureCanRetry() {
+        let deniedApp = launch(extra: ["-SaryQiblaLocationState", "denied"])
+        any(deniedApp, "outing-actions").tap()
+        any(deniedApp, "outing-weather-tools").tap()
+        any(deniedApp, "outing-qibla").tap()
+        XCTAssertTrue(any(deniedApp, "qibla.location-denied").waitForExistence(timeout: 5))
+        XCTAssertTrue(deniedApp.buttons["qibla.open-settings"].isHittable, "denied location offers an app Settings action")
+        XCTAssertFalse(any(deniedApp, "qibla.waiting").exists, "denial does not leave a spinner on screen")
+        deniedApp.terminate()
+
+        let failedApp = launch(extra: ["-SaryQiblaLocationState", "failed"])
+        any(failedApp, "outing-actions").tap()
+        any(failedApp, "outing-weather-tools").tap()
+        any(failedApp, "outing-qibla").tap()
+        XCTAssertTrue(any(failedApp, "qibla.location-error").waitForExistence(timeout: 5))
+        let retry = failedApp.buttons["qibla.retry"]
+        XCTAssertTrue(retry.isHittable, "location failure offers retry")
+        retry.tap()
+        XCTAssertTrue(any(failedApp, "qibla.waiting").waitForExistence(timeout: 3), "retry returns to a bounded locating state")
     }
 
     /// The raised sheet and the panels hold what the three tabs held.

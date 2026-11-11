@@ -361,6 +361,25 @@ final class ScriptedRouter: NavRoutingProvider {
     }
 }
 
+/// An engine whose start takes a while (like the Mapbox one resolving its routes first).
+@MainActor
+final class SlowStartEngine: NavGuidanceEngine {
+    var onEvent: (NavGuidanceEvent) -> Void = { _ in }
+    private(set) var startCalled = false
+    private(set) var startFinished = false
+    private(set) var running = false
+
+    func start(route: NavRoute, plan: NavRoutePlan, target: NavTarget) async throws {
+        startCalled = true
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        running = true
+        startFinished = true
+    }
+
+    func stop() { running = false }
+    func ingest(_ fix: DeviceFix) {}
+}
+
 @MainActor
 final class NavSessionAutoTests: XCTestCase {
     private var mutedBefore: Any?
@@ -409,6 +428,99 @@ final class NavSessionAutoTests: XCTestCase {
         XCTAssertTrue(said[0].hasPrefix("نبدأ التوجيه إلى مخيم النفود"), said[0])
         n.end()
         XCTAssertFalse(n.auto)
+    }
+
+    func testArbitraryPointStartsPersonalGuidanceImmediately() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.success(NavRoutePlan(routes: [road(to: campPos)]))])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+
+        XCTAssertEqual(n.phase, .planning)
+        await wait("personal guidance starts") { n.phase == .guiding }
+        XCTAssertFalse(n.auto, "a point selected on the map must not start group auto-guidance")
+        XCTAssertEqual(n.target, point)
+        XCTAssertEqual(n.active?.id, "r1")
+    }
+
+    func testArbitraryPointStillStartsWithHonestBearingWhenNoRouteExists() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.failure(.noRoute)])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+
+        await wait("direct guidance starts") { n.phase == .offRoad }
+        XCTAssertFalse(n.auto)
+        XCTAssertTrue(n.direct)
+        XCTAssertEqual(n.fallback, .noRoad)
+        XCTAssertEqual(n.offRoad?.from, olaya)
+        XCTAssertEqual(n.offRoad?.to, campPos)
+    }
+
+    func testImmediatePointRetriesTheRoadRouteWhenConnectivityReturns() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.failure(.offline), .success(NavRoutePlan(routes: [road(to: campPos)]))])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+        await wait("temporary bearing guidance") { n.phase == .offRoad }
+        XCTAssertEqual(n.fallback, .offline)
+
+        let finished = await n.retryRoute()
+        XCTAssertTrue(finished)
+        XCTAssertEqual(n.phase, .guiding)
+        XCTAssertFalse(n.auto)
+        XCTAssertNil(n.fallback)
+        XCTAssertEqual(router.calls, 2)
+    }
+
+    /// Build 36 field bug: the blue location arrow stayed after «أنهِ الطلعة». Ending a person's own
+    /// guidance (a map point, offline → bearing) stops its GPS and its road-route retries for good.
+    func testEndingPersonalGuidanceStopsItsGPSAndRetries() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.failure(.offline)])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.retryInterval = 0.05
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+        await wait("temporary bearing guidance") { n.phase == .offRoad }
+        XCTAssertTrue(n.isLocating, "the bearing leg runs on its own location stream")
+
+        n.end()
+        XCTAssertFalse(n.isLocating)
+        XCTAssertEqual(n.phase, .idle)
+        let calls = router.calls
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(router.calls, calls, "no road-route retry after the end")
+        XCTAssertEqual(n.phase, .idle)
+        XCTAssertFalse(n.isLocating)
+    }
+
+    /// «إنهاء» while the engine is still starting (the Mapbox engine awaits before it starts its
+    /// trip): the engine must not be left running behind the ended guidance.
+    func testEndWhileTheEngineIsStartingLeavesNothingRunning() async {
+        let engine = SlowStartEngine()
+        let router = ScriptedRouter([.success(NavRoutePlan(routes: [road(to: campPos)]))])
+        let n = NavSession(provider: router, makeEngine: { _ in engine })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: NavTarget(source: .point, name: "نقطة", position: campPos))
+        await wait("the engine is starting") { engine.startCalled }
+        n.end()
+        await wait("the engine finished starting", timeout: 3) { engine.startFinished }
+        await wait("and was stopped again") { !engine.running }
+        XCTAssertEqual(n.phase, .idle)
     }
 
     func testOffRoadDestinationRoadsThenBearing() async {
@@ -533,6 +645,17 @@ final class NavSessionAutoTests: XCTestCase {
         n.end()
     }
 
+    /// A long stretch without signal must not re-run the whole routing chain every 20 s.
+    func testOfflineRetryBacksOffExponentiallyUpToFiveMinutes() {
+        XCTAssertEqual(NavSession.retryDelay(attempt: 0, base: 20), 20)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 1, base: 20), 40)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 2, base: 20), 80)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 4, base: 20), 300, "capped at five minutes")
+        XCTAssertEqual(NavSession.retryDelay(attempt: 1_000, base: 20), 300)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 3, base: 600), 600, "a longer configured interval is kept")
+        XCTAssertEqual(NavSession.retryDelay(attempt: 1, base: 0.05), 0.1, accuracy: 1e-9)
+    }
+
     func testAPersonsOwnPlanningIsNotAuto() async {
         let router = ScriptedRouter([.success(NavRoutePlan(routes: [road(to: campPos)]))])
         let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
@@ -578,5 +701,170 @@ final class AutoNavActivityTests: XCTestCase {
         XCTAssertFalse(OutingActivityThrottle.isUrgent(b, a), "the distance ticking is not urgent")
         b.navSymbol = "arrow.turn.up.left"
         XCTAssertTrue(OutingActivityThrottle.isUrgent(b, a))
+    }
+}
+
+/// «طريق الرجعة» (owner): in the desert the return follows EXACTLY the outbound trail; in the
+/// city the fastest road. The outbound trail is cut at its city ↔ desert junction; the desert
+/// part is retraced to the junction (`BackTrack`), then the trip's road guidance takes over.
+final class ReturnTripHybridTests: XCTestCase {
+    /// 41 points, 100 m apart, due north from the city (index 0) to the desert camp (index 40).
+    private let home = LngLat(lng: 46.70, lat: 24.90)
+    private func at(_ northM: Double, _ eastM: Double = 0) -> LngLat { TrailGeo.lngLat(eastM, northM, ref: home) }
+    private var outbound: [TrailPoint] {
+        (0...40).map { i in let p = at(Double(i) * 100); return TrailPoint(lat: p.lat, lng: p.lng, t: 1_800_000_000_000 + Double(i) * 10_000) }
+    }
+    private let noRegion: (LngLat) -> String? = { _ in nil }
+
+    private func span(_ pts: [TrailPoint], _ r: ClosedRange<Int>) -> MatchedSpan {
+        let piece = MatchedPiece(first: r.lowerBound, last: r.upperBound, coords: r.map { pts[$0].position },
+                                 anchors: r.map { (t: pts[$0].t, index: $0 - r.lowerBound) }, confidence: 0.9)
+        return MatchedSpan(piece: piece)
+    }
+
+    // MARK: the split
+
+    func testSavedRoadEndCutsTheTrailAtTheNearestPoint() {
+        let pts = outbound
+        let s = ReturnRoute.split(pts, saved: at(2_000, 60), match: nil, region: noRegion)
+        XCTAssertEqual(s, ReturnRoute.Split(junction: 20, source: .savedRoute))
+        let leg = ReturnRoute.desertLeg(pts, split: s)
+        XCTAssertEqual(leg.count, 21)
+        XCTAssertEqual(leg.first?.position, pts[20].position)
+        XCTAssertEqual(leg.last?.position, pts[40].position)
+    }
+
+    func testSavedRoadEndOffTheTrailIsNotTrusted() {
+        /* The driver left the road somewhere else than the route said: the next source decides. */
+        let s = ReturnRoute.split(outbound, saved: at(2_000, 1_000), match: nil, region: noRegion)
+        XCTAssertEqual(s, ReturnRoute.Split(junction: 0, source: .none))
+    }
+
+    func testRoadMatcherFallbackEndsAtTheLastLongMatchedStretch() {
+        let pts = outbound
+        var cache = TrailMatchCache()
+        cache.spans = [span(pts, 0...20), span(pts, 30...31)]
+        cache.doneUpToT = pts.last!.t
+        let s = ReturnRoute.split(pts, saved: nil, match: cache, region: noRegion)
+        XCTAssertEqual(s, ReturnRoute.Split(junction: 20, source: .roadMatch), "a 100 m match in the desert is not the road network")
+        /* The matcher never looked at the end of the trail: what it did not match says nothing. */
+        cache.doneUpToT = pts[25].t
+        XCTAssertEqual(ReturnRoute.split(pts, saved: nil, match: cache, region: noRegion).source, .none)
+    }
+
+    func testDesertRegionFallbackCutsWhereTheTrailEnteredIt() {
+        let pts = outbound
+        let edge = pts[25].lat - 1e-6
+        let s = ReturnRoute.split(pts, saved: nil, match: TrailMatchCache(), region: { $0.lat > edge ? "thumamah" : nil })
+        XCTAssertEqual(s, ReturnRoute.Split(junction: 25, source: .desertRegion))
+        /* The whole trail inside the region: nothing tells the city from the desert. */
+        XCTAssertEqual(ReturnRoute.split(pts, saved: nil, match: nil, region: { _ in "thumamah" }).source, .none)
+    }
+
+    func testNothingKnownRetracesTheWholeTrail() {
+        let pts = outbound
+        let s = ReturnRoute.split(pts, saved: nil, match: nil, region: noRegion)
+        XCTAssertEqual(s, ReturnRoute.Split(junction: 0, source: .none))
+        XCTAssertEqual(ReturnRoute.desertLeg(pts, split: s).map(\.position), pts.map(\.position))
+        XCTAssertEqual(ReturnRoute.start(trail: pts, split: s, me: pts[40].position), .desertTrail(ReturnRoute.desertLeg(pts, split: s)))
+        XCTAssertEqual(ReturnRoute.split([], saved: nil, match: nil, region: noRegion).junction, 0)
+    }
+
+    func testRoadEndOfARoute() {
+        let a = at(0), b = at(1_000), c = at(2_000)
+        let paved = NavRoute(id: "mapbox-0", coordinates: [a, b, c], distanceM: 2_000, durationS: 120, steps: [])
+        XCTAssertEqual(ReturnRoute.roadEnd(of: paved), c, "all paved: its end")
+        var dirt = paved
+        dirt.surfaceRuns = [NavSurfaceRun(kind: .paved, coordinates: [a, b]), NavSurfaceRun(kind: .unpaved, coordinates: [b, c])]
+        XCTAssertEqual(ReturnRoute.roadEnd(of: dirt), b, "where the paved road ends")
+        let desert = NavRoute(id: "desert-desert-easy", coordinates: [b, c], distanceM: 1_000, durationS: 300, steps: [])
+        XCTAssertNil(ReturnRoute.roadEnd(of: desert), "a pure desert-grid route has no road part")
+        var hybrid = desert
+        hybrid.id = "mapbox-0-desert-easy"
+        hybrid.roadEnd = b
+        XCTAssertEqual(ReturnRoute.roadEnd(of: hybrid), b)
+    }
+
+    func testJunctionStoreRoundTripAndAccountWipe() {
+        let d = UserDefaults(suiteName: "junction-\(UUID().uuidString)")!
+        XCTAssertNil(OutboundJunctionStore.load("o1", defaults: d))
+        OutboundJunctionStore.save("o1", at(2_000), defaults: d)
+        let p = OutboundJunctionStore.load("o1", defaults: d)
+        XCTAssertLessThan(Vehicle.distanceMeters(p ?? home, at(2_000)), 0.5)
+        OutboundJunctionStore.forgetAll(defaults: d)
+        XCTAssertNil(OutboundJunctionStore.load("o1", defaults: d))
+    }
+
+    @MainActor
+    func testAccountWipeForgetsTheJunctions() {
+        XCTAssertTrue(LocalAccountData.keys.contains(OutboundJunctionStore.key))
+    }
+
+    // MARK: where the return starts
+
+    func testFromTheDesertRetracesOnlyTheDesertPartBackToTheJunction() throws {
+        let pts = outbound
+        let s = ReturnRoute.Split(junction: 20, source: .savedRoute)
+        guard case let .desertTrail(leg) = ReturnRoute.start(trail: pts, split: s, me: at(4_000, 20)) else { return XCTFail("desert leg expected") }
+        /* `BackTrack` guides to its path's FIRST point: the junction, not the old start. */
+        var bt = try XCTUnwrap(BackTrack(path: leg))
+        XCTAssertEqual(bt.startPoint, pts[20].position)
+        let far = bt.update(at(4_000, 20))
+        XCTAssertFalse(far.arrived)
+        XCTAssertEqual(far.remainingM, 2_020, accuracy: 15)
+        /* Off the trail in the desert: led back to the SAME trail. */
+        let off = bt.update(at(3_000, 200))
+        XCTAssertTrue(off.offTrack)
+        XCTAssertLessThan(Vehicle.distanceMeters(off.nearest, at(3_000)), 5)
+        XCTAssertTrue(bt.update(at(2_010)).arrived)
+    }
+
+    func testCitySideJunctionOrFarFromTheTrailIsTheNormalRoad() {
+        let pts = outbound
+        let s = ReturnRoute.Split(junction: 20, source: .roadMatch)
+        XCTAssertEqual(ReturnRoute.start(trail: pts, split: s, me: at(1_000, 30)), .road, "the city part: fastest road")
+        XCTAssertEqual(ReturnRoute.start(trail: pts, split: s, me: at(2_010)), .road, "at the junction")
+        XCTAssertEqual(ReturnRoute.start(trail: pts, split: s, me: at(3_500, 8_000)), .road, "nowhere near the old trail")
+        XCTAssertEqual(ReturnRoute.start(trail: pts, split: ReturnRoute.Split(junction: 40, source: .roadMatch), me: at(4_000)), .road,
+                       "a trail that never left the road")
+    }
+
+    // MARK: the hand-over
+
+    func testArrivalAtTheJunctionHandsOverToTheRoadGuidance() throws {
+        let pts = outbound
+        let s = ReturnRoute.Split(junction: 20, source: .savedRoute)
+        var guide = ReturnGuide()
+        XCTAssertFalse(guide.holdsRoadGuidance)
+        let start = ReturnRoute.start(trail: pts, split: s, me: at(4_000))
+        guide.begin(start)
+        XCTAssertEqual(guide.phase, .desert)
+        XCTAssertTrue(guide.holdsRoadGuidance, "no new desert route while the trail is retraced")
+        guide.begin(.road)
+        XCTAssertEqual(guide.phase, .desert, "decided once")
+
+        var bt = try XCTUnwrap(BackTrack(path: ReturnRoute.desertLeg(pts, split: s)))
+        XCTAssertFalse(guide.backTrackUpdate(bt.update(at(3_000))))
+        XCTAssertTrue(guide.holdsRoadGuidance)
+        XCTAssertTrue(guide.backTrackUpdate(bt.update(at(2_005))), "the junction reached: hand over")
+        XCTAssertEqual(guide.phase, .road)
+        XCTAssertFalse(guide.holdsRoadGuidance)
+        XCTAssertFalse(guide.backTrackUpdate(bt.update(at(2_005))), "once")
+        /* The trip's own guidance now starts the road leg to the return trip's destination. */
+        let startPoint = OutingDestination(name: "نقطة البداية", lat: home.lat, lng: home.lng)
+        guard case let .start(t) = TripAutoNav.decide(active { $0.destination = startPoint }) else { return XCTFail("road guidance expected") }
+        XCTAssertEqual(t.source, .destination)
+        XCTAssertEqual(t.position, home)
+    }
+
+    func testStoppingTheDesertLegOrStartingInTheCityIsTheRoad() {
+        var g = ReturnGuide()
+        g.begin(.road)
+        XCTAssertEqual(g.phase, .road)
+        var d = ReturnGuide()
+        d.begin(.desertTrail(outbound))
+        d.cancel()
+        XCTAssertEqual(d.phase, .road)
+        XCTAssertFalse(d.holdsRoadGuidance)
     }
 }

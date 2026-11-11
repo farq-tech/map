@@ -1,4 +1,5 @@
 import AVKit
+import CoreLocation
 import XCTest
 
 /// «الملاحة»: the route options, active guidance, reroute, the off-road last leg and
@@ -17,6 +18,11 @@ final class NavigationUITests: XCTestCase {
     private func launch(_ extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo"] + extra
+        /* Keep this suite self-contained: the demo route starts by Kingdom Centre, so do not
+         * rely on whoever launched xcodebuild having set the simulator's location beforehand. */
+        XCUIDevice.shared.location = XCUILocation(location: CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 24.7113, longitude: 46.6744), altitude: 600,
+            horizontalAccuracy: 5, verticalAccuracy: 5, course: 0, speed: 0, timestamp: Date()))
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()

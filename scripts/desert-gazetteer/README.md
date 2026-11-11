@@ -6,6 +6,11 @@ A bundled, offline list of real desert places for the home chips «نفود»، 
 invents a place, a name or a coordinate. The only derived values are a simplified outline, its
 bounding box and a representative point inside it.
 
+The iOS `PlaceNamer` reuses this same file for offline labels on saved and recent map points,
+excluding the synthetic camp-site suggestions. It does not ship a second place list or assign a
+distant town/feature to a point when the geocoder and nearby named features provide no match.
+The app's About screen includes the OSM and GeoNames attributions listed below.
+
 ## Sources and licences
 
 | Source | What | Licence | Attribution (in «حول» and under the list) |

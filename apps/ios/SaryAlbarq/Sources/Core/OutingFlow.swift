@@ -140,7 +140,7 @@ enum LegLifecycle {
 
 /// What the outing screen is doing right now — unmistakable on screen at all times.
 enum OutingFlowState: Equatable {
-    /// «ما بدأت الطلعة»: the leader sees «ابدأ الطلعة», members «بانتظار أمير الرحلة يبدأ».
+    /// «ما بدأت الطلعة»: the leader sees «ابدأ الطلعة», members see that they joined and are waiting for the leader.
     case notStarted
     case paused
     /// «الطلعة شغّالة»: no leg, never arrived anywhere yet.

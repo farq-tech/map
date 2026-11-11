@@ -46,6 +46,16 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertGreaterThan(HomeSheetRules.expandedHeight(screen: 874), HomeSheetRules.collapsedHeight)
     }
 
+    func testSheetFrameStaysValidForInitialAndInvalidGeometry() {
+        for screen in [0.0, -1, .nan, .infinity] {
+            let height = HomeSheetRules.frameHeight(screen: screen, preferred: .nan, drag: .infinity)
+            XCTAssertTrue(height.isFinite, "height must be finite for screen=\(screen)")
+            XCTAssertGreaterThanOrEqual(height, 160, "height must not be negative or collapse before layout")
+        }
+        XCTAssertEqual(HomeSheetRules.frameHeight(screen: 874, preferred: 220, drag: 20), 200)
+        XCTAssertEqual(HomeSheetRules.frameHeight(screen: 874, preferred: 900, drag: 0), 760)
+    }
+
     /// The cinematic intro is off by default (the owner: the moving logo looked laggy).
     func testIntroIsStaticByDefault() {
         XCTAssertFalse(IntroPolicy.enabledByDefault)

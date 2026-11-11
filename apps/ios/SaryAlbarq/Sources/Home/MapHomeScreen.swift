@@ -31,14 +31,16 @@ struct MapHomeScreen: View {
     @State private var desertNote: String?
     /// The desert result picked (its outline stays drawn under the place card).
     @State private var desertPicked: DesertCategoryItem?
-    private let desertService: DesertCategoryService = DesertCategoryRouter()
+    private let desertService: DesertCategoryService = DesertCategoryRouter.shared
     @State private var selected: SelectedPlace?
+    @State private var selectedPointNameTask: Task<Void, Never>?
     @State private var camera: PlanCamera?
     @State private var cameraSeq = 1
-    @State private var shortcuts = HomeShortcutStore.load()
+    /* Loaded in onAppear: a @State initialiser runs on every re-init of this struct (each parent re-render). */
+    @State private var shortcuts: [HomeShortcut: OutingDestination] = [:]
     /// Choosing a place for «البيت» / «الشغل» (the next pick is saved there).
     @State private var assigning: HomeShortcut?
-    @State private var recent = RecentPlaces.load()
+    @State private var recent: [OutingDestination] = []
     @State private var profileOpen = false
     @State private var startFor: StartTarget?
     @State private var creating = false
@@ -95,6 +97,9 @@ struct MapHomeScreen: View {
                 setExpanded(true)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .saryRecentPlacesChanged)) { _ in
+            recent = RecentPlaces.load()
         }
         .onChange(of: locator.fix) { old, fix in if old == nil, fix != nil, selected == nil { recenter(zoom: 12) } }
         .onChange(of: voice.text) { _, t in if !t.isEmpty { query = t } }
@@ -172,7 +177,7 @@ struct MapHomeScreen: View {
         } else {
             base = CGFloat(HomeSheetRules.collapsedHeight) + (activeOuting == nil ? 0 : 78)
         }
-        return min(min(screen - 60, 760), max(160, base - drag))
+        return CGFloat(HomeSheetRules.frameHeight(screen: Double(screen), preferred: Double(base), drag: Double(drag)))
     }
 
     private func sheet(height: CGFloat) -> some View {
@@ -644,6 +649,8 @@ struct MapHomeScreen: View {
     }
 
     private func beginAssign(_ s: HomeShortcut) {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         assigning = s
         selected = nil
         setExpanded(true)
@@ -652,6 +659,8 @@ struct MapHomeScreen: View {
 
     private func runCategory(_ c: HomeCategory) {
         if category == c { clearSearch(); return }
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         category = c
         selected = nil
         desertPicked = nil
@@ -667,8 +676,10 @@ struct MapHomeScreen: View {
         results = []
         searching = true
         let near = myPoint
+        let service = desertService
         job = Task {
-            let r = await desertService.search(c, near: near)
+            /* Edge distances to thousands of outlines: off the main thread, then the state on it. */
+            let r = await Task.detached(priority: .userInitiated) { await service.search(c, near: near) }.value
             guard !Task.isCancelled, category == c else { return }
             searching = false
             switch r {
@@ -712,26 +723,48 @@ struct MapHomeScreen: View {
             return
         }
         searchFocused = false
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         selected = s
         expanded = false
         cameraSeq += 1
-        camera = PlanCamera(kind: .point(LngLat(lng: s.destination.lng, lat: s.destination.lat), zoom: 14), id: cameraSeq)
+        let point = LngLat(lng: s.destination.lng, lat: s.destination.lat)
+        camera = PlanCamera(kind: .point(point, zoom: 14), id: cameraSeq)
+        guard PlaceLabel.isGeneric(s.destination.name) else { return }
+        selectedPointNameTask = Task {
+            let name = await PlaceNameResolver.shared.name(for: point, within: 3)
+            guard !Task.isCancelled, !PlaceLabel.isGeneric(name),
+                  var current = selected,
+                  PlaceLabel.isGeneric(current.destination.name),
+                  PlanGeo.meters(LngLat(lng: current.destination.lng, lat: current.destination.lat), point) < 2 else { return }
+            current.destination.name = name
+            selected = current
+        }
     }
 
     private func closePlace() {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         selected = nil
         desertPicked = nil
     }
 
     /// In an active outing, «ابدأ» goes to this point in that outing; otherwise create a new outing.
     private func start(_ d: OutingDestination) {
-        RecentPlaces.add(d)
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
+        let destination = selected.map(\.destination).flatMap { picked in
+            let a = LngLat(lng: picked.lng, lat: picked.lat)
+            let b = LngLat(lng: d.lng, lat: d.lat)
+            return PlanGeo.meters(a, b) < 2 ? picked : nil
+        } ?? d
+        RecentPlaces.add(destination)
         recent = RecentPlaces.load()
         if let outing = activeOuting {
-            DispatchQueue.main.async { model.open(outing.id, mapDestination: d) }
+            DispatchQueue.main.async { model.open(outing.id, mapDestination: destination) }
             return
         }
-        startFor = StartTarget(destination: d)
+        startFor = StartTarget(destination: destination)
     }
 
     private var placeStartTitle: String {
@@ -756,9 +789,13 @@ struct MapHomeScreen: View {
             if !now { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
             /* «دليل البر» first: a known desert name answers offline too. */
-            let desert = HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near)
+            /* Matched off the main thread (thousands of names, edge distances), shown on it. */
+            let (desert, desertOnly) = await Task.detached(priority: .userInitiated) {
+                (HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near), HomeDesertRules.categoryKind(t) != nil)
+            }.value
+            guard !Task.isCancelled else { return }
             results = desert
-            if HomeDesertRules.categoryKind(t) != nil {
+            if desertOnly {
                 /* Category intent is entirely answered by the bundled gazetteer. Avoid waiting on
                  * geocoders or leaking a query that cannot improve these type-filtered results. */
                 searching = false

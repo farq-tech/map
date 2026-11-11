@@ -26,7 +26,18 @@ struct NavPiPSnapshot: Equatable {
     var distanceRemaining: String
     var timeRemaining: String
     var route: [LngLat]
+    var routeRevision: UUID? = nil
     var progress: Double
+
+    /// SwiftUI compares a fresh snapshot on every body evaluation. Comparing the whole coordinate
+    /// array there is O(route); a route revision changes when route geometry is newly constructed,
+    /// while remaining stable for progress-only snapshot updates.
+    static func == (a: NavPiPSnapshot, b: NavPiPSnapshot) -> Bool {
+        a.target == b.target && a.road == b.road && a.instruction == b.instruction && a.symbol == b.symbol
+            && a.distanceToTurn == b.distanceToTurn && a.distanceRemaining == b.distanceRemaining
+            && a.timeRemaining == b.timeRemaining && a.progress == b.progress
+            && a.routeRevision == b.routeRevision
+    }
 
     @MainActor static func make(nav: NavSession) -> NavPiPSnapshot? {
         guard let step = nav.currentStep else { return nil }
@@ -38,6 +49,7 @@ struct NavPiPSnapshot: Equatable {
                               distanceRemaining: nav.remainingMeters.map(SaryFormat.distance(meters:)) ?? "",
                               timeRemaining: nav.remainingSeconds.map(NavText.remaining(seconds:)) ?? "",
                               route: nav.active?.coordinates ?? [],
+                              routeRevision: nav.active?.geometryRevision,
                               progress: nav.active.map { route in
                                   guard route.distanceM > 0 else { return 0 }
                                   return min(1, max(0, 1 - (nav.remainingMeters ?? route.distanceM) / route.distanceM))
@@ -61,6 +73,9 @@ final class NavPictureInPicture: NSObject, ObservableObject {
     private var startTask: Task<Void, Never>?
     private var lastFrameTime = CMTime.invalid
     private var automatic = false
+    /// While PiP is not showing, only a primer frame is kept in the layer (so a tap or the
+    /// automatic start from inline has something to show); refresh it at most this often.
+    private static let primerInterval: Double = 5
 
     override init() {
         super.init()
@@ -104,7 +119,7 @@ final class NavPictureInPicture: NSObject, ObservableObject {
         guard automatic else { return }
         startTask?.cancel()
         startError = nil
-        enqueueFrame()
+        enqueueFrame(force: true)
         startFrames()
         startTask = Task { @MainActor [weak self] in
             /* The sample-buffer layer consumes its first frame asynchronously. PiP can report
@@ -153,12 +168,18 @@ final class NavPictureInPicture: NSObject, ObservableObject {
         timer = nil
     }
 
-    private func enqueueFrame() {
-        guard let snapshot, let image = Self.render(snapshot), let cgImage = image.cgImage else { return }
+    /// `force`: the user asked to start PiP, so the next frame goes out without the primer throttle.
+    private func enqueueFrame(force: Bool = false) {
+        guard let snapshot else { return }
         if displayLayer.status == .failed { displayLayer.flush() }
         guard displayLayer.isReadyForMoreMediaData else { return }
         let now = displayTimebase.map(CMTimebaseGetTime) ?? CMClockGetTime(CMClockGetHostTimeClock())
         guard let presentationTime = NavPiPFrameTiming.next(current: now, after: lastFrameTime) else { return }
+        /* Not floating yet (and no start in progress): the layer already holds a primer frame, so
+         * only refresh it every few seconds instead of rendering on every guidance update. */
+        if !active, !force, startTask == nil, lastFrameTime.isValid, lastFrameTime.isNumeric,
+           CMTimeGetSeconds(CMTimeSubtract(now, lastFrameTime)) < Self.primerInterval { return }
+        guard let image = Self.render(snapshot), let cgImage = image.cgImage else { return }
         let width = cgImage.width, height = cgImage.height
         var pixelBuffer: CVPixelBuffer?
         /* PiP's sample-buffer renderer consumes the frames through IOSurface. A CPU-only
@@ -204,7 +225,12 @@ final class NavPictureInPicture: NSObject, ObservableObject {
 
     private static func render(_ snapshot: NavPiPSnapshot) -> UIImage? {
         let size = CGSize(width: 640, height: 360)
-        let renderer = UIGraphicsImageRenderer(size: size)
+        /* Fixed 640x360 pixels: the PiP window is never larger than that, and the screen scale
+         * (3x) would render and copy ~9x the pixels every frame. The card fills its background. */
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
         return renderer.image { ctx in
             let bounds = CGRect(origin: .zero, size: size)
             UIColor(red: 0.035, green: 0.045, blue: 0.065, alpha: 1).setFill()

@@ -4,13 +4,13 @@ import UIKit
 
 // MARK: - Typography
 
-/// Tajawal (OFL, bundled in Resources/Fonts) registered at runtime.
+/// ITF Huwiya Arabic (bundled from Farq) registered at runtime.
 enum SaryFonts {
-    static let files = ["Tajawal-Regular", "Tajawal-Medium", "Tajawal-Bold", "Tajawal-ExtraBold"]
+    static let files = ["itfHuwiyaArabic-Regular", "itfHuwiyaArabic-Medium", "itfHuwiyaArabic-Bold", "itfHuwiyaArabic-Black"]
 
     private static let registered: Bool = {
         for name in files {
-            guard let url = Bundle.main.url(forResource: name, withExtension: "ttf") else { continue }
+            guard let url = Bundle.main.url(forResource: name, withExtension: "otf") else { continue }
             // Already registered returns an error we can ignore.
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
@@ -27,10 +27,10 @@ enum SaryWeight: CaseIterable {
 
     var postScript: String {
         switch self {
-        case .regular: return "Tajawal-Regular"
-        case .medium: return "Tajawal-Medium"
-        case .bold: return "Tajawal-Bold"
-        case .heavy: return "Tajawal-ExtraBold"
+        case .regular: return "itfHuwiyaArabic-Regular"
+        case .medium: return "itfHuwiyaArabic-Medium"
+        case .bold: return "itfHuwiyaArabic-Bold"
+        case .heavy: return "itfHuwiyaArabic-Black"
         }
     }
 
@@ -94,7 +94,7 @@ enum SaryTextStyle: String, CaseIterable {
 }
 
 extension Font {
-    /// Tajawal at `size`, scaling with Dynamic Type relative to `style`.
+    /// ITF Huwiya Arabic at `size`, scaling with Dynamic Type relative to `style`.
     static func sary(_ size: CGFloat, _ weight: SaryWeight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
         SaryFonts.registerIfNeeded()
         return .custom(weight.postScript, size: size, relativeTo: style)
@@ -102,7 +102,7 @@ extension Font {
 
     /// Numbers that update live (distances, timers, battery): the system font
     /// (SF Arabic covers Arabic-Indic digits) with tabular figures, because
-    /// Tajawal's digits are proportional and would jitter while ticking.
+    /// Huwiya's digits are proportional and would jitter while ticking.
     /// `size` is already scaled — use `.saryNumber(_:)` in views.
     static func saryNumeric(scaled size: CGFloat, _ weight: SaryWeight = .bold) -> Font {
         .system(size: size, weight: weight.system).monospacedDigit()

@@ -252,6 +252,10 @@ final class LiveOutingController: ObservableObject {
     /// «طريق العودة»: a frozen copy of my trail being retraced (nil when off).
     @Published private(set) var backTrack: BackTrack?
     @Published private(set) var backTrackStatus: BackTrackStatus?
+    /// A return trip's guidance: the desert leg on the outbound trail, then the road (`ReturnGuide`).
+    var returnGuide = ReturnGuide()
+    /// The road end last saved for this outing's guidance (`OutboundJunctionStore`), so it is written once.
+    var savedRoadJunction: LngLat?
     /// «اسلك هذا المسار» (build 10): following any saved track, off-road (nil when off).
     @Published var trackFollow: TrackFollowModel?
     /// My trail as drawn (`TrackDisplay`), rebuilt only when the trail changes.
@@ -304,6 +308,9 @@ final class LiveOutingController: ObservableObject {
     /// was closed ONCE. Build 11 closed every sheet on every later update, so on an ended trip
     /// «أدوات الطلعة» and anything opened from it vanished about a second after opening.
     var closeHandled = false
+    /// The trip ended (or I left / was removed) and this screen's guidance was stopped ONCE
+    /// (`stopGuidanceWhenTripOver`); guidance the person starts afterwards is theirs.
+    var tripEndHandled = false
 
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
@@ -551,6 +558,7 @@ final class LiveOutingController: ObservableObject {
         updateSpeed()
         updateTrip()
         autoNavSessionChanged()
+        stopGuidanceWhenTripOver()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -732,6 +740,8 @@ final class LiveOutingController: ObservableObject {
     func stopBackTrack() {
         backTrack = nil
         backTrackStatus = nil
+        /* A return trip's desert leg stopped by the person: the trip's road guidance from here. */
+        returnGuide.cancel()
         followCamGuidanceCheck()
     }
 
@@ -744,6 +754,11 @@ final class LiveOutingController: ObservableObject {
         }
         let st = bt.update(LngLat(lng: f.lng, lat: f.lat), accuracy: f.accuracy, atMs: f.atMs)
         if bt != backTrack { backTrack = bt }
+        /* A return trip's desert leg reached the city ↔ desert junction: the fastest road from here. */
+        if returnGuide.backTrackUpdate(st) {
+            handOverReturnToRoad()
+            return
+        }
         if st.arrived && backTrackStatus?.arrived != true { toast("وصلت نقطة البداية") }
         if st != backTrackStatus { backTrackStatus = st }
     }
@@ -989,7 +1004,8 @@ final class LiveOutingController: ObservableObject {
                 guard let self, let st = self.session.view?.status else { return }
                 Task { await self.session.setStatus(st == .paused ? "resume" : st == .created ? "start" : "pause") }
             },
-            endOuting: { [weak self] in Task { await self?.session.setStatus("end") } },
+            /* The same path as the trip strip's «أنهِ الطلعة»: the guidance (and its own GPS) ends too. */
+            endOuting: { [weak self] in self?.endTrip() },
             leaveOuting: { [weak self] in self?.leaveOuting() }
         )
         return a

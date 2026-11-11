@@ -93,8 +93,13 @@ final class ExploreUITests: XCTestCase {
 
         let rain = any(app, "weather.layer.rain")
         XCTAssertTrue(rain.waitForExistence(timeout: 5), "rain is a selectable layer")
-        rain.scrollIntoView(in: app)
-        XCTAssertTrue(rain.isHittable, "rain is reachable in the scrollable layer sheet")
+        /* The layer page has one long ScrollView. Swiping the whole application flings past
+         * the weather rows on iPhone and leaves `rain` off-screen by the time XCTest checks it.
+         * Scroll that page in short, deliberate steps and stop as soon as the row is reachable. */
+        let layerList = app.scrollViews.firstMatch
+        XCTAssertTrue(layerList.waitForExistence(timeout: 5), "layer sheet content scrolls")
+        for _ in 0..<8 where !rain.isHittable { layerList.swipeUp(velocity: .slow) }
+        XCTAssertTrue(rain.isHittable, "rain is reachable in the scrollable layer sheet: \(rain.frame)")
         rain.tap()
         XCTAssertTrue(any(app, "weather.rain.days").waitForExistence(timeout: 3), "rain exposes its period picker")
         let week = app.buttons["weather.rain.days.7"].firstMatch
