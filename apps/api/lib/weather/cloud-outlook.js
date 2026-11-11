@@ -24,10 +24,10 @@ const TARGET_DT_MIN = 30;
 const MIN_CONFIDENCE = 0.45;
 const R = 6378137;
 
-const cache = new Lru(Number(process.env.WEATHER_OUTLOOK_CACHE) || 300);
+const cache = new Lru(Number(process.env.WEATHER_OUTLOOK_CACHE) || 40);
 const inflight = new Map();
 /* Last good window per 1° cell: served (with its true, older age) while a fresh one is being read. */
-const lastGood = new Map();
+const lastGood = new Lru(Number(process.env.WEATHER_OUTLOOK_STALE_CACHE) || 40); // ~1.5 MiB a window: bounded
 const STALE_MAX_MIN = 35;
 
 function toMercator(lat, lng) {

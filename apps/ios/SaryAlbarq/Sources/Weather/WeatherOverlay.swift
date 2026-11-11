@@ -40,7 +40,8 @@ final class WeatherOverlay {
     private var framesTask: Task<Void, Never>?
     private var timer: Timer?
     private var outlookTask: Task<Void, Never>?
-    private var outlookFor: (point: LngLat, at: Date)?
+    private var outlookRetried = false
+    private var outlookFor: (point: LngLat, at: Date, destination: Bool)?
     private var frameIndex = 0
     private var pauseTicks = 0
     let legend = WeatherLegendModel()
@@ -243,7 +244,7 @@ final class WeatherOverlay {
 
     /// Phase 2: direction + arrival for the destination / the person, refreshed when the point moves
     /// ≥ 25 km or the estimate is older than 10 min. Any failure or low confidence hides the row.
-    private func refreshOutlook() {
+    private func refreshOutlook(isRetry: Bool = false) {
         var point = request.point
         #if DEBUG
         /* Screenshots: `-SaryCloudPoint 17.5,44.0` pins the estimate to a point (the simulator has no real position). */
@@ -259,11 +260,13 @@ final class WeatherOverlay {
             return
         }
         if let last = outlookFor, Date().timeIntervalSince(last.at) < 600,
-           Self.km(last.point, p) < 25 { return }
+           Self.km(last.point, p) < 25, last.destination == request.pointIsDestination { return }
         /* A new place (not a refresh of the same one): never keep showing the old place's arrival. */
-        if outlookFor.map({ Self.km($0.point, p) >= 25 }) ?? true { legend.outlook = nil }
+        if outlookFor.map({ Self.km($0.point, p) >= 25 || $0.destination != request.pointIsDestination }) ?? true { legend.outlook = nil }
         outlookTask?.cancel()
-        outlookFor = (p, Date())
+        /* The one-retry allowance belongs to a request: a new place or layer starts with a fresh one. */
+        if !isRetry { outlookRetried = false }
+        outlookFor = (p, Date(), request.pointIsDestination)
         legend.outlookLoading = true
         let subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me
         outlookTask = Task { [weak self] in
@@ -271,7 +274,17 @@ final class WeatherOverlay {
             guard let self, !Task.isCancelled else { return }
             self.legend.outlookLoading = false
             self.legend.outlook = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
-            if o == nil { self.outlookFor = nil }
+            if o == nil {
+                self.outlookFor = nil
+                /* One quiet retry a minute later (the server may have finished reading by then). */
+                if !self.outlookRetried {
+                    self.outlookRetried = true
+                    try? await Task.sleep(nanoseconds: 60_000_000_000)
+                    if !Task.isCancelled { self.refreshOutlook(isRetry: true) }
+                }
+            } else {
+                self.outlookRetried = false
+            }
         }
     }
 

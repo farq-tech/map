@@ -232,7 +232,8 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setExplore(explore)
         HiResImagery.of(map).update(hiRes)
         /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
-        let cloudDest = plan.picked ?? plan.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }
+        /* The planned destination only: a long-pressed / searched point card is not where the person is going. */
+        let cloudDest = plan.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }
         WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome,
                                                             point: cloudDest ?? userPoint, pointIsDestination: cloudDest != nil))
         QiblaMapOverlay.of(map).update(origin: qiblaOrigin)
