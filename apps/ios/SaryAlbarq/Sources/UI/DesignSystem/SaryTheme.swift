@@ -362,8 +362,8 @@ private struct SaryPulseModifier: ViewModifier {
                 /* Ripples and halos travel out, then snap back unseen (they are
                  * transparent at the peak); breaths ease in and out evenly. */
                 let out = (style == .ripple || style == .halo) && mode == .full
-                if peak { return .easeOut(duration: out ? period * 0.9 : period / 2) }
-                return out ? nil : .easeInOut(duration: period / 2)
+                if peak { return Animation.easeOut(duration: out ? period * 0.9 : period / 2) }
+                return out ? nil : Animation.easeInOut(duration: period / 2)
             }
             .onAppear { onScreen = true }
             .onDisappear { onScreen = false }
