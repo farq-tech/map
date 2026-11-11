@@ -1331,6 +1331,8 @@ final class OutingSession: ObservableObject, Identifiable {
         } else {
             /* A hide already on the wire must land first, or it would hide me again after this. */
             await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
+            /* A hide that failed on the wire is back in the queue: its retry would hide me again. */
+            outbox.discard(user: myUserId, outing: id, kind: .hide)
             ok = await run("hidden") {
                 let r = try await api.setHidden(id, hidden: on)
                 view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
@@ -1414,6 +1416,9 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         if ok, racingCancel {
             await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .cancelSOS, timeoutMs: 15_000)
+            /* That «أنا بخير» may have failed and gone back in the queue to retry: its retry would
+             * cancel this SOS later, so it is taken back before the SOS is raised again. */
+            outbox.discard(user: myUserId, outing: id, kind: .cancelSOS)
             _ = await run("sos") {
                 let s = try await api.raiseSos(id, fix: wire)
                 view?.apply(.sos(userId: me, sos: s, refresh: false))
@@ -1421,6 +1426,8 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         if ok, racingHide {
             await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
+            /* Same for a hide that failed and is waiting to retry: it would hide me again after the SOS. */
+            outbox.discard(user: myUserId, outing: id, kind: .hide)
             _ = await run("hidden") {
                 let r = try await api.setHidden(id, hidden: false)
                 view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))

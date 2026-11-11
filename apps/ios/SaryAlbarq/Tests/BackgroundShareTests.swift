@@ -639,6 +639,33 @@ final class BackgroundSessionTests: XCTestCase {
         outbox.stop()
     }
 
+    /// Safety: a «أنا بخير» that was on the wire when a new SOS went out, and failed, goes back
+    /// in the queue to retry; `raiseSOS` takes it back after waiting, so it can't cancel the new SOS.
+    func testAFailedInFlightCancelCanBeTakenBackOnceItIsOffTheWire() async {
+        let server = SlowServer()
+        server.delay = 50_000_000
+        server.failuresLeft = 1
+        /* A real backoff (not the clock-moving one): the retry must still be waiting when we look. */
+        let outbox = OutingActionOutbox(deps: .init(
+            perform: { a in try await server.perform(a) },
+            defaults: defaults,
+            now: { [unowned self] in self.clock },
+            sleep: { _ in try? await Task.sleep(nanoseconds: 10_000_000_000) }
+        ))
+        outbox.currentUser = { "u1" }
+        outbox.enqueue(PendingOutingAction(user: "u1", outing: "o1", kind: .cancelSOS, createdMs: clock))
+        await waitUntil { outbox.isInFlight(user: "u1", outing: "o1", kind: .cancelSOS) }
+        XCTAssertFalse(outbox.discard(user: "u1", outing: "o1", kind: .cancelSOS), "on the wire: can't be taken back")
+        let cleared = await outbox.waitUntilNotInFlight(user: "u1", outing: "o1", kind: .cancelSOS, timeoutMs: 5_000)
+        XCTAssertTrue(cleared)
+        XCTAssertTrue(outbox.has(user: "u1", outing: "o1", kind: .cancelSOS), "failed, so queued again to retry")
+        XCTAssertTrue(outbox.discard(user: "u1", outing: "o1", kind: .cancelSOS), "off the wire: taken back")
+        XCTAssertTrue(outbox.queue.isEmpty)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(server.done.isEmpty, "the retry never cancels the new SOS")
+        outbox.stop()
+    }
+
     /// Demo and solo have no server: every action applies on this phone and nothing is queued.
     func testLocalSessionsNeverQueueServerWork() async {
         let server = SlowServer()
