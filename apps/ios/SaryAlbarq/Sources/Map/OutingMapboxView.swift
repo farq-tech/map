@@ -2040,12 +2040,36 @@ enum ArabicBasemap {
 
     static func cached(_ layer: MapLayer) -> String? {
         if let c = cache[layer] { return c }
+        guard let s = readDisk(layer) else { return nil }
+        cache[layer] = s
+        return s
+    }
+
+    /// The disk copy, tuned and graded as this build draws it (nil: none, or not Arabic).
+    /// Touches no shared state: safe on any thread.
+    private static func readDisk(_ layer: MapLayer) -> String? {
         guard let u = fileURL(layer), let raw = try? String(contentsOf: u, encoding: .utf8), raw.contains("name_ar") else { return nil }
         var s = tune(raw)
         /* A copy saved by an older build has another grade: grade it as this build does (idempotent). */
         if layer == .satellite { s = gradeSatellite(s) }
-        cache[layer] = s
         return s
+    }
+
+    /// Reads and writes of the disk copies, in order, off the main thread.
+    private static let disk = DispatchQueue(label: "sary.basemap.disk", qos: .userInitiated)
+
+    /// Launch (main thread): read and grade the disk copy off the main thread. Grading is a full
+    /// JSON parse and re-encode of the style; done in `cached` it ran on the main thread while
+    /// the first map was being created. A map created before this lands reads it itself, as before.
+    static func prewarm(_ layer: MapLayer = .satellite) {
+        guard cache[layer] == nil else { return }
+        disk.async {
+            guard let s = readDisk(layer) else { return }
+            DispatchQueue.main.async {
+                /* A fresher copy (fetched, or read by a map meanwhile) wins. */
+                if cache[layer] == nil { cache[layer] = s }
+            }
+        }
     }
 
     private static func fileURL(_ layer: MapLayer) -> URL? {
@@ -2105,8 +2129,11 @@ enum ArabicBasemap {
         if let json, json != cached(layer) {
             cache[layer] = json
             if let u = fileURL(layer) {
-                try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? json.write(to: u, atomically: true, encoding: .utf8)
+                /* The memory copy above is what this launch draws; the disk copy (the next launch's) is written off main. */
+                disk.async {
+                    try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try? json.write(to: u, atomically: true, encoding: .utf8)
+                }
             }
         } else if json != nil {
             /* Same style as the one already drawn: nothing to reload. */
