@@ -524,3 +524,43 @@ final class TrailSessionTests: XCTestCase {
         XCTAssertNil(TrailStore.load("o1", in: dir))
     }
 }
+
+/// `DisplayTrailMemo`: the composed trail is rebuilt only when the trail or the match cache changes.
+final class DisplayTrailMemoTests: XCTestCase {
+    private func pts(_ n: Int) -> [TrailPoint] {
+        (0..<n).map { TrailPoint(lat: 24.7 + Double($0) * 1e-4, lng: 46.6, t: 1_800_000_000_000 + Double($0) * 1000) }
+    }
+
+    func testUnchangedInputsComposeOnce() {
+        var memo = DisplayTrailMemo()
+        let p = pts(5)
+        let c = TrailMatchCache()
+        let a = memo.value(points: p, cache: c, compose: { pts, _ in pts.reversed() })
+        let b = memo.value(points: p, cache: c, compose: { pts, _ in pts.reversed() })
+        XCTAssertEqual(a, b)
+        XCTAssertEqual(a, Array(p.reversed()))
+        XCTAssertEqual(memo.composeCount, 1)
+    }
+
+    func testNewPointOrNewCacheComposesAgain() {
+        var memo = DisplayTrailMemo()
+        var p = pts(3)
+        _ = memo.value(points: p, cache: nil, compose: { pts, _ in pts })
+        p.append(pts(4)[3])
+        XCTAssertEqual(memo.value(points: p, cache: nil, compose: { pts, _ in pts }).count, 4)
+        XCTAssertEqual(memo.composeCount, 2)
+        var c = TrailMatchCache()
+        c.doneUpToT = 42
+        _ = memo.value(points: p, cache: c, compose: { pts, _ in pts })
+        XCTAssertEqual(memo.composeCount, 3)
+        /* Equal contents in another array still hit. */
+        _ = memo.value(points: p.map { $0 }, cache: c, compose: { pts, _ in pts })
+        XCTAssertEqual(memo.composeCount, 3)
+    }
+
+    func testMatchesComposeDirectly() {
+        var memo = DisplayTrailMemo()
+        let p = pts(6)
+        XCTAssertEqual(memo.value(points: p, cache: nil, compose: TrailDisplay.compose), TrailDisplay.compose(p, nil))
+    }
+}
