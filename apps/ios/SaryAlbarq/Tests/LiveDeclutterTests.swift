@@ -62,6 +62,12 @@ final class StartPinLayoutTests: XCTestCase {
 /// UI-AUDIT م3 (docs/UI-AUDIT.md §٢ «شاشة الطلعة لكل حالة»): what each state of the live screen
 /// keeps — one primary (the CTA), each action once (`LiveScreenRules`).
 final class LiveScreenRulesTests: XCTestCase {
+    func testPrimaryIsCompactWhileDrivingOrSheetRaised() {
+        XCTAssertFalse(LiveScreenRules.primaryCompact(sheetRaised: false, driving: false), "stopped: the primary is big")
+        XCTAssertTrue(LiveScreenRules.primaryCompact(sheetRaised: false, driving: true), "driving: «وين رايحين؟» too is a pill")
+        XCTAssertTrue(LiveScreenRules.primaryCompact(sheetRaised: true, driving: false))
+    }
+
     func testQuickRowIsFourAndOnlyWhileStoppedInARunningTrip() {
         XCTAssertEqual(LiveScreenRules.quickRow(chat: true), ["desert", "chat", "rally", "more"])
         XCTAssertEqual(LiveScreenRules.quickRow(chat: false), ["desert", "rally", "more"], "no chat on an older server")

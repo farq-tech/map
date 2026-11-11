@@ -308,15 +308,9 @@ struct LiveOutingScreen: View {
                     let flow = controller.flowUI
                     /* My SOS on (focused mode): the CTA steps aside; the SOS strip has «أنا بخير». */
                     let hasCTA = flow.primary != nil && !controller.sosFocused
-                    /* «وصلنا» while driving a leg is the only compact case; any stopped state («وين رايحين؟»,
-                     * «ابدأ المشوار»…) keeps the primary big even if the car is still rolling. */
-                    let ctaCompact: Bool = {
-                        /* The sheet raised (reading the people / the quick row): the primary shrinks to a pill
-                         * at the side so it never covers the cars and markers above the sheet. */
-                        if controller.sheetDetent != .peek { return true }
-                        if case .onLeg = flow.state { return driving }
-                        return false
-                    }()
+                    /* Owner (2026-11-11): while driving every primary («وين رايحين؟», «وصلنا»…) is a compact pill;
+                     * the sheet raised also shrinks it so it never covers the cars above the sheet. */
+                    let ctaCompact = LiveScreenRules.primaryCompact(sheetRaised: controller.sheetDetent != .peek, driving: driving)
                     let pttBig = driving && (ctaCompact || !hasCTA)
                     HStack(alignment: .center, spacing: theme.space(.s)) {
                         /* UX ٢١: no empty «—» bubble — only with a real reading. Guiding (v2) uses NavSpeedCluster. */

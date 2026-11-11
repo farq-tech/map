@@ -5,6 +5,11 @@ import SwiftUI
 /// shows, as pure rules (unit-tested in `LiveDeclutterTests`). One primary per state — the
 /// `OutingFlow` CTA; everything else is quiet, and each action has one way in.
 enum LiveScreenRules {
+    /// The outing's primary button shrinks to a pill whenever the sheet is raised, and — owner's
+    /// decision (2026-11-11) — whenever the car is driving, whatever the state («وين رايحين؟» too):
+    /// the walkie-talkie is the one big control on the road.
+    static func primaryCompact(sheetRaised: Bool, driving: Bool) -> Bool { sheetRaised || driving }
+
     /// The stopped quick row (four): «البر», «المحادثة» (when the server has it), «التجمع», «المزيد».
     /// «ملاحة» / «وجّه الكل» left it (the CTA is the one accent; «وجّه الكل» is offered in
     /// `NavStartChoiceSheet`), «أخفِ موقعي» moved into «المزيد», «طريق الرجعة» is the map's side button.
