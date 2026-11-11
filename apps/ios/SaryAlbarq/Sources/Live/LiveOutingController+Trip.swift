@@ -113,6 +113,8 @@ extension LiveOutingController {
         if backTrack != nil { stopBackTrack() }
         /* `-demo` keeps no trip log of its own: the screen's one goes to the summary. */
         if session.isDemo { let l = speed.local; TripLogStore.update(session.id) { $0 = l } }
+        /* #173: ending is for everyone, so the server decides (never faked); this line answers the tap now. */
+        if !session.isLocal { toast("جاري إنهاء الطلعة…") }
         Task { await session.setStatus("end") }
     }
 

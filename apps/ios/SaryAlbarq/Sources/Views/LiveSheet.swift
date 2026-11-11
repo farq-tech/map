@@ -162,8 +162,8 @@ struct LiveSheet: View {
             NoteComposer(state: NoteComposerUIState(currentNote: ui.participantsTab.participants.first(where: \.isMe)?.note,
                                                    isSending: controller.session.busy.contains("note")),
                          actions: NoteComposerActions(
-                            send: { t in Task { if await controller.session.sendNote(t) { controller.modal = nil; controller.toast("رسالتك فوق سيارتك ١٥ دقيقة") } } },
-                            clearNote: { Task { if await controller.session.sendNote("") { controller.modal = nil } } },
+                            send: { t in Task { if await controller.session.sendNote(t, deferred: true) { controller.modal = nil; controller.toast("رسالتك فوق سيارتك ١٥ دقيقة") } } },
+                            clearNote: { Task { if await controller.session.sendNote("", deferred: true) { controller.modal = nil } } },
                             cancel: { controller.modal = nil }))
                 .presentationDetents([.medium, .large])
         case .stations:

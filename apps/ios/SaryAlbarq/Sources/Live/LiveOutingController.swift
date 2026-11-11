@@ -351,6 +351,8 @@ final class LiveOutingController: ObservableObject {
         inviteLink = session.storedInviteURL()?.absoluteString
         weather = OutingWeather(outingId: session.id, tracksMap: true)
         weather.onAlert = { [weak self] a in self?.pushAlert(LiveAlertUI(id: a.id, kind: .weather(a)), ttl: 45) }
+        /* #173: an action already done here waits for the network (or was refused): one toast. */
+        session.onDeferredNotice = { [weak self] text in self?.toast(text) }
         #if DEBUG
         /* Screenshots: `-SaryLiveSheet half|full`, `-SaryLiveModal weather`. */
         let shotArgs = ProcessInfo.processInfo.arguments
@@ -1107,13 +1109,13 @@ final class LiveOutingController: ObservableObject {
     }
 
     /// «غادر الطلعة» — the only way to stop sharing (confirmed first by the caller's dialog).
+    /// Instant (#173): sharing stops and the screen closes now; the server is told in the
+    /// background (`OutingSession.leave`, persisted and retried).
     func leaveOuting() {
         confirm = nil
-        Task {
-            guard await session.leave() else { return }
-            endGuidanceForLeaving()
-            onExit()
-        }
+        session.leave()
+        endGuidanceForLeaving()
+        onExit()
     }
 
     /// The first alert worth a notification, after an invite join: our explainer, then iOS's prompt.

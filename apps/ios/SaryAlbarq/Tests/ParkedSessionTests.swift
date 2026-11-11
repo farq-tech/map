@@ -24,7 +24,7 @@ final class ParkedSessionTests: XCTestCase {
         m.open(DemoData.outingId)
         guard let s = m.session else { return XCTFail("the demo trip opens") }
         m.parkSession()
-        _ = await s.leave()
+        s.leave()
         try? await Task.sleep(nanoseconds: 200_000_000)
         XCTAssertNil(m.parkedSession, "left: nothing keeps running")
         XCTAssertTrue(s.didClose)
