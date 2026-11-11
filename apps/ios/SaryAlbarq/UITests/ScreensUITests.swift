@@ -123,4 +123,18 @@ final class ScreensUITests: XCTestCase {
         let app = launch(["-demo", "-SaryScreen", "home", "-SaryOffline"])
         XCTAssertTrue(app.descendants(matching: .any)["offline-banner"].waitForExistence(timeout: 10))
     }
+
+    /// UI-AUDIT 0.1 + 0.5: a friend's SOS shows even with a sheet (or the settings) up, offers
+    /// «اتصل ٩١١», and «أظهره على الخريطة» acknowledges it.
+    func testFriendSOSShowsOverAnOpenSheet() {
+        for extra in [["-SaryLiveModal", "layers"], ["-SaryLiveTab", "more"]] {
+            let app = launch(["-resetState", "-demo", "-SaryDrive", "0", "-SaryContext", "stopped", "-SaryFriendSOS", "6"] + extra)
+            let show = app.buttons["sos-alert-show"]
+            XCTAssertTrue(show.waitForExistence(timeout: 30), "the friend's SOS over \(extra)")
+            XCTAssertTrue(app.buttons["sos-alert-911"].exists, "«اتصل ٩١١» on the friend's SOS")
+            show.tap()
+            XCTAssertTrue(show.waitForNonExistence(timeout: 5), "acknowledged")
+            app.terminate()
+        }
+    }
 }

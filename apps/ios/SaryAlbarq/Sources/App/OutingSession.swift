@@ -938,6 +938,12 @@ final class OutingSession: ObservableObject, Identifiable {
     #if DEBUG
     /// Screenshots / UI tests: a plausible trail into the demo outing (DEBUG builds only).
     func seedDemoTrail(_ t: Trail) { trail = t }
+
+    /// Screenshots and UI tests (`-SaryFriendSOS <s>`): a friend in the demo outing raises SOS.
+    func demoFriendSOS() {
+        guard isDemo, let v = view, let uid = v.positions.keys.sorted().first(where: { $0 != v.myId }) else { return }
+        view?.apply(.sos(userId: uid, sos: SosInfo(at: ISODate.string(Date()), fix: nil), refresh: false))
+    }
     #endif
 
     // MARK: inbound

@@ -372,6 +372,9 @@ final class LiveOutingController: ObservableObject {
         }
         if arg("-SaryLiveModal") == "camp" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .campSuggest } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
+        if let d = arg("-SaryFriendSOS").flatMap(Double.init) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + d) { [weak self] in self?.session.demoFriendSOS() }
+        }
         if arg("-SaryLiveModal") == "qibla" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .qibla } }
         #endif
         session.objectWillChange.sink { [weak self] in

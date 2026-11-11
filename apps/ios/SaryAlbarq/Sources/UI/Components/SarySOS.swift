@@ -524,6 +524,18 @@ struct SaryFriendSOSAlert: View {
                         .buttonStyle(SaryPressStyle())
                         .accessibilityIdentifier("sos-alert-call")
                     }
+                    /* UI-AUDIT 0.5: a friend's SOS may need the official line too (device test of PR #149). */
+                    Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+                        Label("اتصل ٩١١", systemImage: SaryIcon.phone)
+                            .saryText(.headline)
+                            .foregroundStyle(p.onEmergency)
+                            .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
+                            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityLabel(Text("اتصل ٩١١"))
+                    .accessibilityHint(Text("الطوارئ الرسمية"))
+                    .accessibilityIdentifier("sos-alert-911")
                 }
             }
             .foregroundStyle(p.onEmergency)
