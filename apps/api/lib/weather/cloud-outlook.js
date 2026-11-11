@@ -98,7 +98,7 @@ async function loadFields(box, tMs) {
  * Pure glue: frames → motion (+ cross-check) and the verdict for the point at pixel (px, py).
  * `grays`: { older, newer, oldest? } brightness fields; `opacityNewer`: dense-cloud field of the newest.
  */
-function analyse({ grays, opacityNewer, dtMin, dt2Min, pxKm, ageMin, px, py }) {
+function motionOf(grays, dtMin, dt2Min, pxKm) {
   const opts = { maxSpeedKmh: MAX_SPEED_KMH, maxShift: Math.floor((WINDOW_PX - 100) / 2) };
   const mv = motion.estimateMotion(grays.older, grays.newer, dtMin, pxKm, opts);
   let check = null;
@@ -108,8 +108,18 @@ function analyse({ grays, opacityNewer, dtMin, dt2Min, pxKm, ageMin, px, py }) {
     cons = motion.consistency(mv, check);
   }
   const m2 = mv.ok && cons != null ? { ...mv, confidence: Math.min(mv.confidence, 0.15 + 0.85 * cons) } : mv;
-  const o = motion.outlookForPoint(opacityNewer, px, py, m2, pxKm, ageMin, { minConfidence: MIN_CONFIDENCE });
-  return { motion: m2, check, consistency: cons, outlook: o };
+  return { motion: m2, check, consistency: cons };
+}
+
+/**
+ * Pure glue: frames → motion (+ cross-check) and the verdict for the point at pixel (px, py).
+ * `grays`: { older, newer, oldest? } brightness fields; `opacityNewer`: dense-cloud field of the newest.
+ * `precomputed` (the window's motion, computed once and kept with the window) skips the heavy matching.
+ */
+function analyse({ grays, opacityNewer, dtMin, dt2Min, pxKm, ageMin, px, py, precomputed }) {
+  const m = precomputed || motionOf(grays, dtMin, dt2Min, pxKm);
+  const o = motion.outlookForPoint(opacityNewer, px, py, m.motion, pxKm, ageMin, { minConfidence: MIN_CONFIDENCE });
+  return { motion: m.motion, check: m.check, consistency: m.consistency, outlook: o };
 }
 
 /** Window centre = the 1° cell centre, so every point of a cell shares one fetch. */
@@ -150,10 +160,15 @@ async function outlook(lat, lng, nowMs = Date.now()) {
   const px = ((x - win.box[0]) / (win.box[2] - win.box[0])) * (WINDOW_PX - 1);
   const py = ((win.box[3] - y) / (win.box[3] - win.box[1])) * (WINDOW_PX - 1);
   const pxKm = WINDOW_KM / WINDOW_PX;
-  const ageMin = Math.max(0, (nowMs - Date.parse(win.sel.newer.time)) / 60000);
+  /* The frames may have taken minutes to load: age counts from now, not from the request's start. */
+  const nowAfter = Math.max(nowMs, Date.now());
+  const ageMin = Math.max(0, (nowAfter - Date.parse(win.sel.newer.time)) / 60000);
+  const grays = { newer: win.newer.gray, older: win.older.gray, oldest: win.oldest ? win.oldest.gray : null };
+  /* The matching is the expensive part (~0.3 s): once per window, then every point in the cell reuses it. */
+  if (!win.motionResult) win.motionResult = motionOf(grays, win.sel.dtMin, win.sel.dt2Min, pxKm);
   const a = analyse({
-    grays: { newer: win.newer.gray, older: win.older.gray, oldest: win.oldest ? win.oldest.gray : null },
-    opacityNewer: win.newer.opacity, dtMin: win.sel.dtMin, dt2Min: win.sel.dt2Min, pxKm, ageMin, px, py,
+    grays, opacityNewer: win.newer.opacity, dtMin: win.sel.dtMin, dt2Min: win.sel.dt2Min, pxKm, ageMin, px, py,
+    precomputed: win.motionResult,
   });
   const mv = a.motion;
   const o = a.outlook;

@@ -150,7 +150,10 @@ function estimateMotion(older, newer, dtMin, pxKm, opts = {}) {
   const peakScore = clamp01((best - 0.35) / 0.5);
   const distinct = clamp01((best - Math.max(second, -1)) / 0.12);
   const texture = clamp01(s.template.std / 0.12);
-  const confidence = Math.min(peakScore, distinct, texture);
+  /* A displaced peak must beat "nothing moved" clearly; otherwise a small noisy shift passes for motion. */
+  const shiftPx0 = Math.hypot(dx, dy);
+  const gainOverZero = shiftPx0 >= 1 ? clamp01((best - zero) / 0.05) : 1;
+  const confidence = Math.min(peakScore, distinct, texture, gainOverZero);
 
   const shiftPx = Math.hypot(dx, dy);
   const speedKmh = (shiftPx * pxKm) / (dtMin / 60);
@@ -166,6 +169,7 @@ function estimateMotion(older, newer, dtMin, pxKm, opts = {}) {
     zeroShiftCorrelation: zero,
     distinct,
     texture,
+    gainOverZero,
     stationary,
   };
 }
@@ -199,12 +203,12 @@ function patchMean(f, cx, cy, r = 2) {
 
 /**
  * Where is cloud relative to (cx, cy) along the motion axis, in the *newer* frame?
- * Marches upwind (against the motion) for the first dense patch, and downwind for the first clear one.
+ * Marches upwind (against the motion) for the first dense patch (what is coming) and for the first clear patch (the cloud's trailing edge, i.e. when it will have passed).
  * Distances in km, or null when not found within `horizonKm` / inside the frame.
  */
 function scanAlongMotion(newer, cx, cy, motion, pxKm, { dense = 0.45, clear = 0.2, horizonKm = 300 } = {}) {
   const len = Math.hypot(motion.dx, motion.dy);
-  if (!len) return { here: patchMean(newer, cx, cy), upwindKm: null, downwindKm: null, scannedKm: 0 };
+  if (!len) return { here: patchMean(newer, cx, cy), upwindKm: null, clearUpwindKm: null, scannedKm: 0 };
   const ux = motion.dx / len;
   const uy = motion.dy / len;
   const here = patchMean(newer, cx, cy);
@@ -221,17 +225,19 @@ function scanAlongMotion(newer, cx, cy, motion, pxKm, { dense = 0.45, clear = 0.
       break;
     }
   }
-  let downwindKm = null;
+  /* When the point is under cloud it clears once the cloud's trailing edge (UPWIND of the point)
+   * has passed: the first clear patch marching against the motion, not along it. */
+  let clearUpwindKm = null;
   for (let i = 1; i <= maxSteps; i++) {
-    const x = cx + ux * i;
-    const y = cy + uy * i;
+    const x = cx - ux * i;
+    const y = cy - uy * i;
     if (x < 0 || y < 0 || x > newer.w - 1 || y > newer.h - 1) break;
     if (patchMean(newer, x, y) <= clear) {
-      downwindKm = i * pxKm;
+      clearUpwindKm = i * pxKm;
       break;
     }
   }
-  return { here, upwindKm, downwindKm, scannedKm };
+  return { here, upwindKm, clearUpwindKm, scannedKm };
 }
 
 /** ± margin (minutes) around an arrival estimate: grows with weak confidence and with distance. */
@@ -260,7 +266,7 @@ function outlookForPoint(newer, cx, cy, motion, pxKm, ageMin, opts = {}) {
   };
   if (motion.stationary) return { ...common, state: 'stationary' };
   if (scan.here >= (opts.dense || 0.45)) {
-    const clearImg = scan.downwindKm != null ? (scan.downwindKm / motion.speedKmh) * 60 : null;
+    const clearImg = scan.clearUpwindKm != null ? (scan.clearUpwindKm / motion.speedKmh) * 60 : null;
     const clearNow = clearImg != null ? clearImg - ageMin : null;
     return {
       ...common,
