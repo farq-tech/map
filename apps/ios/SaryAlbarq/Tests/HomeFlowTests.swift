@@ -221,4 +221,41 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertFalse(IntroPolicy.enabledByDefault)
         XCTAssertEqual(IntroPolicy.mode(IntroFacts(enabled: IntroPolicy.enabled(defaults))), .still)
     }
+
+    /// Owner, Build 39: guidance back to idle with the gate ready must start again, and the idle card
+    /// must not say «ننتظر موقعك» when the fix is there.
+    func testStandaloneRestartsFromIdleAndSaysTheTruth() {
+        let now = Date()
+        XCTAssertTrue(StandaloneNavRules.shouldStart(gate: .ready, phase: .idle, loading: false))
+        XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .ready, phase: .idle, loading: true), "a start in flight")
+        XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .ready, phase: .guiding, loading: false))
+        XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .waitingForFix, phase: .idle, loading: false))
+        XCTAssertEqual(StandaloneNavRules.idleText(gate: .ready, accuracyM: 8, waitingSince: nil, now: now, targetName: "الثمامة"), "نبدأ التوجيه إلى الثمامة…")
+        XCTAssertEqual(StandaloneNavRules.idleText(gate: .waitingForFix, accuracyM: 8, waitingSince: now, now: now, targetName: "الثمامة"), "ننتظر موقعك… · الدقة ±٨ م")
+        XCTAssertEqual(StandaloneNavRules.diagnostics(accepted: 30, rejected: [.stale: 12, .teleport: 1], lastFixAgeS: 4.2),
+                       "مقبولة ٣٠ · مرفوضة: قديمة ١٢، قفزة ١ · آخر قراءة قبل ٤ ث")
+        XCTAssertEqual(StandaloneNavRules.diagnostics(accepted: 0, rejected: [:], lastFixAgeS: nil), "مقبولة ٠ · مرفوضة ٠")
+    }
+
+    /// The gate on a phone lying still (owner's hypothesis, Build 39): iOS's fresh 1 Hz fixes after a
+    /// fresh-fix request are taken even after an old reference from an earlier session; only fixes
+    /// that are not newer than the reference, or older than 10 s once a reference exists, are refused.
+    func testGateOnAParkedPhone() {
+        var g = FixQualityGate()
+        g.keepsFirstStale = false
+        let t0 = Date().timeIntervalSince1970 * 1000
+        let fix = { (atMs: Double, acc: Double) in DeviceFix(lat: 24.7113, lng: 46.6744, accuracy: acc, heading: nil, speed: 0, atMs: atMs) }
+        /* An old reference from an earlier session (10 min ago). */
+        if case .accept = g.judge(fix(t0 - 600_000, 8), nowMs: t0 - 600_000) {} else { XCTFail("seed") }
+        /* iOS answers the request: fresh fixes once a second, 0.5 s old on arrival → all taken. */
+        for k in 0..<10 {
+            let at = t0 + Double(k) * 1000
+            guard case .accept = g.judge(fix(at, 8), nowMs: at + 500) else { return XCTFail("fresh fix \(k) refused") }
+        }
+        /* What would freeze lastFix: fixes no newer than the reference, or 15–60 s old on arrival. */
+        let last = t0 + 9000
+        XCTAssertEqual(g.judge(fix(last, 8), nowMs: last + 1000), .reject(.stale), "not newer than the reference")
+        XCTAssertEqual(g.judge(fix(last + 500, 8), nowMs: last + 15_500), .reject(.stale), "15 s old on arrival")
+        XCTAssertEqual(g.accepted, 11)
+    }
 }
