@@ -56,6 +56,15 @@ extension LiveOutingController {
         followCamTimerCheck()
     }
 
+    /// That pan / pinch / rotate / tilt has settled: one that moved nothing gives the camera back
+    /// to the guidance at once (no «رجّعني للتوجيه» for a touch that only brushed the map).
+    func cameraGestureEnded(negligible: Bool) {
+        let was = followCam.mode
+        followCam.gestureEnded(negligible: negligible)
+        if was == .free, followCam.mode != .free, nav.isActive, nav.camera == .free { nav.camera = .follow }
+        followCamTimerCheck()
+    }
+
     /// Any finger on the screen (the auto-recenter waits for it to be gone a while).
     func cameraTouch(down: Bool) {
         followCam.touch(down: down, at: Date().timeIntervalSince1970)

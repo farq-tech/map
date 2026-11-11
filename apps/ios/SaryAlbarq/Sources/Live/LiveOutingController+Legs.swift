@@ -98,6 +98,7 @@ extension LiveOutingController {
             i.remainingM = p.remainingMeters
             i.eta = p.eta
         }
+        i.guidance = guidanceState
         return i
     }
 
@@ -116,6 +117,7 @@ extension LiveOutingController {
         case .whereTo, .changeDestination: modal = .whereTo
         case .startLeg: startLegFlow()
         case .arrived: arrivedTapped()
+        case .resumeGuidance: resumeAutoNav()
         case .endOuting: legConfirmEnd = true
         case .summary: openSummary()
         }

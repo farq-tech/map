@@ -186,6 +186,16 @@ enum TripAutoNav {
         }
     }
 
+    /// «أوقف التوجيه» pauses the trip's guidance on this phone: when it is the trip's guidance being
+    /// stopped, and also when it is a person's own guidance («اتجه» to a station, «روح له») while the
+    /// trip's guidance is on — otherwise `decide` sees nothing running and starts the trip's guidance
+    /// again a second later: one action triggering another (owner's build 36 report, item 10).
+    /// Nothing to pause once arrived, or with nothing running.
+    static func stopPausesTrip(_ s: TripAutoNavState, navAuto: Bool, navPhase: NavPhase) -> Bool {
+        guard navPhase != .arrived, navPhase != .idle else { return false }
+        return navAuto || (s.active && !s.paused && !s.arrived)
+    }
+
     /// Guidance would start (or move on) right now if only my fix were fresh: the wait is shown
     /// («ننتظر موقعك…») instead of doing nothing in silence.
     static func waitsForFix(_ i: Input) -> Bool {

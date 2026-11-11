@@ -58,7 +58,13 @@ final class NavSession: ObservableObject {
     /// The route being driven.
     @Published private(set) var active: NavRoute?
     @Published private(set) var progress: NavProgress?
+    /// The route revision `progress` was measured on. A reroute replaces `active` at once, but the
+    /// next progress (on the NEW route) comes a moment later: until then the old route's step
+    /// index and distances must not be read against the new route (`shownProgress`).
+    private var progressRevision = 0
     @Published private(set) var rerouting = false
+    /// When the current off-route began (`rerouteHoldS`).
+    private var reroutingSince: Date?
     @Published private(set) var offRoad: NavOffRoadLeg?
     /// Live remainder in the off-road phase.
     @Published private(set) var offRoadNow: (distanceM: Double, bearing: Double)?
@@ -679,6 +685,21 @@ final class NavSession: ObservableObject {
         return r
     }
 
+    /// Off the route, the engine keeps measuring against the OLD route (its distances grow as I
+    /// drive away from it). Build 36: the first such progress cleared «نعيد حساب الطريق…» at once,
+    /// so the banner flipped back to the abandoned route's turn with a growing distance while the
+    /// bottom bar kept the old remaining distance. The old route's progress is held back this long
+    /// (a reroute normally lands in 1–3 s; a failed one says so with `.rerouteFailed`); after it the
+    /// engine is trusted again (back on the route without a new one).
+    static let rerouteHoldS = 8.0
+
+    /// Mapbox's periodic traffic refresh of the same route vs a real reroute from where I am: the
+    /// same start and (nearly) the same length is the same route, its progress still applies.
+    static func isRefresh(of old: NavRoute?, _ new: NavRoute) -> Bool {
+        guard let old, let a = old.coordinates.first, let b = new.coordinates.first else { return false }
+        return Vehicle.distanceMeters(a, b) < 10 && abs(old.distanceM - new.distanceM) <= max(50, old.distanceM * 0.02)
+    }
+
     func handle(_ ev: NavGuidanceEvent) {
         #if DEBUG
         if case let .progress(p) = ev {
@@ -692,13 +713,20 @@ final class NavSession: ObservableObject {
         switch ev {
         case let .progress(p):
             guard phase == .guiding else { return }
+            if rerouting {
+                /* The abandoned route's numbers: not shown, not timed (see `rerouteHoldS`). */
+                if let s = reroutingSince, Date().timeIntervalSince(s) < Self.rerouteHoldS { return }
+                rerouting = false
+                reroutingSince = nil
+            }
             noteProgress(p)
             progress = p
-            if rerouting { rerouting = false }
+            progressRevision = routeRevision
             etaSmoother.update(remainingS: p.durationRemainingS, speedMps: guidanceSpeed())
             announceETAIfDue(p)
         case .offRoute:
             guard phase == .guiding else { return }
+            if !rerouting { reroutingSince = Date() }
             rerouting = true
             /* Once, not on every reroute while the driver is still finding the way back. */
             if Date().timeIntervalSince(lastOffRouteSpoken) > 45 {
@@ -709,8 +737,17 @@ final class NavSession: ObservableObject {
         case let .rerouted(r):
             guard phase == .guiding else { return }
             rerouting = false
+            reroutingSince = nil
+            let refresh = Self.isRefresh(of: active, r)
             active = r
             routeRevision += 1
+            if refresh {
+                /* The same road with fresh traffic: the last progress still describes it. */
+                progressRevision = routeRevision
+            } else {
+                /* A new route from here: its own time at once, not blended with the old route's. */
+                etaSmoother.snapNext()
+            }
             if let t = target { offRoad = NavOffRoad.lastLeg(routeEnd: r.end, target: t.position) }
             toast("مسار جديد")
             /* The new route's first maneuver at once: Mapbox's own first cue for it came just
@@ -718,6 +755,7 @@ final class NavSession: ObservableObject {
             if r.steps.count > 1, let line = guidanceLine(stepIndex: 1, distanceM: r.steps[0].distanceM, force: true, opening: true) { sayGuidance(line) }
         case let .rerouteFailed(m):
             rerouting = false
+            reroutingSince = nil
             toast(m)
         case .arrivedAtRouteEnd:
             guard phase == .guiding else { return }
@@ -770,8 +808,25 @@ final class NavSession: ObservableObject {
         if let t = target { onArrived(t) }
     }
 
+    /// The last fix that steered the guidance (`isNewer`).
+    private var lastIngested: DeviceFix?
+
+    /// Two location streams feed the guidance (the app's own `location.lastFix`, re-sent on every
+    /// location publish, and `NavLocator`): build 36 fed both straight in, so an older fix arriving
+    /// after a newer one moved the progress BACK (the turn distance jumped up and down while the
+    /// remaining distance lagged). Only a fix newer than the last one steers; a repeat is ignored.
+    static func isNewer(_ f: DeviceFix, than last: DeviceFix?) -> Bool {
+        guard let last else { return true }
+        if f.atMs != last.atMs { return f.atMs > last.atMs }
+        return f.lat != last.lat || f.lng != last.lng
+    }
+
     /// Every GPS fix (the app's own, and our locator's in the off-road phase / local engine).
     func ingest(_ f: DeviceFix) {
+        if phase == .guiding || phase == .offRoad {
+            guard Self.isNewer(f, than: lastIngested) else { return }
+            lastIngested = f
+        }
         switch phase {
         case .guiding:
             engine?.ingest(f)
@@ -805,6 +860,9 @@ final class NavSession: ObservableObject {
 
     private func reset() {
         phase = .idle
+        lastIngested = nil
+        reroutingSince = nil
+        progressRevision = 0
         progressAt = .distantPast
         progressSpeed = nil
         etaSmoother.reset()
@@ -833,15 +891,28 @@ final class NavSession: ObservableObject {
 
     // MARK: what the UI shows
 
+    /// The progress the screen reads: only one measured on the route being driven (never the
+    /// previous route's, in the moment between a reroute and the new route's first progress).
+    var shownProgress: NavProgress? { progressRevision == routeRevision ? progress : nil }
+
     var currentStep: NavStep? {
-        guard let r = active, let p = progress, r.steps.indices.contains(p.stepIndex) else { return active?.steps.dropFirst().first }
+        guard let r = active, let p = shownProgress, r.steps.indices.contains(p.stepIndex) else { return active?.steps.dropFirst().first }
         return r.steps[p.stepIndex]
     }
 
     var nextStep: NavStep? {
         guard let r = active else { return nil }
-        let i = (progress?.stepIndex ?? 1) + 1
+        let i = (shownProgress?.stepIndex ?? 1) + 1
         return r.steps.indices.contains(i) ? r.steps[i] : nil
+    }
+
+    /// How far the maneuver on the banner (`currentStep`) is. Without a progress yet (the start, just
+    /// after a reroute) that is the first step's length — the road up to the first maneuver — not
+    /// the length of the step AFTER it (what the banner showed before build 37).
+    var maneuverDistanceM: Double? {
+        guard let r = active else { return nil }
+        if let p = shownProgress, r.steps.indices.contains(p.stepIndex) { return p.distanceToManeuverM }
+        return r.steps.first?.distanceM
     }
 
     var etaDate: Date? {
@@ -850,13 +921,13 @@ final class NavSession: ObservableObject {
     }
 
     var remainingSeconds: Double? {
-        if let p = progress { return etaSmoother.remaining() ?? p.durationRemainingS }
+        if let p = shownProgress { return etaSmoother.remaining() ?? p.durationRemainingS }
         return active?.durationS
     }
 
     var remainingMeters: Double? {
         if phase == .offRoad { return offRoadNow?.distanceM ?? offRoad?.distanceM }
-        let road = progress?.distanceRemainingM ?? active?.distanceM
+        let road = shownProgress?.distanceRemainingM ?? active?.distanceM
         return road.map { $0 + (offRoad?.distanceM ?? 0) }
     }
 
@@ -870,6 +941,7 @@ final class NavSession: ObservableObject {
         selectedId = routes.first?.id
         active = phase == .planning ? nil : routes.first
         self.progress = progress
+        progressRevision = routeRevision
         self.offRoad = offRoad
         offRoadNow = offRoad.map { ($0.distanceM, $0.bearing) }
         self.rerouting = rerouting
@@ -949,7 +1021,7 @@ extension NavSession {
         case .guiding:
             if rerouting { return NavActivityLine(text: "نعيد حساب الطريق…", symbol: "arrow.triangle.2.circlepath") }
             guard let step = currentStep else { return nil }
-            let d = progress?.distanceToManeuverM ?? step.distanceM
+            let d = maneuverDistanceM ?? step.distanceM
             let inD = NavText.inDistance(d).map { $0 + " " } ?? ""
             return NavActivityLine(text: inD + NavText.instruction(step, targetName: target?.name), symbol: NavGlyph.symbol(step.maneuver))
         case .offRoad:

@@ -804,3 +804,30 @@ final class RouteVisibilityTests: XCTestCase {
         XCTAssertEqual(p?["circle-stroke-color"] as? String, "#ffffff")
     }
 }
+
+/// Build 37 (owner's report item 7): the direction in words is the banner's big line, the road under it.
+final class NavHUDManeuverTests: XCTestCase {
+    private func step(_ m: NavManeuver, road: String? = nil, sign: String? = nil) -> NavStep {
+        NavStep(maneuver: m, roadName: road, signText: sign, location: riyadh, distanceM: 500, durationS: 30)
+    }
+
+    func testHeadlineIsTheDirectionAndTheRoadGoesUnder() {
+        let left = step(.init(kind: .turn, direction: .left), road: "طريق الملك فهد")
+        XCTAssertEqual(NavHUD.headline(left, targetName: nil), "انعطف يسارًا")
+        XCTAssertEqual(NavHUD.road(left), "طريق الملك فهد")
+        let ramp = step(.init(kind: .offRamp, direction: .right), sign: "مخرج 5")
+        XCTAssertEqual(NavHUD.headline(ramp, targetName: nil), NavText.action(ramp.maneuver))
+        XCTAssertEqual(NavHUD.road(ramp), NavText.arabicDigitsOnly("مخرج 5"))
+        XCTAssertNil(NavHUD.road(step(.init(kind: .turn, direction: .right))), "no road: one line only")
+        XCTAssertNil(NavHUD.road(step(.init(kind: .turn, direction: .right), road: "")))
+        let round = step(.init(kind: .roundabout, direction: .right, exit: 2), road: "طريق العليا")
+        XCTAssertTrue(NavHUD.headline(round, targetName: nil).contains("المخرج"), NavHUD.headline(round, targetName: nil))
+    }
+
+    func testArrivalShowsTheDestinationOnly() {
+        let end = step(.init(kind: .arrive, direction: nil), road: "شارع")
+        XCTAssertEqual(NavHUD.headline(end, targetName: "حطين"), "حطين")
+        XCTAssertEqual(NavHUD.headline(end, targetName: nil), "وجهتك")
+        XCTAssertNil(NavHUD.road(end))
+    }
+}

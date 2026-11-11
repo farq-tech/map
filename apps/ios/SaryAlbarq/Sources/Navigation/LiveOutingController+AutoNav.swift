@@ -192,6 +192,17 @@ extension LiveOutingController {
         s.save(session.id)
     }
 
+    /// «أوقف التوجيه» tapped in the guidance bar (or the trip's off-road track panel): stops THIS
+    /// guidance and nothing else — never an arrival, never the leg, never the outing. When the trip's
+    /// own guidance is on for this phone it is paused too (`TripAutoNav.stopPausesTrip`), so it does
+    /// not start again by itself a second later; «استأنف التوجيه» brings it back.
+    func stopGuidanceTapped() {
+        if TripAutoNav.stopPausesTrip(autoNavState, navAuto: nav.auto, navPhase: nav.phase), !autoNavState.paused { pauseAutoNav() }
+        nav.end()
+        stopAutoFollow()
+        modal = nil
+    }
+
     /// «أوقف التوجيه» (this phone only).
     func pauseAutoNav() {
         var s = autoNavState
@@ -221,8 +232,17 @@ extension LiveOutingController {
         guard autoNavAllowed, !nav.isActive, nav.phase != .planning, session.view?.status == .active, session.closedReason == nil,
               tripDestination != nil, !autoNavState.arrived, !trip.record.me.arrived else { return nil }
         if autoNavState.offered && !autoNavState.active { return .leaderStarted }
-        if autoNavState.paused { return .resume }
+        /* On a leg, «استأنف التوجيه» is the screen's one primary button (`OutingFlow`): not twice. */
+        if autoNavState.paused { return flowUI.primary == .resumeGuidance ? nil : .resume }
         return autoNavState.active ? nil : .start
+    }
+
+    /// The guidance on this phone as one explicit state (`TripGuidanceState`): guiding, paused by
+    /// «أوقف التوجيه», arrived at the leg's destination, or off.
+    var guidanceState: TripGuidanceState {
+        TripGuidanceState.of(guiding: nav.phase == .guiding || nav.phase == .offRoad || nav.phase == .planning,
+                             paused: autoNavState.paused,
+                             arrived: autoNavState.arrived || trip.record.me.arrived)
     }
 
     // MARK: off-road along the plan's track

@@ -21,7 +21,7 @@ struct LiveSheet: View {
             if controller.nav.isActive {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, «المزيد»,
                  * «غيّر الوجهة», «أوقف التوجيه»). */
-                NavBottomBar(nav: controller.nav, end: controller.endNav,
+                NavBottomBar(nav: controller.nav, end: controller.stopGuidanceTapped,
                              more: { controller.modal = .actions },
                              changeDestination: controller.navChangeDestination)
                 if ui.sheetDetent != .peek, controller.nav.phase != .arrived {

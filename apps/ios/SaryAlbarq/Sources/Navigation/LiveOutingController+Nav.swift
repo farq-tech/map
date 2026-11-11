@@ -112,7 +112,9 @@ extension LiveOutingController {
     }
 
     static func retargetHint(wasAuto: Bool) -> String {
-        wasAuto ? "يرجع توجيه الطلعة للوجهة لما تنهي هذا التوجيه" : "ترجع للوجهة من أدوات ← الطريق"
+        /* «أوقف التوجيه» on this one pauses the trip's guidance too (`stopGuidanceTapped`): it comes
+         * back on arrival here, or with «استأنف التوجيه» — never by itself after a stop. */
+        wasAuto ? "يرجع توجيه الطلعة لما توصل هنا، أو من «استأنف التوجيه»" : "ترجع للوجهة من أدوات ← الطريق"
     }
 
     /// «روح له»: refused in the card itself (with the reason) when their position is old.
@@ -226,11 +228,11 @@ extension LiveOutingController {
             d.guidanceActive = true
             if let r = nav.active {
                 /* Traffic colours along what is left (Mapbox `driving-traffic`); none in the desert / Valhalla. */
-                let done = nav.progress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
+                let done = nav.shownProgress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
                 let traffic = NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done)
                 /* Surfaces are drawn only without traffic colours; like traffic, only what is left. */
                 let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done)
-                d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.progress), selected: true,
+                d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.shownProgress), selected: true,
                                   traffic: traffic, surfaces: surfaces)]
                 /* The next turn as an arrow on the line (the banner's maneuver, `currentStep`). */
                 if let step = nav.currentStep, NavManeuverArrow.shows(step.maneuver) {
@@ -259,7 +261,7 @@ extension LiveOutingController {
         /* Following my car is the map's own frame-by-frame camera («باتجاهي», `mapFollowMode`). */
         case .follow, .free: return nil
         case .overview:
-            var pts = nav.active.map { Self.remaining($0, progress: nav.progress) } ?? []
+            var pts = nav.active.map { Self.remaining($0, progress: nav.shownProgress) } ?? []
             if let t = nav.target { pts.append(t.position) }
             if let f = location.lastFix { pts.append(LngLat(lng: f.lng, lat: f.lat)) }
             return .fit(pts, bottomShare: 0.2)

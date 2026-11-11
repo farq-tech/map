@@ -235,3 +235,65 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertNotNil(r.groupStart)
     }
 }
+
+/// Build 36 (owner's report item 10): stopping the guidance, arriving, ending and leaving are
+/// separate states; «أوقف التوجيه» brought the outing back with «وصلنا» as its one button.
+@MainActor
+final class OutingGuidanceStateTests: XCTestCase {
+    private let camp = OutingDestination(name: "مخيم النفود", lat: 24.7590, lng: 46.7491)
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func onLeg(_ g: TripGuidanceState, arrivedAt: Date? = nil) -> OutingFlowInput {
+        var i = OutingFlowInput()
+        i.status = .active
+        i.iLead = true
+        i.iOwn = true
+        i.legs = [OutingLeg(id: "l1", seq: 1, scope: .group, destination: camp, started_at: ISODate.string(t0))]
+        i.guidance = g
+        i.myArrivedAt = arrivedAt
+        i.now = t0
+        return i
+    }
+
+    func testStoppedGuidanceIsNotAnArrival() {
+        let ui = OutingFlow.ui(onLeg(.paused))
+        XCTAssertEqual(ui.state, .onLeg(onLeg(.paused).legs[0]), "the leg goes on")
+        XCTAssertEqual(ui.primary, .resumeGuidance)
+        XCTAssertEqual(ui.primary?.title, "استأنف التوجيه")
+        XCTAssertNotEqual(ui.primary, .arrived, "«وصلنا» is not what «أوقف التوجيه» leads to")
+        XCTAssertTrue(ui.line.hasPrefix("في الطريق إلى مخيم النفود"), ui.line)
+        XCTAssertTrue(ui.line.contains("التوجيه موقّف"), ui.line)
+        XCTAssertEqual(OutingCTA.resumeGuidance.id, "nav.auto.resume", "the identifier the guidance prompt had")
+    }
+
+    func testGuidingOrOffKeepsArrivedAsTheLegsAction() {
+        XCTAssertEqual(OutingFlow.ui(onLeg(.guiding)).primary, .arrived)
+        XCTAssertEqual(OutingFlow.ui(onLeg(.off)).primary, .arrived)
+        XCTAssertFalse(OutingFlow.ui(onLeg(.guiding)).line.contains("موقّف"))
+    }
+
+    func testArrivalStopsTheLegButNotTheOuting() {
+        let ui = OutingFlow.ui(onLeg(.arrived, arrivedAt: t0))
+        XCTAssertEqual(ui.state, .stopped(at: camp.name, since: t0))
+        XCTAssertEqual(ui.primary, .whereTo, "the outing goes on: «وين رايحين؟», never «أنهِ الطلعة» by itself")
+        var ended = onLeg(.paused)
+        ended.status = .ended
+        XCTAssertEqual(OutingFlow.ui(ended).primary, .summary, "an ended outing has no guidance button")
+    }
+
+    func testTheStateIsDerivedOnlyFromItsOwnFacts() {
+        XCTAssertEqual(TripGuidanceState.of(guiding: true, paused: false, arrived: false), .guiding)
+        XCTAssertEqual(TripGuidanceState.of(guiding: false, paused: true, arrived: false), .paused)
+        XCTAssertEqual(TripGuidanceState.of(guiding: true, paused: true, arrived: false), .guiding, "«استأنف» / a person's own guidance runs")
+        XCTAssertEqual(TripGuidanceState.of(guiding: false, paused: true, arrived: true), .arrived)
+        XCTAssertEqual(TripGuidanceState.of(guiding: false, paused: false, arrived: false), .off)
+    }
+
+    /// The header and the guidance bar count the minutes left the same way (build 36: «١٩ د» over «١٨ د»).
+    func testHeaderMinutesMatchTheGuidanceBar() {
+        for s in [18 * 60 + 40.0, 18 * 60 + 5, 65 * 60 + 50, 61 * 60] {
+            let line = OutingFlow.minutesLine(t0.addingTimeInterval(s), now: t0)
+            XCTAssertEqual(line, NavText.remaining(seconds: s), "\(s) s")
+        }
+    }
+}

@@ -75,6 +75,22 @@ enum NavHUD {
         return NavText.action(step.maneuver)
     }
 
+    /// The banner's big line (build 37, owner's report item 7: the direction and its distance are
+    /// what is read at a glance): the action in words («انعطف يسارًا», «في الدوّار خذ المخرج الثاني»);
+    /// at the end, the destination.
+    static func headline(_ step: NavStep, targetName: String?) -> String {
+        if step.maneuver.kind == .arrive { return title(step, targetName: targetName) }
+        return NavText.action(step.maneuver)
+    }
+
+    /// The road (or sign) under the headline, smaller; nil when there is none or it would repeat it.
+    static func road(_ step: NavStep) -> String? {
+        guard step.maneuver.kind != .arrive else { return nil }
+        let n = [step.roadName, step.signText].compactMap { $0 }.first { !$0.isEmpty }.map(NavText.arabicDigitsOnly)
+        guard let n, n != NavText.action(step.maneuver) else { return nil }
+        return n
+    }
+
     /// Over the posted limit (rounded km/h above it).
     static func overLimit(kmh: Double?, limit: Int?) -> Bool {
         guard let k = kmh, let l = limit, l > 0 else { return false }
@@ -116,15 +132,16 @@ struct NavManeuverBanner: View {
                 }
                 .padding(theme.space(.m))
             } else if let step = nav.currentStep {
-                let d = nav.progress?.distanceToManeuverM ?? step.distanceM
+                let d = nav.maneuverDistanceM ?? step.distanceM
                 let parts = NavHUD.distanceParts(d)
                 HStack(alignment: .center, spacing: theme.space(.m)) {
-                    /* The arrow and the distance: the two things read at a glance. */
+                    /* The arrow and the distance: the two things read at a glance (bigger in build 37). */
                     VStack(spacing: 0) {
                         NavManeuverGlyph(maneuver: step.maneuver, size: glyph, tint: .clear, ink: p.accentText)
                         HStack(alignment: .firstTextBaseline, spacing: 3) {
-                            Text(parts.value).font(.sary(theme.drive ? 30 : 26, .heavy)).foregroundStyle(p.textPrimary)
-                            Text(parts.unit).font(.sary(theme.drive ? 16 : 14, .bold)).foregroundStyle(p.textSecondary)
+                            Text(parts.value).font(.sary(theme.drive ? 38 : 32, .heavy)).foregroundStyle(p.textPrimary)
+                                .monospacedDigit()
+                            Text(parts.unit).font(.sary(theme.drive ? 18 : 15, .bold)).foregroundStyle(p.textSecondary)
                         }
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -133,18 +150,28 @@ struct NavManeuverBanner: View {
                         .accessibilityIdentifier("nav.distance")
                     }
                     .frame(minWidth: glyph + 8)
-                    Text(NavHUD.title(step, targetName: nav.target?.name))
-                        .font(.sary(theme.drive ? 30 : 26, .bold))
-                        .foregroundStyle(p.textPrimary)
-                        /* Two lines, barely shrinking (26 pt never drops to 13): a long road
-                         * name wraps instead of turning unreadable at a glance. */
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        /* VoiceOver hears the whole instruction («بعد ٣٫٣ كم انعطف يسارًا إلى …»). */
-                        .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
-                        .accessibilityIdentifier("nav.instruction")
+                    /* The direction in words, big; the road under it, smaller (one line). */
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(NavHUD.headline(step, targetName: nav.target?.name))
+                            .font(.sary(theme.drive ? 28 : 24, .heavy))
+                            .foregroundStyle(p.textPrimary)
+                            /* Two lines, barely shrinking: wraps instead of turning unreadable at a glance. */
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let road = NavHUD.road(step) {
+                            Text(road)
+                                .font(.sary(theme.drive ? 20 : 17, .bold))
+                                .foregroundStyle(p.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .ignore)
+                    /* VoiceOver hears the whole instruction («بعد ٣٫٣ كم انعطف يسارًا إلى …»). */
+                    .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
+                    .accessibilityIdentifier("nav.instruction")
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -208,12 +235,12 @@ struct NavManeuverBanner: View {
         return HStack(spacing: theme.space(.s)) {
             Text("ثم").saryText(.callout, weight: .bold).foregroundStyle(p.textSecondary)
             NavManeuverGlyph(maneuver: next.maneuver, size: theme.drive ? 30 : 26, tint: .clear, ink: p.textPrimary)
-            Text(NavHUD.title(next, targetName: nav.target?.name))
+            /* The following maneuver in a few words (its direction), one line: no second road name. */
+            Text(NavHUD.headline(next, targetName: nav.target?.name))
                 .saryText(.callout, weight: .bold)
                 .foregroundStyle(p.textPrimary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
@@ -398,7 +425,9 @@ struct NavArrivalCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: end) { Text(SaryCopy.stopGuidance).saryText(theme.drive ? .body : .callout, weight: .bold) }
+            /* Arrival already ended the guidance: this only closes the card (build 36 labelled it
+             * «أوقف التوجيه», one word for two different things). */
+            Button(action: end) { Text(SaryCopy.arrivedDone).saryText(theme.drive ? .body : .callout, weight: .bold) }
                 .buttonStyle(.sary(.primary, width: .hug, compact: !theme.drive))
                 .accessibilityIdentifier("nav.arrived.end")
         }
@@ -613,7 +642,7 @@ struct NavStepsSheet: View {
     var body: some View {
         let p = theme.palette
         let steps = nav.active?.steps ?? []
-        let from = nav.progress?.stepIndex ?? 1
+        let from = nav.shownProgress?.stepIndex ?? 1
         NavigationStack {
             List {
                 if let leg = nav.offRoad, nav.phase != .offRoad {
@@ -626,7 +655,7 @@ struct NavStepsSheet: View {
                         NavManeuverGlyph(maneuver: s.maneuver, size: 40, tint: i == from ? p.navBlue : p.textSecondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(NavText.instruction(s, targetName: nav.target?.name)).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
-                            let d = i == from ? (nav.progress?.distanceToManeuverM ?? 0) : steps[i - 1].distanceM
+                            let d = i == from ? (nav.maneuverDistanceM ?? 0) : steps[i - 1].distanceM
                             Text(NavText.distance(d)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
                         }
                     }

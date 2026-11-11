@@ -71,6 +71,7 @@ struct LiveOutingScreen: View {
                         controller.userPannedMap = true
                         controller.navUserMovedMap()
                     },
+                    onGestureEnd: { controller.cameraGestureEnded(negligible: $0) },
                     waypoints: controller.mapWaypoints,
                     onWaypointTap: { controller.features.modal = .waypoint($0) },
                     plan: plan,
@@ -694,7 +695,7 @@ private struct LiveTopStack: View {
         case .offRoad:
             if controller.autoNavFollowId != nil, let f = controller.followUI {
                 /* The trip's off-road leg along the plan's drawn route: the track panel is the one header. */
-                FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.endNav, approach: controller.approachFollow)
+                FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.stopGuidanceTapped, approach: controller.approachFollow)
                     .transition(.move(edge: .top).combined(with: .opacity))
             } else {
                 NavOffRoadPanel(nav: nav, reference: controller.navReferenceBearing)

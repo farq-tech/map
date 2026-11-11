@@ -154,8 +154,28 @@ enum OutingFlowState: Equatable {
     case ended
 }
 
+/// The guidance on this phone, as ONE explicit state, separate from the leg and the outing
+/// (owner's build 36 report, item 10: «أوقف التوجيه» brought the outing back showing «وصلنا»).
+/// Each changes only by its own action:
+///   * `guiding` — turn-by-turn runs (the trip's or a person's own);
+///   * `paused`  — «أوقف التوجيه» on this phone: the leg is still on, nothing restarts by itself,
+///                 «استأنف التوجيه» is the one primary action;
+///   * `arrived` — the leg's destination reached («وصلتوا» / «وصلنا» / detected): guidance is done
+///                 for this leg, the OUTING goes on (only «أنهِ الطلعة» ends it);
+///   * `off`     — never started on this phone for this leg.
+/// The outing's own end and leaving it are `OutingFlowState.ended` and the screen closing.
+enum TripGuidanceState: Equatable {
+    case off, guiding, paused, arrived
+
+    static func of(guiding: Bool, paused: Bool, arrived: Bool) -> TripGuidanceState {
+        if arrived { return .arrived }
+        if guiding { return .guiding }
+        return paused ? .paused : .off
+    }
+}
+
 enum OutingCTA: String, Equatable {
-    case startOuting, waitLeader, whereTo, startLeg, changeDestination, arrived, endOuting, summary
+    case startOuting, waitLeader, whereTo, startLeg, changeDestination, arrived, resumeGuidance, endOuting, summary
 
     var title: String {
         switch self {
@@ -166,6 +186,7 @@ enum OutingCTA: String, Equatable {
         case .startLeg: return "ابدأ المشوار"
         case .changeDestination: return "غيّر الوجهة"
         case .arrived: return "وصلنا"
+        case .resumeGuidance: return "استأنف التوجيه"
         case .endOuting: return "أنهِ الطلعة"
         case .summary: return "ملخص الطلعة"
         }
@@ -179,12 +200,14 @@ enum OutingCTA: String, Equatable {
         case .startLeg: return "location.north.line.fill"
         case .changeDestination: return "arrow.triangle.swap"
         case .arrived: return "flag.checkered"
+        case .resumeGuidance: return "location.north.line.fill"
         case .endOuting: return "house.fill"
         case .summary: return "list.bullet.rectangle"
         }
     }
 
-    var id: String { "flow.cta.\(rawValue)" }
+    /// «استأنف التوجيه» keeps the identifier it had as the guidance prompt (UI tests).
+    var id: String { self == .resumeGuidance ? "nav.auto.resume" : "flow.cta.\(rawValue)" }
 }
 
 struct OutingFlowInput: Equatable {
@@ -207,6 +230,8 @@ struct OutingFlowInput: Equatable {
     var eta: Date?
     /// «رجعتوا؟»: everyone is back near the start after hours out (`OutingEndSuggest`).
     var endSuggested = false
+    /// The guidance on this phone (`TripGuidanceState`): paused, the leg's primary is «استأنف التوجيه».
+    var guidance: TripGuidanceState = .off
     var now = Date()
 }
 
@@ -254,8 +279,12 @@ enum OutingFlow {
         case let .picked(d):
             return OutingFlowUI(state: s, line: "الوجهة \(d.name) · جاهزين؟", primary: .startLeg)
         case let .onLeg(leg):
-            let parts = ["في الطريق إلى \(leg.destination.name)", i.remainingM.map { SaryFormat.distance(meters: $0) }, minutesLine(i.eta, now: i.now)]
-            return OutingFlowUI(state: s, line: parts.compactMap { $0 }.joined(separator: " · "), primary: .arrived)
+            /* «أوقف التوجيه» is not an arrival: the leg goes on and its one primary action brings the
+             * guidance back. «وصلنا» stays in the «الرحلة» card for when we really are there. */
+            let paused = i.guidance == .paused
+            let parts = ["في الطريق إلى \(leg.destination.name)", i.remainingM.map { SaryFormat.distance(meters: $0) }, minutesLine(i.eta, now: i.now),
+                         paused ? "التوجيه موقّف" : nil]
+            return OutingFlowUI(state: s, line: parts.compactMap { $0 }.joined(separator: " · "), primary: paused ? .resumeGuidance : .arrived)
         case let .stopped(at, _):
             return OutingFlowUI(state: s, line: "واقفين عند \(at)", primary: endFirst ? .endOuting : .whereTo)
         case .ended:
@@ -268,10 +297,12 @@ enum OutingFlow {
         n > 0 ? "الطلعة شغّالة · \(SaryFormat.number(n)) مباشر" : "الطلعة شغّالة"
     }
 
-    /// «١٨ د» / «١ س ٥ د»; nil without an ETA.
+    /// «١٨ د» / «١ س ٥ د»; nil without an ETA. Whole minutes counted the way the guidance bar counts
+    /// them (`NavText.remaining` → `SaryFormat.duration`): build 36 rounded here and truncated there,
+    /// so the header could say «١٩ د» over a bar saying «١٨ د».
     static func minutesLine(_ eta: Date?, now: Date) -> String? {
         guard let eta else { return nil }
-        let m = max(1, Int((eta.timeIntervalSince(now) / 60).rounded()))
+        let m = max(1, max(0, Int(eta.timeIntervalSince(now).rounded())) / 60)
         if m < 60 { return "\(SaryFormat.number(m)) د" }
         let h = m / 60, r = m % 60
         return r == 0 ? "\(SaryFormat.number(h)) س" : "\(SaryFormat.number(h)) س \(SaryFormat.number(r)) د"
@@ -302,6 +333,8 @@ enum SaryCopy {
     static let guideAll = "وجّه الكل"
     /// Stop guidance.
     static let stopGuidance = "أوقف التوجيه"
+    /// Close the «وصلت» card: the guidance is already over, so it is NOT «أوقف التوجيه».
+    static let arrivedDone = "تمام"
     /// End the outing (the action); its confirmation is `EndOutingCopy`.
     static let endOuting = "أنهِ الطلعة"
     /// Postpone («not now»).

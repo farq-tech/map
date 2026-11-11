@@ -94,7 +94,7 @@ struct StandaloneNavScreen: View {
         let me = location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) }
         let gate = StandaloneNavRules.gate(canLocate: location.canLocate, fix: location.lastFix, now: Date())
         ZStack {
-            PlanMapView(route: StandaloneNavRules.line(phase: nav.phase, active: nav.active, progress: nav.progress, offRoad: nav.offRoad,
+            PlanMapView(route: StandaloneNavRules.line(phase: nav.phase, active: nav.active, progress: nav.shownProgress, offRoad: nav.offRoad,
                                                        me: me, target: target.position),
                         destination: OutingDestination(name: target.name, lat: target.position.lat, lng: target.position.lng),
                         camera: camera, theme: theme, userLocation: me)
@@ -255,7 +255,7 @@ struct StandaloneNavScreen: View {
         if followMe, let me {
             follow(me, force: true)
         } else {
-            var pts = StandaloneNavRules.line(phase: nav.phase, active: nav.active, progress: nav.progress, offRoad: nav.offRoad, me: me, target: target.position)
+            var pts = StandaloneNavRules.line(phase: nav.phase, active: nav.active, progress: nav.shownProgress, offRoad: nav.offRoad, me: me, target: target.position)
             pts.append(target.position)
             if let me { pts.append(me) }
             cameraSeq += 1

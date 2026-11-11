@@ -286,3 +286,65 @@ final class FollowCameraTests: XCTestCase {
         XCTAssertEqual(s.step(target: target, at: 0.016, reduceMotion: true).pose, target)
     }
 }
+
+/// Build 36 (owner's report item 6): «رجّعني للتوجيه» came up again and again during guidance.
+/// A touch that left the camera where it was gives following straight back, without the pill.
+final class FollowCameraGestureTests: XCTestCase {
+    func testATouchThatMovedNothingKeepsFollowingWithoutThePill() {
+        var s = FollowCameraState()
+        s.guidanceStarted()
+        s.userMovedMap(at: 10)
+        XCTAssertEqual(s.mode, .free, "the camera stops fighting the finger at once")
+        XCTAssertTrue(s.recenterOffered)
+        s.gestureEnded(negligible: true)
+        XCTAssertEqual(s.mode, .heading, "a drifting tap is not a decision to look elsewhere")
+        XCTAssertFalse(s.recenterOffered, "no «رجّعني للتوجيه»")
+    }
+
+    func testARealPanKeepsTheMapAndThePill() {
+        var s = FollowCameraState()
+        s.guidanceStarted()
+        s.userMovedMap(at: 10)
+        s.gestureEnded(negligible: false)
+        XCTAssertEqual(s.mode, .free)
+        XCTAssertTrue(s.recenterOffered)
+        /* A later negligible touch on the free map brings nothing back by itself. */
+        s.userMovedMap(at: 20)
+        s.gestureEnded(negligible: true)
+        XCTAssertEqual(s.mode, .free)
+        XCTAssertTrue(s.recenterOffered)
+    }
+
+    func testNorthUpComesBackTooAndOverviewIsNotUndone() {
+        var s = FollowCameraState()
+        s.cycle()
+        s.userMovedMap(at: 1)
+        s.gestureEnded(negligible: true)
+        XCTAssertEqual(s.mode, .north)
+        var o = FollowCameraState()
+        o.guidanceStarted()
+        o.release(offerBack: true, at: 1)
+        o.userMovedMap(at: 2)
+        o.gestureEnded(negligible: true)
+        XCTAssertEqual(o.mode, .free, "«نظرة عامة» chosen on purpose stays")
+        XCTAssertTrue(o.recenterOffered)
+    }
+
+    func testAButtonDuringTheGestureWins() {
+        var s = FollowCameraState()
+        s.guidanceStarted()
+        s.userMovedMap(at: 1)
+        s.recenter()
+        s.release()
+        s.gestureEnded(negligible: true)
+        XCTAssertEqual(s.mode, .free, "the camera taken for a member after the touch: not undone")
+    }
+
+    func testNegligibleThresholds() {
+        XCTAssertTrue(FollowCameraState.negligibleGesture(shiftPt: 8, zoomDelta: 0.02, bearingDelta: 1, pitchDelta: 0))
+        XCTAssertFalse(FollowCameraState.negligibleGesture(shiftPt: 60, zoomDelta: 0, bearingDelta: 0, pitchDelta: 0), "a pan")
+        XCTAssertFalse(FollowCameraState.negligibleGesture(shiftPt: 2, zoomDelta: 0.5, bearingDelta: 0, pitchDelta: 0), "a pinch")
+        XCTAssertFalse(FollowCameraState.negligibleGesture(shiftPt: 2, zoomDelta: 0, bearingDelta: -20, pitchDelta: 0), "a rotation")
+        XCTAssertFalse(FollowCameraState.negligibleGesture(shiftPt: 2, zoomDelta: 0, bearingDelta: 0, pitchDelta: 12), "a tilt")
+    }
+}

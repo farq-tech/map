@@ -157,7 +157,8 @@ final class NavigationUITests: XCTestCase {
             XCTAssertTrue(el(app, "nav.distance").exists, "the distance, big")
             let title = el(app, "nav.instruction")
             XCTAssertTrue(title.label.contains("طريق مكة المكرمة"), title.label)
-            XCTAssertLessThan(title.frame.height, 60, "the road on one line")
+            /* Build 37: the direction in words (big) with the road under it (one smaller line). */
+            XCTAssertLessThan(title.frame.height, 84, "the action on one line, the road on one line")
             XCTAssertFalse(el(app, "nav.banner.eta").frame.intersects(el(app, "nav.banner").frame), "the ETA left the banner")
             let remaining = el(app, "nav.remainingTime")
             XCTAssertTrue(remaining.waitForExistence(timeout: 5), "the time left")

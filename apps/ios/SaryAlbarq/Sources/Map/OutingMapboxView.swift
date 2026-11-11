@@ -127,6 +127,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
     var onUserGesture: () -> Void = {}
+    /// That gesture has settled: true when it left the camera where it was (`FollowCameraState.gestureEnded`).
+    var onGestureEnd: (Bool) -> Void = { _ in }
     /// Shared waypoints (pins join the chip declutter, see `WaypointLayout`).
     var waypoints: [MapWaypoint] = []
     var onWaypointTap: (String) -> Void = { _ in }
@@ -193,6 +195,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onEmptyTap = onEmptyTap
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
+        c.onGestureEnd = onGestureEnd
         c.waypointPins.onTap = onWaypointTap
         c.onLongPress = onLongPress
         c.onWaterways = onWaterways
@@ -291,6 +294,10 @@ struct OutingMapboxView: UIViewRepresentable {
         private var farqApplied = false
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
+        var onGestureEnd: (Bool) -> Void = { _ in }
+        /// The camera when the current hand gesture began, and how many of its recognizers still run.
+        private var gestureStartCamera: CameraState?
+        private var gesturesRunning = 0
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
         private var waterQuery: Cancelable?
         let navDrawer = NavMapDrawer()
@@ -852,6 +859,9 @@ struct OutingMapboxView: UIViewRepresentable {
             compass.active = m == .heading
             compass.onChange = { [weak self] in self?.startLink() }
             guard m != .free, let map else { return }
+            /* Following again: a hand gesture whose end never came cannot block the next one's report. */
+            gesturesRunning = 0
+            gestureStartCamera = nil
             keepGroup = false
             map.camera.cancelAnimations()
             let st = map.mapboxMap.cameraState
@@ -1612,6 +1622,8 @@ struct OutingMapboxView: UIViewRepresentable {
         func gestureManager(_ gestureManager: GestureManager, didBegin gestureType: GestureType) {
             /* A tap (on a car, a name, or empty map) is not "let me look"; drag, pinch, rotate and tilt are. */
             if gestureType != .singleTap {
+                if gesturesRunning == 0, let map { gestureStartCamera = map.mapboxMap.cameraState }
+                gesturesRunning += 1
                 keepGroup = false
                 /* The camera is the person's from this touch: stop driving it now (the screen
                    hears it through `onUserGesture` and offers «رجّعني للتوجيه»). */
@@ -1624,8 +1636,28 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
             }
         }
-        func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {}
-        func gestureManager(_ gestureManager: GestureManager, didEndAnimatingFor gestureType: GestureType) {}
+        func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {
+            guard gestureType != .singleTap, !willAnimate else { return }
+            gestureFinished()
+        }
+        func gestureManager(_ gestureManager: GestureManager, didEndAnimatingFor gestureType: GestureType) {
+            guard gestureType != .singleTap else { return }
+            gestureFinished()
+        }
+
+        /// One recognizer of the hand gesture is done (its deceleration included); when the last one
+        /// is, report whether the camera really moved (a drifting tap in a moving car did not).
+        private func gestureFinished() {
+            gesturesRunning = max(0, gesturesRunning - 1)
+            guard gesturesRunning == 0, let start = gestureStartCamera, let map else { return }
+            gestureStartCamera = nil
+            let now = map.mapboxMap.cameraState
+            let a = map.mapboxMap.point(for: start.center), b = map.mapboxMap.point(for: now.center)
+            let shift = Double(hypot(a.x - b.x, a.y - b.y))
+            onGestureEnd(FollowCameraState.negligibleGesture(shiftPt: shift, zoomDelta: Double(now.zoom - start.zoom),
+                                                             bearingDelta: FollowMath.delta(Double(start.bearing), Double(now.bearing)),
+                                                             pitchDelta: Double(now.pitch - start.pitch)))
+        }
     }
 }
 

@@ -65,12 +65,26 @@ struct FollowCameraState: Equatable {
     private(set) var touching = false
     /// «باتجاهي» was entered by guidance starting (not the button).
     private(set) var auto = false
+    /// The following mode the current gesture dropped (until that gesture settles).
+    private(set) var leftByGesture: MapFollowMode?
+
+    /// A gesture that barely moved the camera (a tap whose finger drifted a few points in a moving
+    /// car, a double tap the map took as a zoom): not a decision to look elsewhere.
+    static let negligibleShiftPt = 24.0
+    static let negligibleZoom = 0.15
+    static let negligibleBearingDeg = 5.0
+    static let negligiblePitchDeg = 4.0
+
+    static func negligibleGesture(shiftPt: Double, zoomDelta: Double, bearingDelta: Double, pitchDelta: Double) -> Bool {
+        shiftPt < negligibleShiftPt && abs(zoomDelta) < negligibleZoom && abs(bearingDelta) < negligibleBearingDeg && abs(pitchDelta) < negligiblePitchDeg
+    }
 
     /// The button.
     mutating func cycle() {
         mode = mode.next
         recenterOffered = false
         auto = false
+        leftByGesture = nil
     }
 
     /// Guidance started or resumed («ابدأ الملاحة», «للكل», «استأنف التوجيه», «اسلك هذا المسار», «طريق العودة»).
@@ -78,11 +92,13 @@ struct FollowCameraState: Equatable {
         mode = .heading
         recenterOffered = false
         auto = true
+        leftByGesture = nil
     }
 
     /// Guidance ended: the pill has nothing to bring back.
     mutating func guidanceEnded() {
         recenterOffered = false
+        leftByGesture = nil
     }
 
     /// The person moved the map (pan, pinch, rotate, tilt, double-tap zoom) at `t`.
@@ -90,7 +106,19 @@ struct FollowCameraState: Equatable {
         lastTouchAt = t
         guard mode != .free else { return }
         if mode == .heading { recenterOffered = true }
+        leftByGesture = mode
         mode = .free
+    }
+
+    /// The gesture that began with `userMovedMap` has settled. When it left the camera where it was
+    /// (`negligibleGesture`), following comes straight back and «رجّعني للتوجيه» never shows: build 36
+    /// offered the pill during guidance for touches that moved nothing (a tap whose finger drifted,
+    /// in a moving car, starts the map's pan). A real pan / zoom keeps the map the person's (and the pill).
+    mutating func gestureEnded(negligible: Bool) {
+        defer { leftByGesture = nil }
+        guard negligible, let back = leftByGesture, mode == .free else { return }
+        mode = back
+        recenterOffered = false
     }
 
     /// The camera was taken for something else on purpose (a member, the group, a point, «نظرة عامة»).
@@ -100,6 +128,7 @@ struct FollowCameraState: Equatable {
         if let t { lastTouchAt = t }
         mode = .free
         auto = false
+        leftByGesture = nil
     }
 
     /// Any finger down / up on the screen (resets the auto-recenter clock).
@@ -112,6 +141,7 @@ struct FollowCameraState: Equatable {
     mutating func recenter() {
         mode = .heading
         recenterOffered = false
+        leftByGesture = nil
     }
 
     /// Recentre by itself: offered, enabled, nobody touching, untouched for `after` s, moving faster than `minKmh`.

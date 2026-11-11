@@ -876,3 +876,141 @@ final class ReturnTripHybridTests: XCTestCase {
         XCTAssertFalse(d.holdsRoadGuidance)
     }
 }
+
+/// Build 36 (owner's report item 10): «أوقف التوجيه» stops guidance and nothing else — it never
+/// arrives, and nothing starts again by itself afterwards.
+final class TripAutoNavStopGuidanceTests: XCTestCase {
+    func testStoppingTheTripsGuidancePausesIt() {
+        XCTAssertTrue(TripAutoNav.stopPausesTrip(on(), navAuto: true, navPhase: .guiding))
+        XCTAssertTrue(TripAutoNav.stopPausesTrip(on(), navAuto: true, navPhase: .offRoad))
+        XCTAssertFalse(TripAutoNav.stopPausesTrip(on(), navAuto: true, navPhase: .arrived), "closing «وصلتوا» is not a pause")
+        XCTAssertFalse(TripAutoNav.stopPausesTrip(on(), navAuto: false, navPhase: .idle))
+    }
+
+    func testStoppingMyOwnGuidanceDoesNotRestartTheTripsByItself() {
+        /* «اتجه» to a station while the trip's guidance is on, then «أوقف التوجيه». */
+        XCTAssertTrue(TripAutoNav.stopPausesTrip(on(), navAuto: false, navPhase: .guiding))
+        var paused = on()
+        paused.paused = true
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state = paused }), .none, "paused: nothing starts by itself")
+        /* Without the pause the trip's guidance would have come straight back — the bug. */
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state = on() }), .start(TripAutoNav.nextTarget(destination: camp, stops: [], reached: [])!))
+        /* No trip guidance on this phone: a person's own stop has nothing to pause. */
+        XCTAssertFalse(TripAutoNav.stopPausesTrip(TripAutoNavState(), navAuto: false, navPhase: .guiding))
+        var arrived = on()
+        arrived.arrived = true
+        XCTAssertFalse(TripAutoNav.stopPausesTrip(arrived, navAuto: false, navPhase: .guiding))
+    }
+
+    func testAPauseIsNeverAnArrival() {
+        var s = on()
+        s.paused = true
+        XCTAssertFalse(s.arrived)
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state = s; $0.navPhase = .guiding; $0.navAuto = true; $0.navTarget = TripAutoNav.nextTarget(destination: camp, stops: [], reached: []) }), .none)
+    }
+}
+
+/// Build 36 (owner's report item 5): the banner, the remaining distance and the time left always
+/// describe the same route and the same, latest position.
+@MainActor
+final class NavSessionSyncTests: XCTestCase {
+    private var campPos: LngLat { LngLat(lng: camp.lng, lat: camp.lat) }
+
+    private func road(from a: LngLat, to end: LngLat, id: String, turnAt: Double = 0.5) -> NavRoute {
+        let c = (0...10).map { i in LngLat(lng: a.lng + (end.lng - a.lng) * Double(i) / 10, lat: a.lat + (end.lat - a.lat) * Double(i) / 10) }
+        let d = Vehicle.distanceMeters(a, end)
+        let k = c[Int(turnAt * 10)]
+        return NavRoute(id: id, coordinates: c, distanceM: d, durationS: d / 15, steps: [
+            NavStep(maneuver: .init(kind: .depart, direction: nil), roadName: "العليا", location: a, distanceM: d * turnAt, durationS: d * turnAt / 15),
+            NavStep(maneuver: .init(kind: .turn, direction: .right), roadName: "التخصصي", location: k, distanceM: d * (1 - turnAt), durationS: d * (1 - turnAt) / 15),
+            NavStep(maneuver: .init(kind: .arrive, direction: nil), roadName: nil, location: end, distanceM: 0, durationS: 0),
+        ])
+    }
+
+    private func guiding(_ r: NavRoute) async -> NavSession {
+        let n = NavSession(provider: ScriptedRouter([.success(NavRoutePlan(routes: [r]))]), makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+        n.autoStart(to: NavTarget(source: .destination, name: camp.name, position: campPos))
+        let end = Date().addingTimeInterval(3)
+        while n.phase != .guiding, Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(n.phase, .guiding)
+        return n
+    }
+
+    func testAnOlderFixNeverMovesTheGuidanceBack() async {
+        let r = road(from: olaya, to: campPos, id: "a")
+        let n = await guiding(r)
+        let t = Date().timeIntervalSince1970 * 1000 + 10_000
+        let ahead = r.coordinates[4], behind = r.coordinates[2]
+        n.ingest(fix(ahead).with(atMs: t))
+        let p = n.progress
+        XCTAssertNotNil(p)
+        /* The app's own stream re-sends an older fix after our locator's newer one. */
+        n.ingest(fix(behind).with(atMs: t - 1_000))
+        XCTAssertEqual(n.progress, p, "the remaining distance never jumps back up")
+        n.ingest(fix(ahead).with(atMs: t))
+        XCTAssertEqual(n.progress, p, "the same fix twice changes nothing")
+        n.ingest(fix(r.coordinates[5]).with(atMs: t + 1_000))
+        XCTAssertLessThan(n.progress?.distanceRemainingM ?? .infinity, p?.distanceRemainingM ?? 0, "a newer fix steers")
+        n.end()
+    }
+
+    func testNewerFixRule() {
+        let a = fix(olaya).with(atMs: 1_000)
+        XCTAssertTrue(NavSession.isNewer(a, than: nil))
+        XCTAssertTrue(NavSession.isNewer(a.with(atMs: 1_001), than: a))
+        XCTAssertFalse(NavSession.isNewer(a.with(atMs: 999), than: a))
+        XCTAssertFalse(NavSession.isNewer(a, than: a))
+        XCTAssertTrue(NavSession.isNewer(fix(campPos).with(atMs: 1_000), than: a), "same millisecond, another place")
+    }
+
+    func testOffRouteKeepsReroutingUntilTheNewRouteAndNeverShowsTheOldRoutesTurn() async {
+        let r = road(from: olaya, to: campPos, id: "a")
+        let n = await guiding(r)
+        n.handle(.progress(NavProgress(stepIndex: 1, distanceToManeuverM: 300, distanceRemainingM: 4_000, durationRemainingS: 300)))
+        n.handle(.offRoute)
+        XCTAssertTrue(n.rerouting)
+        /* The engine still measures against the abandoned route: its distance grows. */
+        n.handle(.progress(NavProgress(stepIndex: 1, distanceToManeuverM: 420, distanceRemainingM: 4_120, durationRemainingS: 310)))
+        XCTAssertTrue(n.rerouting, "«نعيد حساب الطريق…» stays until the new route")
+        XCTAssertEqual(n.progress?.distanceToManeuverM, 300, "the old route's growing numbers are not shown")
+        /* The new route starts where I am: a different turn, nothing like the old one. */
+        let from = LngLat(lng: olaya.lng + 0.003, lat: olaya.lat - 0.002)
+        let new = road(from: from, to: campPos, id: "b", turnAt: 0.3)
+        n.handle(.rerouted(new))
+        XCTAssertFalse(n.rerouting)
+        XCTAssertNil(n.shownProgress, "the old route's step index is not read against the new route")
+        XCTAssertEqual(n.currentStep, new.steps[1])
+        XCTAssertEqual(n.maneuverDistanceM ?? 0, new.steps[0].distanceM, accuracy: 0.5, "up to the first turn, not the step after it")
+        XCTAssertEqual(n.remainingMeters ?? 0, new.distanceM + (n.offRoad?.distanceM ?? 0), accuracy: 1, "the new route's distance")
+        XCTAssertEqual(n.remainingSeconds ?? 0, new.durationS, accuracy: 1)
+        n.handle(.progress(NavProgress(stepIndex: 1, distanceToManeuverM: 250, distanceRemainingM: 3_500, durationRemainingS: 260)))
+        XCTAssertEqual(n.shownProgress?.distanceToManeuverM, 250)
+        XCTAssertEqual(n.remainingSeconds ?? 0, 260, accuracy: 2, "the new route's time at once (no blend with the old one)")
+        n.end()
+    }
+
+    func testATrafficRefreshOfTheSameRouteKeepsItsProgress() async {
+        let r = road(from: olaya, to: campPos, id: "a")
+        let n = await guiding(r)
+        n.handle(.progress(NavProgress(stepIndex: 2, distanceToManeuverM: 800, distanceRemainingM: 800, durationRemainingS: 60)))
+        var refreshed = r
+        refreshed.id = "a2"
+        refreshed.durationS += 30
+        n.handle(.rerouted(refreshed))
+        XCTAssertEqual(n.shownProgress?.stepIndex, 2, "same road, fresh traffic: still the same turn")
+        XCTAssertEqual(n.currentStep, refreshed.steps[2])
+        n.end()
+    }
+
+    func testBeforeTheFirstProgressTheBannerDistanceIsToTheFirstTurn() async {
+        let r = road(from: olaya, to: campPos, id: "a", turnAt: 0.3)
+        let n = await guiding(r)
+        XCTAssertNil(n.shownProgress)
+        XCTAssertEqual(n.currentStep, r.steps[1])
+        XCTAssertEqual(n.maneuverDistanceM ?? 0, r.steps[0].distanceM, accuracy: 0.5)
+        XCTAssertNotEqual(n.maneuverDistanceM ?? 0, r.steps[1].distanceM, accuracy: 1)
+        n.end()
+    }
+}
