@@ -204,18 +204,32 @@ def main(region, cache):
 
     # Sentinel-2: spring greenness (after winter rain) and a recent dry-season scene for ground type.
     spring = s2_by_date(bbox, "2025-02-01T00:00:00Z/2025-04-30T23:59:59Z", 5, 3)
-    recent = s2_by_date(bbox, "2026-09-01T00:00:00Z/2026-11-05T23:59:59Z", 3, 1)
+    recent = s2_by_date(bbox, "2026-09-01T00:00:00Z/2026-11-05T23:59:59Z", 3, 3)  # best day first, the rest are fallbacks
     ndvi_max = None
     for day, items in spring:
-        b = s2_bands(bbox, arc, items, ["red", "nir"])
+        try:
+            b = s2_bands(bbox, arc, items, ["red", "nir"])
+        except rasterio.errors.RasterioIOError as e:  # one damaged/truncated scene file must not sink the tile
+            print(f"skipping spring scene day {day}: {str(e)[:80]}", flush=True)
+            continue
         nd = (b["nir"] - b["red"]) / (b["nir"] + b["red"] + 1e-6)
         ndvi_max = nd if ndvi_max is None else np.fmax(ndvi_max, nd)
         for it in items:
             sources.append({"dataset": "Sentinel-2 L2A", "item": it["id"], "date": day, "use": "spring NDVI"})
-    day, items = recent[0]
-    rb = s2_bands(bbox, arc, items, ["blue", "green", "red", "nir", "swir16", "swir22"])
-    for it in items:
-        sources.append({"dataset": "Sentinel-2 L2A", "item": it["id"], "date": day, "use": "ground type"})
+    if ndvi_max is None:
+        raise SystemExit(f"{region}: every spring Sentinel-2 day failed to read")
+    rb = None
+    for day, items in recent:
+        try:
+            rb = s2_bands(bbox, arc, items, ["blue", "green", "red", "nir", "swir16", "swir22"])
+        except rasterio.errors.RasterioIOError as e:
+            print(f"skipping dry-season scene day {day}: {str(e)[:80]}", flush=True)
+            continue
+        for it in items:
+            sources.append({"dataset": "Sentinel-2 L2A", "item": it["id"], "date": day, "use": "ground type"})
+        break
+    if rb is None:
+        raise SystemExit(f"{region}: every dry-season Sentinel-2 day failed to read")
 
     arrays = dict(dem=dem, wc=wc, ndvi_spring=ndvi_max.astype("float32"),
                   **{f"s2_{k}": v.astype("float32") for k, v in rb.items()}, **frac)
