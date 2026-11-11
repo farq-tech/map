@@ -101,9 +101,9 @@ final class ExploreUITests: XCTestCase {
         for _ in 0..<8 where !rain.isHittable { layerList.swipeUp(velocity: .slow) }
         XCTAssertTrue(rain.isHittable, "rain is reachable in the scrollable layer sheet: \(rain.frame)")
         rain.tap()
-        XCTAssertTrue(any(app, "weather.rain.days").waitForExistence(timeout: 3), "rain exposes its period picker")
+        /* The picker has no group identifier any more (#126): each period is its own button. */
         let week = app.buttons["weather.rain.days.7"].firstMatch
-        XCTAssertTrue(week.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(week.waitForExistence(timeout: 5), "rain exposes its period picker")
         week.tap()
         XCTAssertTrue(week.isSelected, "seven-day period is selected")
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "NASA GPM IMERG")).firstMatch.exists,

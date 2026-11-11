@@ -19,7 +19,9 @@ final class LayersToggleUITests: XCTestCase {
 
         let rain = app.descendants(matching: .any)["weather.layer.rain"]
         XCTAssertTrue(rain.waitForExistence(timeout: 8))
-        rain.scrollIntoView(in: app, margin: 120)
+        /* Short, deliberate steps: a fling goes past the weather rows (same as ExploreUITests). */
+        let layerList = app.scrollViews.firstMatch
+        for _ in 0..<8 where !rain.isHittable { layerList.swipeUp(velocity: .slow) }
         XCTAssertTrue(rain.isHittable, "the rainfall layer is within the scrollable layers sheet")
         rain.tap()
         XCTAssertTrue(rain.isSelected, "rainfall becomes the active weather layer")
@@ -31,7 +33,8 @@ final class LayersToggleUITests: XCTestCase {
         XCTAssertTrue(sevenDays.isSelected, "the selected accumulation period is visible")
 
         let clouds = app.descendants(matching: .any)["weather.layer.clouds"]
-        clouds.scrollIntoView(in: app, margin: 120)
+        for _ in 0..<8 where !clouds.isHittable { layerList.swipeDown(velocity: .slow) }
+        for _ in 0..<8 where !clouds.isHittable { layerList.swipeUp(velocity: .slow) }
         XCTAssertTrue(clouds.isHittable, "the cloud layer is reachable")
         clouds.tap()
         XCTAssertTrue(clouds.isSelected, "switching to clouds selects one overlay at a time")
