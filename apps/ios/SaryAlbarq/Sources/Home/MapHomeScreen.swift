@@ -504,6 +504,9 @@ struct MapHomeScreen: View {
                 if !query.isEmpty {
                     Button { clearSearch() } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary)
+                            /* Same glyph, 44 pt touch area (the capsule is 50 tall). */
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel(Text("امسح"))
                     .accessibilityIdentifier("home.search.clear")
@@ -878,6 +881,9 @@ struct MapHomeScreen: View {
                 .padding(.horizontal, 10)
                 .frame(minHeight: 36)
                 .background(Capsule().fill(p.sunken))
+                /* 36 tall to the eye, 44 to the finger. */
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("home.place.weather")

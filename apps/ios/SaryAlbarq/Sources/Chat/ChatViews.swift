@@ -482,6 +482,9 @@ struct ChatThreadView: View {
                             if chat.sendText(draft, to: with) { draft = "" }
                         } label: {
                             Image(systemName: "arrow.up.circle.fill").font(.system(size: 34)).foregroundStyle(over || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? p.textTertiary : p.accent)
+                                /* 34 pt glyph, 44 pt touch area. */
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         .disabled(over || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityLabel("أرسل")

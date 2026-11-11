@@ -256,9 +256,14 @@ struct LiveSearchSheet: View {
                     .onChange(of: query) { _, q in schedule(q) }
                     .accessibilityIdentifier("live.search.field")
                 if !query.isEmpty {
-                    Button { clear() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary) }
+                    /* The 44 pt frame and its content shape go INSIDE the label: a frame on the
+                     * Button itself grows the layout but not the area a finger can hit. */
+                    Button { clear() } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
                         .buttonStyle(.plain)
-                        .frame(minWidth: 44, minHeight: 44)
                         .accessibilityLabel(Text("امسح"))
                         .accessibilityIdentifier("live.search.clear")
                 }
