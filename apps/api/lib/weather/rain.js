@@ -260,7 +260,7 @@ function warm() {
 }
 
 module.exports = {
-  LAYER, Z, LEGEND, ATTRIBUTION, TILES,
+  LAYER, MATRIX, Z, LEGEND, rateLookup, refreshLatest, ATTRIBUTION, TILES,
   windowFrames, binStart, parseDays, agoAr, pointInfo, ensureWindow, windowSum, recent, tile, warm, color,
   _reset() {
     bins.clear();

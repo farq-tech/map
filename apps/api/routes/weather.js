@@ -6,6 +6,9 @@
  *   GET /api/weather/clouds/tiles              latest cloud frames (+ tile templates)
  *   GET /api/weather/clouds/tile/:id/:z/:x/:y.png
  *   GET /api/weather/clouds/outlook?lat=&lng=  cloud motion + arrival estimate for one point
+ *   GET /api/weather/wind?lat=&lng=            model wind at a point (+ model age)
+ *   GET /api/weather/wind/streamlines          GeoJSON flow lines for the map
+ *   GET /api/weather/rain/motion?lat=&lng=     which way the observed rain was moving (IMERG, hours old)
  *   GET /api/weather/rain/recent?days=1|3|7&bbox=w,s,e,n
  *   GET /api/weather/rain/tile/:days/:z/:x/:y.png
  *   GET /api/weather/green?bbox=w,s,e,n
@@ -19,6 +22,8 @@ const crypto = require('crypto');
 const clouds = require('../lib/weather/clouds');
 const cloudOutlook = require('../lib/weather/cloud-outlook');
 const rain = require('../lib/weather/rain');
+const rainMotion = require('../lib/weather/rain-motion');
+const wind = require('../lib/weather/wind');
 const green = require('../lib/weather/green');
 const desert = require('../lib/weather/desert-search');
 const { KSA, parseBbox, parseNear } = require('../lib/weather/mercator');
@@ -62,6 +67,28 @@ function createWeatherRouter() {
     const body = await cloudOutlook.outlook(pt.lat, pt.lng);
     if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نقدّر حركة السحاب الحين.' });
     return sendJson(req, res, body, 300);
+  }));
+
+  router.get('/weather/wind', wrap(async (req, res) => {
+    const pt = parseNear(`${req.query.lat},${req.query.lng}`);
+    if (!pt) return res.status(400).json({ ok: false, error: 'bad_point', message_ar: 'الموقع خارج المملكة أو غير مقروء.' });
+    const body = await wind.atPoint(pt.lat, pt.lng);
+    if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نجيب الرياح الحين.' });
+    return sendJson(req, res, body, 600);
+  }));
+
+  router.get('/weather/wind/streamlines', wrap(async (req, res) => {
+    const body = await wind.lines();
+    if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نجيب الرياح الحين.' });
+    return sendJson(req, res, body, 600);
+  }));
+
+  router.get('/weather/rain/motion', wrap(async (req, res) => {
+    const pt = parseNear(`${req.query.lat},${req.query.lng}`);
+    if (!pt) return res.status(400).json({ ok: false, error: 'bad_point', message_ar: 'الموقع خارج المملكة أو غير مقروء.' });
+    const body = await rainMotion.motionAt(pt.lat, pt.lng);
+    if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نقدّر حركة المطر الحين.' });
+    return sendJson(req, res, body, 600);
   }));
 
   router.get('/weather/rain/recent', wrap(async (req, res) => {

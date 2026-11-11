@@ -59,14 +59,14 @@ function limitFor(url) {
   return limits.get(host);
 }
 
-async function realFetchBuffer(url, { timeoutMs = 30_000 } = {}) {
+async function realFetchBuffer(url, { timeoutMs = 30_000, headers = {} } = {}) {
   return limitFor(url)(async () => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const r = await fetch(url, { signal: ctrl.signal, headers: { 'user-agent': UA } });
+      const r = await fetch(url, { signal: ctrl.signal, headers: { 'user-agent': UA, ...headers } });
       const buf = Buffer.from(await r.arrayBuffer());
-      return { status: r.status, type: r.headers.get('content-type') || '', body: buf };
+      return { status: r.status, type: r.headers.get('content-type') || '', body: buf, expires: r.headers.get('expires') || null };
     } finally {
       clearTimeout(t);
     }
