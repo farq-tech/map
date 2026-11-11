@@ -353,4 +353,13 @@ final class SaryFitTests: XCTestCase {
         XCTAssertEqual(SaryFit.height(200, container: 0), 200, "an unmeasured container keeps the design size")
         XCTAssertEqual(SaryFit.height(200, container: .infinity), 200)
     }
+
+    func testDetentKeepsItsFractionOnStandardPhonesAndAMinimumOnAnSE() {
+        // Full sheet heights: 393×852 ≈ 793, Pro Max ≈ 897, SE ≈ 647.
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 793), 793 * 0.52, accuracy: 0.001)
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 897), 897 * 0.52, accuracy: 0.001)
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 647), 400)
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 300), 300, "never taller than the sheet")
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 0), 400)
+    }
 }

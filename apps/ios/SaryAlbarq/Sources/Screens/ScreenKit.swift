@@ -82,6 +82,14 @@ enum SaryFit {
         let k = min(1, max(minScale, container / referenceHeight))
         return (design * k).rounded()
     }
+
+    /// A sheet detent of `fraction` of the sheet's full height, but never shorter than `minimum`
+    /// (a fixed fraction left an SE's 375×667 too little room for the sheet's own controls) nor
+    /// taller than the sheet. On standard phones the fraction already exceeds `minimum`.
+    static func detentHeight(fraction: CGFloat, minimum: CGFloat, maxHeight: CGFloat) -> CGFloat {
+        guard maxHeight.isFinite, maxHeight > 0 else { return minimum }
+        return min(maxHeight, max(minimum, maxHeight * fraction))
+    }
 }
 
 extension View {
