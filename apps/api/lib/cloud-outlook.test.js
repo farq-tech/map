@@ -154,6 +154,29 @@ test('clouds.warm: fetches the Kingdom tiles of the newest frames once, newest f
   }
 });
 
+test('cloudTileRgba: colour by thickness, soft shadow down-right, clear ground untouched', () => {
+  const w = 24;
+  const h = 24;
+  const buf = Buffer.alloc(w * h * 4);
+  const put = (x, y, v) => buf.set([v, v, v, 255], (y * w + x) * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) put(x, y, 40); // warm ground
+  for (let y = 6; y < 12; y++) for (let x = 6; x < 12; x++) put(x, y, 225); // very cold top
+  for (let y = 6; y < 12; y++) for (let x = 14; x < 20; x++) put(x, y, 190); // thick
+  for (let y = 16; y < 22; y++) for (let x = 6; x < 12; x++) put(x, y, 110); // thin
+  const o = clouds.cloudTileRgba(buf, w, h);
+  const px = (x, y) => [...o.subarray((y * w + x) * 4, (y * w + x) * 4 + 4)];
+  assert.equal(px(0, 0)[3], 0, 'warm ground transparent');
+  const cold = px(9, 8);
+  const thick = px(17, 8);
+  const thin = px(9, 18);
+  assert.ok(cold[3] > 220 && cold[0] < thick[0], 'cold top is cyan (less red than white)');
+  assert.ok(thick[0] > 230 && thick[1] > 230 && thick[2] > 230, 'thick cloud is white');
+  assert.ok(thin[2] > thin[0] + 25 && thin[3] > 0 && thin[3] < thick[3], 'thin cloud pale blue and lighter');
+  const shadow = px(13, 13); // just below-right of the cold block
+  assert.ok(shadow[3] > 15 && shadow[0] < 60, `soft dark shadow ${shadow}`);
+  assert.equal(o.length, w * h * 4);
+});
+
 test('clouds tiles: mid-level cloud is drawn clearly (stronger curve than the outlook\'s), warm ground stays transparent', () => {
   const px = Buffer.from([50, 50, 50, 255, 140, 140, 140, 255, 190, 190, 190, 255]);
   const tile = clouds.irToOverlay(px, clouds.TILE_CURVE);
