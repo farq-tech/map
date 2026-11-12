@@ -31,8 +31,6 @@ struct PlanMapView: UIViewRepresentable {
     var desert: DesertOverlay? = nil
     /// A desert marker tapped (its id).
     var onDesertTap: (String) -> Void = { _ in }
-    /// Fresh location for the optional always-visible Qibla ray (used on the home map).
-    var qiblaOrigin: LngLat? = nil
     /// The base map (S6): the home map follows the person's choice in the layers sheet; every other use stays satellite.
     var baseLayer: MapLayer = .satellite
 
@@ -184,7 +182,6 @@ struct PlanMapView: UIViewRepresentable {
             parent = p
             guard let map else { return }
             if p.baseLayer != appliedLayer { setBase(p.baseLayer, on: map) }
-            QiblaMapOverlay.of(map).update(origin: p.qiblaOrigin)
             if styleReady, let m = map.mapboxMap, !dragging, drawnRoute != p.route {
                 PlanMapStyle.update(m, route: p.route)
                 drawnRoute = p.route

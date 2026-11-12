@@ -137,12 +137,12 @@ final class LayersSheetUITests: XCTestCase {
 
     // MARK: S3 — the data layers come from the registry and each toggle still works
 
-    /// Every id the old sheet had for its data rows is still there (same identifiers), plus the new Qibla switch.
+    /// Every id the old sheet had for its data rows is still there (same identifiers); the Qibla switch was removed with the ray (owner, 2026-11-13).
     func testDataLayersAreListedWithTheOldIdentifiers() {
         let app = open()
         let page = app.scrollViews.firstMatch
         for id in ["weather.layer.none", "weather.layer.clouds", "weather.layer.rain", "weather.layer.wind", "weather.layer.green",
-                   "explore-camp-sites", "explore-osm-tracks", "explore-qibla", "explore-hires", "explore-terrain3d", "explore-offline"] {
+                   "explore-camp-sites", "explore-osm-tracks", "explore-hires", "explore-terrain3d", "explore-offline"] {
             var found = el(app, id).exists
             for _ in 0..<10 where !found { page.swipeUp(velocity: .slow); found = el(app, id).exists }
             XCTAssertTrue(found, "\(id) is listed")
@@ -153,7 +153,7 @@ final class LayersSheetUITests: XCTestCase {
     func testEveryDataSwitchFlipsAndPersistsAcrossRelaunch() {
         var app = open()
         sleep(1)
-        let ids = ["explore-camp-sites", "explore-osm-tracks", "explore-qibla", "explore-hires"]
+        let ids = ["explore-camp-sites", "explore-osm-tracks", "explore-hires"]
         var flipped: [String: String] = [:]
         for id in ids {
             let sw = app.switches[id].firstMatch

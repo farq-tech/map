@@ -48,7 +48,7 @@ final class LayersShotsUITests: XCTestCase {
     /// For each data layer: the map with it off, then on (the only variable: the switch in the sheet).
     func testMapOffOnPerLayer() throws {
         try XCTSkipIf(dir == nil)
-        let cases: [(String, String, Bool)] = [("camp", "explore-camp-sites", true), ("qibla", "explore-qibla", true),
+        let cases: [(String, String, Bool)] = [("camp", "explore-camp-sites", true),
                                                ("terrain", "explore-terrain3d", false), ("rain", "weather.layer.rain", false)]
         for (name, id, isSwitch) in cases {
             let app = launch(["-SaryCampFrom", "24.7113,46.6744"])

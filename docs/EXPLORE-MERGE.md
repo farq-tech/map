@@ -80,7 +80,7 @@ RootView
 | P13 | علامة الوسط (Crosshair) + قراءة المركز المستقرة | `ExploreCrosshair:83`, `OutingMapboxView.onCenter`, `ExploreReadingModel` | – | دائمة في idle والاستكشاف الحر؛ مخفية أثناء التوجيه | S |
 | P14 | الارتفاع من Terrain-DEM (لا يُخترع أبدًا) | `ExploreRules.elevationText:34`, `MapCenterReading` | `ExploreTests.testElevationIsNeverInvented` | بطاقة P12 | U موجود |
 | P15 | تلميح «اضغط على أي مكان…» `explore.hint` | `LiveOutingScreen:306-318` | `ExploreUITests` | يظهر في idle فقط عند ورقة مصغّرة | UI |
-| P16 | العمود الجانبي: الطبقات `map.layers`، أماكني، موقعي، درون، واقعي | `exploreSide:494`, `SaryMapControlItem.explore:172` | `ReachabilityUITests.testExplorationToolsWithinTwoTaps`, `LayersButtonUITests`, `ScreensUITests.testExploreControlsAnswer` | عمود المقابض الدائم (`map.layers` و`locate` موجودان بالفعل في الطلعة والرئيسية بعد S5/S6)؛ «أماكني» و«درون» و«واقعي» تنضم بقاعدة «واقف فقط» | UI + قاعدة «زرين كحد أقصى» في `LiveCalmTests` تتعدل بقرار مكتوب |
+| P16 | العمود الجانبي: الطبقات `map.layers`، أماكني، موقعي، درون، واقعي | `exploreSide:494`, `SaryMapControlItem.explore:172` | `ReachabilityUITests.testExplorationToolsWithinTwoTaps`, `LayersButtonUITests`, `ScreensUITests.testExploreControlsAnswer` | عمود المقابض الدائم (`map.layers` و`locate` موجودان بالفعل في الطلعة والرئيسية بعد S5/S6)؛ «أماكني» و«درون» و«واقعي» تنضم بقاعدة «واقف فقط». عمود الخامل بعد إزالة القبلة: الطبقات، موقعي، (أماكني)، «المزيد» | UI + قاعدة «زرين كحد أقصى» في `LiveCalmTests` تتعدل بقرار مكتوب |
 
 ### ٤.٣ محتوى الخريطة
 | # | الميزة | الكود | من يستعملها غيره | مكانها في الخريطة الواحدة | اختبار/إثبات |
@@ -92,7 +92,7 @@ RootView
 | P21 | مسارات OSM الصحراوية | `Map/Motion/OffroadTracks.swift:14`, `MotionFX:214` | `Tests/MapLayerDataTests` | طبقة سجل (`osmTracks`) تصير دائمة حسب المفتاح | U + S |
 | P22 | قاموس الأماكن الصحراوية (طبقة الأسماء/المضلعات) | `DesertGazetteer/DesertGazetteerMapLayer.swift:17` | **الرئيسية تستعمله أصلًا** (`MapHomeScreen:838`، `HomeDesert`) | تنتقل مع بحث الرئيسية إلى الخريطة الواحدة | `DesertGazetteerUITests` + `Tests/DesertGazetteerTests` |
 | P23 | الصور عالية الوضوح (شارة + سطح استكشاف) | `Map/AIEnhance/HiResImagery.swift:21`, `HiResHosts.swift:10`, `HiResViews.swift:12` | `HiResImageryUITests` (٤، منها `testBadgeInExplorationThenActiveNavigation` فاشل معروف) | سجل (S3) + سطح يُشتق دائمًا لا من `exploring` | UI + `Tests/HiResImageryTests` |
-| P24 | القبلة (شعاع على الخريطة) | `Qibla/QiblaMapOverlay.swift:9` | **الرئيسية تعرضها أيضًا** | سجل (مفتاح واحد S3)؛ يبقى اختصار مستقل (قرار #٢) | `Tests/QiblaTests`, `ReachabilityUITests` (الفاشل المعروف) |
+| P24 | ~~القبلة (شعاع على الخريطة + زر ▲)~~ **أُزيلت بقرار المالك (٢٠٢٦-١١-١٣)**: «إذا شغلته يطلع الخط المتقطع… هذا أصلًا ما نحتاجه». حُذف الزر من الرئيسية والخامل وخريطة الطلعة، وحُذف رسم الخط (`QiblaMapOverlay`) وصف طبقة القبلة من الورقة المشتركة (`MapLayerCatalog.qibla`). المفتاح `sary.map.qibla.visible.v1` يبقى ثابتًا بلا قارئ فلا يعيد الخط أبدًا. **البوصلة نفسها (شاشة القبلة) باقية** في «البر» وفي «طقس واتجاه» داخل أدوات الطلعة. | `Qibla/Qibla.swift` (`QiblaView`) | — | **لا شيء على الخريطة** | `QiblaTests` (البوصلة) تبقى؛ `HomeFlowUITests.testHomeMapHasNoQiblaButtonAndTheCompassIsInTheTools` | ✓ مُزال |
 | P25 | التضاريس ثلاثية الأبعاد | `controller.terrain3D`, `OutingMapboxView.setTerrain3D`, `ExploreViews:288` | `ExploreUITests.testTracksSheetAndTerrain` | سجل (جلسة) + قيد «واقف فقط» | UI + S |
 | P26 | الطبقات الأساسية: قمر/طبوغرافي/عادي + ملاحظة العمل بلا إنترنت الصادقة | `Explore/MapLayer.swift:7`, `ExploreRules.offlineNote:48` | `Tests/MapLayersSheetModelTests`, `ExploreTests.testOfflineNotesAreHonest` | `MapLayersSheet` (موجودة) | U + UI + S (خطر: أوفلاين، §٥) |
 | P27 | الخرائط بلا إنترنت (صف في الورقة يفتح منتقي المنطقة) | `MapLayersSheet:228` `explore-offline`, `Screens/OfflineMapsView.swift:271` | الإعدادات | صف الورقة نفسه (يبقى غطاء منفصل بقرار الوثيقة الأم) | UI `LayersToggleUITests` |
@@ -123,7 +123,7 @@ RootView
 | H04 | **«طلعة جديدة»** و**«انضم برابط»** | `:140,550` (`CreateOutingWizard`, `JoinByLinkSheet`) | صفّان ثابتان في الورقة الخاملة |
 | H05 | طلعاتي: نشطة/قادمة/ابدأ/فشل/دعوة | `:430-570,711` | بطاقات الورقة الخاملة (النشطة تفتح الطلعة) |
 | H06 | بطاقة المكان (`placeCard`) وإجراءاتها (اتجه، أنشئ طلعة، أضف لطلعة، احفظ) | `:887,939` | بطاقة موحدة (`PointCard`) S11/S18 |
-| H07 | **موقعي** + **البوصلة/القبلة** + الطبقات | `:235,249,262` | العمود الدائم على الخريطة (`locate`, `map.layers`، والقبلة اختصار مستقل بجانب الطبقات، قرار #٢) |
+| H07 | **موقعي** + الطبقات (زر القبلة أُزيل بقرار المالك ٢٠٢٦-١١-١٣؛ بوصلة القبلة في «البر») | `:235,249` | العمود الدائم: `map.layers` ثم `locate`؛ المساحة المحرَّرة لأزرار ٢D/٣D وتأثيرات الطقس (فرع `camera-3d-nosun`) |
 | H08 | «اتجه» → طلعة فردية | `:1218` ← `AppModel.openSolo:954` | تبقى؛ بلا هدم الخريطة (S17) |
 | H09 | الملف الشخصي والإعدادات (`ProfileSheet` ثم `HomeRoute`) | `:1230`, `Screens/HomeView.swift` | زر الملف في الورقة الخاملة يفتح ورقة الملف؛ الدفع إلى الإعدادات يحتاج غلاف تنقل (EM3) |
 

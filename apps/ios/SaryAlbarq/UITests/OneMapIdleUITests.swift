@@ -171,7 +171,7 @@ final class OneMapIdleUITests: XCTestCase {
             let app = launch(text: size)
             XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30), tag)
             app.allowLocationIfAsked(within: 3)
-            let ids = ["map.layers", "outing-locate", "idle-qibla", "idle-more"]
+            let ids = ["map.layers", "outing-locate", "idle-more"]
             for id in ids { XCTAssertTrue(el(app, id).waitForExistence(timeout: 15), "\(tag): \(id)") }
             let compact = app.windows.firstMatch.frame.height < 760
             XCTAssertEqual(el(app, "explore-places").exists, !compact, "\(tag): «أماكني» is in the column only when it fits, else under «المزيد»")

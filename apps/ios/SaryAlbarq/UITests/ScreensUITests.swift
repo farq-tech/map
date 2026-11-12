@@ -55,15 +55,13 @@ final class ScreensUITests: XCTestCase {
                       "the dedicated handle still collapses the sheet")
     }
 
-    func testHomeQiblaDirectionCanBeHiddenAndRestored() {
+    /// The Qibla button and the dashed line were removed from the map (owner, 2026-11-13); the compass stays in «البر».
+    func testHomeMapHasNoQiblaButtonAndTheCompassIsInTheTools() {
         let app = launch(["-demo", "-SaryScreen", "home"])
-        let toggle = app.buttons["home.qibla.toggle"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
-        XCTAssertEqual(toggle.label, "إخفاء اتجاه القبلة من الخريطة")
-        toggle.tap()
-        XCTAssertEqual(toggle.label, "إظهار اتجاه القبلة على الخريطة")
-        toggle.tap()
-        XCTAssertEqual(toggle.label, "إخفاء اتجاه القبلة من الخريطة")
+        XCTAssertTrue(app.buttons["home.locate"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["home.qibla.toggle"].exists, "no Qibla button on the map")
+        app.buttons["home.tools.open"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["home.tools.qibla"].waitForExistence(timeout: 10), "the compass is a row of «البر»")
     }
 
     func testSettingsReachEveryPage() {
