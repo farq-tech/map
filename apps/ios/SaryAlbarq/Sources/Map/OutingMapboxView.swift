@@ -1396,7 +1396,9 @@ struct OutingMapboxView: UIViewRepresentable {
              * their car alone, the chip and note hidden until they come near again. */
             var unnamed = Set<String>()
             if theme.drive {
-                let named = ChipLayout.namedNearest(items, limit: ChipLayout.driveNamed)
+                /* A friend who is stuck («غرّزت») or talking on the radio keeps their name, near or far. */
+                let keep = Set(recs.values.filter { $0.item.chip?.stuck == true || $0.item.chip?.speaking == true }.map(\.item.id))
+                let named = ChipLayout.namedNearest(items, limit: ChipLayout.driveNamed, keep: keep)
                 unnamed = Set(items.map(\.id)).subtracting(named)
                 items = items.filter { named.contains($0.id) }
             }

@@ -91,14 +91,15 @@ enum ChipLayout {
 
     /// The chips that keep their name while driving: «أنت» and the `limit` friends nearest to it on screen
     /// (ties by id, so the pick does not flicker). Without «أنت» on the map, or with few friends: all of them.
-    static func namedNearest(_ items: [Item], limit: Int) -> Set<String> {
+    /// `keep`: friends who must stay named however far they are (stuck, speaking on the radio): safety first.
+    static func namedNearest(_ items: [Item], limit: Int, keep: Set<String> = []) -> Set<String> {
         let all = Set(items.map(\.id))
         guard let me = items.first(where: \.isMe) else { return all }
         let friends = items.filter { !$0.isMe }
         guard friends.count > limit else { return all }
         func d(_ it: Item) -> CGFloat { hypot(it.anchor.x - me.anchor.x, it.anchor.y - me.anchor.y) }
         let near = friends.sorted { d($0) == d($1) ? $0.id < $1.id : d($0) < d($1) }.prefix(max(0, limit))
-        return Set([me.id] + near.map(\.id))
+        return Set([me.id] + near.map(\.id)).union(keep.intersection(all))
     }
 
     // MARK: -

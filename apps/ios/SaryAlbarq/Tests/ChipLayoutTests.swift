@@ -40,6 +40,8 @@ final class ChipLayoutTests: XCTestCase {
         /* Equal distances: the id breaks the tie, so the pick never flickers. */
         let tie = [item("me", 200, 500, me: true), item("z", 200, 400), item("y", 200, 600), item("x", 100, 500)]
         XCTAssertEqual(ChipLayout.namedNearest(tie, limit: 2), ["me", "x", "y"])
+        /* Safety: a far friend who is stuck or on the radio keeps the name; unknown ids are ignored. */
+        XCTAssertEqual(ChipLayout.namedNearest(items, limit: 2, keep: ["farther", "ghost"]), ["me", "near", "mid", "farther"])
     }
 
     func testFarApartChipsStayOverTheirCarsWithoutLines() {
