@@ -1428,17 +1428,60 @@ final class LiveOutingController: ObservableObject {
                     let seen = Set(got.map(\.id))
                     got += wide.filter { !seen.contains($0.id) }
                 }
+                /* While guiding (UX backlog R2): also look ahead on the route, beyond the first box. A failed extra
+                   look is ignored; the nearest stations still show. */
+                if let ahead = routeAheadSamples() {
+                    var seen = Set(got.map(\.id))
+                    for p in ahead.prefix(4) {
+                        guard let more = try? await OutdoorAPI.fuel(bbox: OutdoorAPI.coarseBbox(lat: p.lat, lng: p.lng)) else { continue }
+                        for s in more where seen.insert(s.id).inserted { got.append(s) }
+                    }
+                }
                 stationList = got
-                let rows = got.map { s -> StationUI in
+                var rows = Array(got.map { s -> StationUI in
                     let p = Geo.LatLng(lat: s.lat, lng: s.lng)
                     return StationUI(id: s.id, name: s.name ?? s.brand ?? "محطة بنزين", distanceMeters: Geo.haversineMeters(origin, p),
                                      bearingDegrees: LiveOutingPresenter.relative(Geo.bearingDeg(origin, p), mapBearing: overlay.projection.bearing),
                                      detail: s.brand.flatMap { $0 == s.name ? nil : $0 })
-                }.sorted { $0.distanceMeters < $1.distanceMeters }.prefix(6)
-                stations = rows.isEmpty ? .empty : .loaded(Array(rows))
+                }.sorted { $0.distanceMeters < $1.distanceMeters }.prefix(6))
+                if let onRoute = alongRouteRows(got, origin: origin) { rows = onRoute }
+                stations = rows.isEmpty ? .empty : .loaded(rows)
             } catch {
                 stations = .error("تعذّر جلب المحطات، حاول مرة ثانية")
             }
+        }
+    }
+
+    /// The active route and how far along it I am, only while guiding (UX backlog R2: «على طول المسار»).
+    private func guidingRoute() -> (line: [AlongRouteRank.Point], myAlongM: Double)? {
+        guard nav.phase == .guiding || nav.phase == .offRoad, let route = nav.selected, let progress = nav.progress,
+              route.coordinates.count >= 2, route.distanceM > 0 else { return nil }
+        let line = route.coordinates.map { AlongRouteRank.Point(lat: $0.lat, lng: $0.lng) }
+        let total = AlongRouteRank.cumulative(line).last ?? 0
+        let done = 1 - min(1, max(0, progress.distanceRemainingM / route.distanceM))
+        return (line, total * done)
+    }
+
+    /// Where to look for stations beyond the first search box: points on the route ahead of me.
+    private func routeAheadSamples() -> [AlongRouteRank.Point]? {
+        guard let g = guidingRoute() else { return nil }
+        return AlongRouteRank.samples(route: g.line, myAlongM: g.myAlongM)
+    }
+
+    /// While guiding: the stations AHEAD on my route, by distance along it plus a penalty for the detour.
+    /// Nil when not guiding or when nothing is on the way (the plain nearest list then shows).
+    private func alongRouteRows(_ got: [OutdoorAPI.Station], origin: Geo.LatLng) -> [StationUI]? {
+        guard let g = guidingRoute() else { return nil }
+        let ranked = AlongRouteRank.rank(route: g.line, myAlongM: g.myAlongM,
+                                         candidates: got.map { .init(id: $0.id, point: .init(lat: $0.lat, lng: $0.lng)) })
+        guard !ranked.isEmpty else { return nil }
+        let byId = Dictionary(got.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return ranked.compactMap { r in
+            guard let s = byId[r.id] else { return nil }
+            let p = Geo.LatLng(lat: s.lat, lng: s.lng)
+            return StationUI(id: s.id, name: s.name ?? s.brand ?? "محطة بنزين", distanceMeters: max(0, r.aheadM),
+                             bearingDegrees: LiveOutingPresenter.relative(Geo.bearingDeg(origin, p), mapBearing: overlay.projection.bearing),
+                             detail: AlongRouteRank.detail(offRouteM: r.offRouteM, number: { SaryFormat.number($0) }))
         }
     }
 
