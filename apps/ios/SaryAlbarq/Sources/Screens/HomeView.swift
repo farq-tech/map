@@ -73,6 +73,63 @@ struct OutingCard: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
+        if NewUI.enabled { newRow } else { legacyRow }
+    }
+
+    /// Build 47 (`NewUI`) list row: icon on the right, the name (shrinks instead of «…»), status + people, time + weather,
+    /// a disclosure chevron that points the Arabic way, one fixed minimum height; «تفاصيل» keeps its info button.
+    private var newRow: some View {
+        let p = theme.palette
+        return HStack(spacing: theme.space(.s)) {
+            Button(action: open) {
+                HStack(spacing: theme.space(.m)) {
+                    Image(systemName: o.status == .ended ? "flag.checkered" : (o.status == .active ? "car.2.fill" : "car.2"))
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(o.status == .active ? p.liveText : p.textSecondary)
+                        .frame(width: SaryMetrics.iconCircle, height: SaryMetrics.iconCircle)
+                        .background(Circle().fill(o.status == .active ? p.live.opacity(0.16) : p.sunken))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(o.name).saryType(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                            .saryLongName(lines: 2, minScale: 0.75).multilineTextAlignment(.leading)
+                        HStack(spacing: 6) {
+                            SaryOutingStatusPill(status: o.status)
+                            Text(o.participantsLabel).saryType(.caption).foregroundStyle(p.textSecondary)
+                            if o.role == "owner" {
+                                Image(systemName: SaryIcon.crown).saryGlyph(10).foregroundStyle(p.warningText)
+                                    .accessibilityLabel(Text("أمير الطلعة"))
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            if let t = o.timeLabel() { Text(t).saryType(.caption).foregroundStyle(p.textTertiary) }
+                            if o.status != .ended { OutingRowWeather(outingId: o.id) }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.forward")
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: SaryMetrics.rowHeight)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SaryRowPressStyle())
+            .accessibilityIdentifier("outing-row")
+            .accessibilityHint(Text(o.status == .ended ? "يفتح ملخص الطلعة" : "يفتح الخريطة"))
+            if let details {
+                SaryIconButton(systemImage: "info", label: "تفاصيل \(o.name)", id: "outing-details", action: details)
+            }
+        }
+        .padding(compact ? theme.space(.s) : theme.space(.m))
+        .background {
+            if !compact {
+                RoundedRectangle(cornerRadius: SaryRadius.control, style: .continuous).fill(p.surface)
+                    .overlay(RoundedRectangle(cornerRadius: SaryRadius.control, style: .continuous).strokeBorder(p.stroke, lineWidth: 1))
+            }
+        }
+    }
+
+    @ViewBuilder private var legacyRow: some View {
         let p = theme.palette
         HStack(spacing: theme.space(.m)) {
             Button(action: open) {
@@ -133,13 +190,19 @@ struct HistoryView: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
-        SaryPage(title: "الطلعات السابقة", back: back) {
-            if model.history.isEmpty {
-                SaryStateView(kind: .empty(title: "ما فيه طلعات منتهية", message: "تظهر هنا بعد ما تنتهي الطلعة.", systemImage: "flag.checkered"))
-            }
-            VStack(spacing: theme.space(.s)) {
-                ForEach(model.history) { o in OutingCard(o: o, open: { open(o.id) }, details: nil) }
-            }
+        if NewUI.enabled {
+            NewUIPage(title: "الطلعات السابقة", back: back) { rows }
+        } else {
+            SaryPage(title: "الطلعات السابقة", back: back) { rows }
+        }
+    }
+
+    @ViewBuilder private var rows: some View {
+        if model.history.isEmpty {
+            SaryStateView(kind: .empty(title: "ما فيه طلعات منتهية", message: "تظهر هنا بعد ما تنتهي الطلعة.", systemImage: "flag.checkered"))
+        }
+        VStack(spacing: theme.space(.s)) {
+            ForEach(model.history) { o in OutingCard(o: o, open: { open(o.id) }, details: nil) }
         }
     }
 }

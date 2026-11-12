@@ -156,4 +156,41 @@ final class NewScreensAUITests: XCTestCase {
         XCTAssertTrue(el(app, "invite.join").isHittable, "the primary is pinned: it never scrolls away")
         shot("invite-valid-axl")
     }
+
+    // MARK: - Create wizard, my outings, details, summary
+
+    func testCreateWizardUsesTheUnifiedHeader() {
+        let app = launch("create")
+        XCTAssertTrue(app.textFields["create.dest.field"].waitForExistence(timeout: 15), "step ١ is «وين رايحين؟»")
+        XCTAssertTrue(el(app, "create.progress").exists)
+        let close = el(app, "page-close"), title = app.staticTexts["وين رايحين؟"]
+        XCTAssertTrue(close.exists)
+        XCTAssertGreaterThanOrEqual(close.frame.width, 43.5); XCTAssertGreaterThanOrEqual(close.frame.height, 43.5)
+        if title.exists { XCTAssertLessThan(close.frame.midX, title.frame.midX, "✕ left, title right") }
+        shot("create-destination")
+    }
+
+    func testQuickCreateKeepsItsControls() {
+        let app = launch("create-quick")
+        XCTAssertTrue(el(app, "start.withFriends").waitForExistence(timeout: 20) || el(app, "create.approve").waitForExistence(timeout: 5))
+        for id in ["start.destination", "start.solo", "start.changePlace", "start.statement"] {
+            XCTAssertTrue(el(app, id).exists, id)
+        }
+        XCTAssertTrue(el(app, "page-close").exists)
+        shot("create-quick")
+    }
+
+    func testHistoryListRowsAreUniformAndEmptyStateExists() {
+        let app = launch("history")
+        let back = el(app, "page-back")
+        XCTAssertTrue(back.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["الطلعات السابقة"].exists)
+        let rows = app.descendants(matching: .any).matching(identifier: "outing-row")
+        if rows.count > 0 {
+            XCTAssertGreaterThanOrEqual(rows.firstMatch.frame.height, 55, "rows have one fixed minimum height")
+        } else {
+            XCTAssertTrue(app.staticTexts["ما فيه طلعات منتهية"].exists)
+        }
+        shot("history")
+    }
 }
