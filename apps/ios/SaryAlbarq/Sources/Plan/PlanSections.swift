@@ -177,7 +177,7 @@ struct DestinationRow: View {
                 SaryRowIcon(systemImage: "flag.checkered")
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(destination.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                Text(destination.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                 if let me, fresh {
                     let d = PlanGeo.meters(me, dest)
                     Text("\(SaryFormat.distance(meters: d)) · \(Geo.directionLabel(PlanGeo.bearing(me, dest))) · ≈ \(SaryFormat.duration(seconds: PlanETA.seconds(meters: d * 1.3)))")
