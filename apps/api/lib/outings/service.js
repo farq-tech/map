@@ -65,6 +65,10 @@ function defaultConfig() {
     inviteTtlHours: envNumber('OUTING_INVITE_TTL_HOURS', 24, { min: 1, max: 24 * 14 }),
     /* Broadcast every accepted fix, but write it to Postgres at most this often per member. */
     persistEveryMs: envNumber('OUTING_PERSIST_EVERY_MS', 10_000, { min: 0, max: 120_000 }),
+    /* The periodic writes (not a member's first fix) wait up to this long and go out as ONE multi-row upsert
+     * instead of one statement per member every persistEveryMs. 0 = write each one at once, as before. The
+     * live broadcast never waits for it; the row only matters to a snapshot after a restart. */
+    persistFlushMs: envNumber('OUTING_PERSIST_FLUSH_MS', 2_000, { min: 0, max: 30_000 }),
     /* Server-side floor between two accepted fixes from one member. */
     minFixIntervalMs: envNumber('OUTING_MIN_FIX_INTERVAL_MS', 1_000, { min: 0, max: 60_000 }),
     /* The last known position is the one thing a group in the desert must not
@@ -77,6 +81,8 @@ function defaultConfig() {
     /* Backfill (positions queued while offline): accepted up to this old, never shown as live. */
     backfillMaxAgeMs: envNumber('OUTING_BACKFILL_MAX_AGE_MS', 6 * 3600_000, { min: 60_000, max: 24 * 3600_000 }),
     membershipCacheMs: 15_000,
+    /* Outings judged at once by the 30 s presence sweep (each costs two queries; the pool is small). */
+    sweepConcurrency: envNumber('OUTING_SWEEP_CONCURRENCY', 3, { min: 1, max: 16 }),
     authCacheMs: 60_000,
   };
 }
@@ -97,6 +103,11 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   /* Freshest fix per member, ahead of the throttled DB write. outingId -> Map(userId -> pos) */
   const latest = new Map();
   const lastPersist = new Map(); // `${o}:${u}` -> ms
+  /* Periodic position writes waiting for the next batch (see cfg.persistFlushMs): `${o}:${u}` -> { outingId, userId, pos }. */
+  const pendingPersist = new Map();
+  let flushTimer = null;
+  /* When this process last bumped an outing's `updated_at` (at most every 5 minutes: see recordPosition). */
+  const outingTouched = new Map(); // outingId -> ms
   /* Voice clips: memory only, 10 minutes. See clips.js. */
   const clips = clipsLib.createClipStore({ now });
   let hub = events;
@@ -367,7 +378,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const value = row || null;
     if (value) {
       if (!memberCache.has(outingId)) memberCache.set(outingId, new Map());
-      memberCache.get(outingId).set(userId, { row: value, at: now() });
+      /* Entries made together (everyone reconnecting after a deploy) must not all expire together: that
+       * sent one query per phone in the same second, every 15 s. Each lives 60–100 % of the TTL. */
+      memberCache.get(outingId).set(userId, { row: value, at: now() - Math.floor(Math.random() * cfg.membershipCacheMs * 0.4) });
     }
     return value;
   }
@@ -1477,6 +1490,65 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
    * { ok: false, reason } — refusals are normal (paused outing, stale fix) and
    * never throw for the hot path.
    */
+  function queuePersist(outingId, userId, pos) {
+    pendingPersist.set(`${outingId}:${userId}`, { outingId, userId, pos });
+    if (!flushTimer) {
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        flushPositions().catch((e) => console.warn('[outings] position flush:', e.code || e.message));
+      }, cfg.persistFlushMs);
+      flushTimer.unref?.();
+    }
+  }
+
+  /** Writes every waiting position in multi-row upserts (≤ 500 rows each). Same guard as the single write. */
+  async function flushPositions() {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (!pendingPersist.size) return 0;
+    const rows = [...pendingPersist.values()];
+    pendingPersist.clear();
+    let n = 0;
+    for (let i = 0; i < rows.length; i += 500) {
+      const part = rows.slice(i, i + 500);
+      const col = (f) => part.map(({ pos }) => f(pos));
+      try {
+        const done = await q(
+          `INSERT INTO sary.member_positions (outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at, mode)
+           SELECT v.outing_id, v.user_id, v.lat, v.lng, v.accuracy, v.heading, v.speed, v.recorded_at, v.received_at, v.mode
+           FROM unnest($1::uuid[], $2::uuid[], $3::float8[], $4::float8[], $5::real[], $6::real[], $7::real[], $8::timestamptz[], $9::timestamptz[], $10::text[])
+             AS v(outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at, mode)
+           WHERE EXISTS (SELECT 1 FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
+                         WHERE m.outing_id = v.outing_id AND m.user_id = v.user_id AND m.status = 'active' AND m.sharing AND o.status = 'active')
+           ON CONFLICT (outing_id, user_id) DO UPDATE SET
+             lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy = EXCLUDED.accuracy, heading = EXCLUDED.heading,
+             speed = EXCLUDED.speed, mode = EXCLUDED.mode, recorded_at = EXCLUDED.recorded_at, received_at = EXCLUDED.received_at
+           WHERE sary.member_positions.recorded_at < EXCLUDED.recorded_at
+           RETURNING user_id`,
+          [
+            part.map((r) => r.outingId),
+            part.map((r) => r.userId),
+            col((p) => p.lat),
+            col((p) => p.lng),
+            col((p) => p.accuracy),
+            col((p) => p.heading),
+            col((p) => p.speed),
+            col((p) => new Date(p.recorded_at).toISOString()),
+            col((p) => new Date(p.received_at).toISOString()),
+            col((p) => p.mode),
+          ],
+        );
+        n += done.length;
+      } catch (e) {
+        /* A failed batch is not retried: the next fix of each member queues a fresher row anyway. */
+        console.warn('[outings] position batch:', e.code || e.message);
+      }
+    }
+    return n;
+  }
+
   async function recordPosition(user, outingId, raw) {
     const m = await membership(outingId, user.id);
     if (!m || m.status !== 'active') return { ok: false, reason: 'not_a_member' };
@@ -1499,25 +1571,36 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const persistedAt = lastPersist.get(key) || 0;
     if (!prev || t - persistedAt >= cfg.persistEveryMs) {
       lastPersist.set(key, t);
-      const written = await q(
-        `INSERT INTO sary.member_positions (outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at, mode)
-         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-         WHERE EXISTS (SELECT 1 FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
-                       WHERE m.outing_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.sharing AND o.status = 'active')
-         ON CONFLICT (outing_id, user_id) DO UPDATE SET
-           lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy = EXCLUDED.accuracy, heading = EXCLUDED.heading,
-           speed = EXCLUDED.speed, mode = EXCLUDED.mode, recorded_at = EXCLUDED.recorded_at, received_at = EXCLUDED.received_at
-         WHERE sary.member_positions.recorded_at < EXCLUDED.recorded_at
-         RETURNING user_id`,
-        [outingId, user.id, pos.lat, pos.lng, pos.accuracy, pos.heading, pos.speed, pos.recorded_at, pos.received_at, pos.mode],
-      );
-      if (!written.length && !prev) {
-        /* The DB disagrees with the cache (state changed elsewhere): refuse. */
-        room.delete(user.id);
-        forgetOuting(outingId);
-        return { ok: false, reason: 'not_allowed' };
+      if (prev && cfg.persistFlushMs > 0 && cfg.persistEveryMs > 0) {
+        /* Not the first fix: the row exists and the guard below (member active, sharing, outing active) is
+         * re-checked by the batch itself, so this can wait for the next flush. */
+        queuePersist(outingId, user.id, pos);
+      } else {
+        const written = await q(
+          `INSERT INTO sary.member_positions (outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at, mode)
+           SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+           WHERE EXISTS (SELECT 1 FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
+                         WHERE m.outing_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.sharing AND o.status = 'active')
+           ON CONFLICT (outing_id, user_id) DO UPDATE SET
+             lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy = EXCLUDED.accuracy, heading = EXCLUDED.heading,
+             speed = EXCLUDED.speed, mode = EXCLUDED.mode, recorded_at = EXCLUDED.recorded_at, received_at = EXCLUDED.received_at
+           WHERE sary.member_positions.recorded_at < EXCLUDED.recorded_at
+           RETURNING user_id`,
+          [outingId, user.id, pos.lat, pos.lng, pos.accuracy, pos.heading, pos.speed, pos.recorded_at, pos.received_at, pos.mode],
+        );
+        if (!written.length && !prev) {
+          /* The DB disagrees with the cache (state changed elsewhere): refuse. */
+          room.delete(user.id);
+          forgetOuting(outingId);
+          return { ok: false, reason: 'not_allowed' };
+        }
       }
-      await q(`UPDATE sary.outings SET updated_at = now() WHERE id = $1 AND updated_at < now() - interval '5 minutes'`, [outingId]);
+      /* The row only changes when it is older than 5 minutes, so asking more than once per 5 minutes per
+       * outing is a wasted write: every persisted fix (each member, every 10 s) used to send this one too. */
+      if (!outingTouched.has(outingId) || t - outingTouched.get(outingId) >= 5 * 60_000) {
+        outingTouched.set(outingId, t);
+        await q(`UPDATE sary.outings SET updated_at = now() WHERE id = $1 AND updated_at < now() - interval '5 minutes'`, [outingId]);
+      }
     }
     const position = shapePosition(user.id, pos);
     hub.emit(outingId, { type: 'position', position });
@@ -1606,12 +1689,17 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   }
 
   /** Every 30 s (index.js): re-judge presence in every outing someone is watching; emit the changes. */
+  /**
+   * Re-judges presence for every outing someone watches. Outings are handled a few at a time (it used
+   * to be one after the other: two queries each, so on a remote database the pass could outlast its
+   * 30 s interval once a few thousand outings were watched), yielding to the event loop between batches.
+   */
   async function sweepPresence() {
     const ids = hub.roomIds ? hub.roomIds() : [];
     let n = 0;
-    for (const outingId of ids) {
+    const one = async (outingId) => {
       const m = await membership(outingId, '00000000-0000-0000-0000-000000000000').catch(() => null);
-      if (!m || m.outing_status !== 'active') continue;
+      if (!m || m.outing_status !== 'active') return;
       const [mem, pos] = await Promise.all([members(outingId), positions(outingId, 'active')]);
       const posBy = new Map(pos.map((p) => [p.user_id, p]));
       const link = hub.linkState ? hub.linkState(outingId) : new Map();
@@ -1620,6 +1708,11 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         presence: presence.compute(outingId, x, posBy.get(x.user_id) || null, link.get(x.user_id) || null),
       }));
       n += presence.publish(outingId, list);
+    };
+    const width = cfg.sweepConcurrency;
+    for (let i = 0; i < ids.length; i += width) {
+      await Promise.all(ids.slice(i, i + width).map((id) => one(id).catch(() => undefined)));
+      await new Promise((r) => setImmediate(r));
     }
     return { emitted: n };
   }
@@ -1685,6 +1778,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       if (!room.size) latest.delete(oid);
     }
     for (const [k, at] of lastPersist) if (at < cutoff) lastPersist.delete(k);
+    for (const [k, at] of outingTouched) if (now() - at > 3600_000) outingTouched.delete(k);
     clips.sweep();
     /* Trip chat: ended more than 30 days ago → every message and read marker deleted. */
     await chat.purge().catch((e) => console.warn('[outings-chat] purge', e.code || e.message));
@@ -1744,6 +1838,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     shareSummary,
     withdrawSummary,
     recordPosition,
+    flushPositions,
     recordBackfill,
     setHidden,
     nudge,
@@ -1753,7 +1848,10 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     goingOffline,
     sweepSilence,
     sweep,
-    drainBackgroundTasks: () => chat.drainPushes(),
+    drainBackgroundTasks: async () => {
+      await flushPositions().catch(() => undefined);
+      await chat.drainPushes();
+    },
   };
 }
 

@@ -49,6 +49,11 @@ const QUEUE_STALL_MS = 10_000;
  * auth must never be reported with it (it used to be — see AUTH_TIMEOUT_CODE). */
 const AUTH_TIMEOUT_CODE = 4408;
 const OPEN = 1;
+/* A ceiling on live sockets in this process (memory: each one holds buffers and a queue). Past it a new
+ * upgrade is answered 503 + Retry-After and the app retries with backoff; sockets already open are untouched. */
+const MAX_SOCKETS = Number(process.env.OUTINGS_WS_MAX_SOCKETS || 20_000);
+/* How long a restarting server waits for phones to take the close frame before cutting the rest. */
+const GRACEFUL_CLOSE_MS = 1_500;
 
 /** Socket lifetimes and close codes, numbers only (no user, no outing): GET /api/outings/health-style probes. */
 function createSocketStats() {
@@ -56,7 +61,11 @@ function createSocketStats() {
   let opened = 0;
   let ready = 0;
   let shortLived = 0; // closed < 15 s after opening
+  let refused = 0; // upgrades answered 503 because the process is full (OUTINGS_WS_MAX_SOCKETS)
   return {
+    refuse() {
+      refused += 1;
+    },
     open() {
       opened += 1;
     },
@@ -68,12 +77,12 @@ function createSocketStats() {
       if (ms < 15_000) shortLived += 1;
     },
     snapshot() {
-      return { opened, ready, short_lived: shortLived, closes: Object.fromEntries([...closes].sort((a, b) => a[0] - b[0])) };
+      return { opened, ready, refused, short_lived: shortLived, closes: Object.fromEntries([...closes].sort((a, b) => a[0] - b[0])) };
     },
   };
 }
 
-function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, authTimeoutMs = AUTH_TIMEOUT_MS, heartbeatMs = HEARTBEAT_MS, queueStallMs = QUEUE_STALL_MS, log = null } = {}) {
+function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, maxSockets = MAX_SOCKETS, authTimeoutMs = AUTH_TIMEOUT_MS, heartbeatMs = HEARTBEAT_MS, queueStallMs = QUEUE_STALL_MS, log = null } = {}) {
   const stats = createSocketStats();
   const debug = log || (process.env.SARY_WS_DEBUG === '1' ? (...a) => console.log('[outings-ws]', ...a) : null);
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES, perMessageDeflate: false });
@@ -86,6 +95,11 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
       /* */
     }
     if (pathname !== path) return; // another upgrade handler may own it
+    if (wss.clients.size >= maxSockets) {
+      stats.refuse();
+      socket.end('HTTP/1.1 503 Service Unavailable\r\nRetry-After: 5\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
@@ -287,7 +301,19 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
     stats: () => stats.snapshot(),
     close() {
       clearInterval(beat);
-      for (const ws of wss.clients) ws.terminate();
+      /* A restart (deploy): tell every phone with a close frame (1012 = service restart → the app reconnects
+       * with its backoff) instead of a cut cable, then cut whatever has not left yet. */
+      for (const ws of wss.clients) {
+        try {
+          ws.close(1012, 'service_restart');
+        } catch {
+          ws.terminate();
+        }
+      }
+      const cut = setTimeout(() => {
+        for (const ws of wss.clients) ws.terminate();
+      }, GRACEFUL_CLOSE_MS);
+      cut.unref?.();
       wss.close();
     },
   };

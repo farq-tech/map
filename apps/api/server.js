@@ -258,3 +258,20 @@ const server = app.listen(PORT, () => {
 
 /* Live outings ride the same HTTP server: WebSocket upgrade at /api/outings/live. */
 outings.attach(server);
+
+/* A deploy sends SIGTERM. Say goodbye to live sockets (close 1012, the apps reconnect) and finish what is in
+ * flight, instead of being cut mid-fix; a hard stop follows if that takes more than a few seconds. */
+let shuttingDown = false;
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[farq-map-api] ${sig}: shutting down`);
+    const hard = setTimeout(() => process.exit(0), 8_000);
+    hard.unref();
+    server.close();
+    await outings.close().catch(() => {});
+    await new Promise((r) => setTimeout(r, 300));
+    process.exit(0);
+  });
+}

@@ -165,6 +165,38 @@ final class LayersButtonUITests: XCTestCase {
         XCTAssertTrue(el(app, "weather.quick.clouds").isSelected, "the chip shows the layer is on")
     }
 
+    private func guidingApp(_ extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryNavDemo", "-SaryNavTo", "24.7220,46.6650,حطين", "-SaryNavDelay", "3", "-SaryNavStart",
+                               "-SaryWeatherDemo", "rain", "-SaryScheme", "light", "-SaryDrive", "0"] + extra
+        app.launch(); app.allowLocationIfAsked()
+        return app
+    }
+
+    /// Owner's Build 46 report: in guidance, with rain on, «الطبقات» did nothing and the rain layer could not be turned off.
+    func testGuidingWithRainLayersOpenAndRainTurnsOff() {
+        let app = guidingApp()
+        XCTAssertTrue(el(app, "nav.bottomBar").waitForExistence(timeout: 75), "guiding")
+        tapOpensSheet(app, "guiding-rain")
+        let rain = el(app, "weather.quick.rain")
+        XCTAssertTrue(rain.waitForExistence(timeout: 5))
+        if !rain.isSelected { rain.tap() }
+        XCTAssertTrue(rain.isSelected, "rain is on")
+        rain.tap()
+        XCTAssertFalse(rain.isSelected, "rain turns off")
+        shot("guiding-rain-off")
+    }
+
+
+
+    func testGuidingDockComesBackAndLayersWork() {
+        let app = guidingApp(["-SaryDockDrop", "35"])
+        XCTAssertTrue(el(app, "dock.fallback.end").waitForExistence(timeout: 60))
+        XCTAssertTrue(el(app, "nav.bottomBar").waitForExistence(timeout: 30), "the dock is presented again")
+        XCTAssertTrue(el(app, "dock.fallback.end").waitForNonExistence(timeout: 10))
+        tapOpensSheet(app, "after-dock-return")
+    }
+
     func testTapOpensTheSheetAfterTheEnd() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryScheme", "light", "-SaryDrive", "0",
