@@ -96,7 +96,8 @@ struct DesertRouteSheet: View {
             case .working:
                 SaryStateView(kind: .loading("نحسب الدروب…")).sarySurface(radius: SaryRadius.l)
             case .noFix:
-                SaryStateView(kind: .empty(title: "ننتظر موقعك", message: nil, systemImage: "location")).sarySurface(radius: SaryRadius.l)
+                SaryStateView(kind: .empty(title: "ننتظر موقعك", message: "نحسب الدروب من مكانك، فخلّ الموقع شغّال وانتظر لحظة.", systemImage: "location"))
+                    .sarySurface(radius: SaryRadius.l)
             case .outside:
                 /* «اتجه» is right here (it was named without a button): the usual road guidance. */
                 SaryStateView(kind: .empty(title: "الوجهة بعيدة على دروب البر",

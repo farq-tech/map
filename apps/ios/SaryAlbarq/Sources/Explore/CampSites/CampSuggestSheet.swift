@@ -182,19 +182,11 @@ struct CampSuggestSheet: View {
     private var radiusPicker: some View {
         HStack(spacing: theme.space(.s)) {
             Text("ضمن").saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.textSecondary)
-            ForEach(CampSuggestModel.radii, id: \.self) { km in
-                let on = model.radiusKm == km
-                Button { model.setRadius(km) } label: {
-                    Text("\(SaryFormat.number(Int(km))) كم").saryText(.subhead, weight: .bold)
-                        .foregroundStyle(on ? theme.palette.onAccent : theme.palette.textPrimary)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(Capsule().fill(on ? theme.palette.accent : theme.palette.sunken))
-                }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-                .accessibilityIdentifier("camp.radius.\(Int(km))")
-            }
-            Spacer(minLength: 0)
+            /* The design system's segmented control: 44 pt targets (the chips were ~32 pt), same ids. */
+            SarySegmented(options: CampSuggestModel.radii,
+                          selection: Binding(get: { model.radiusKm }, set: { model.setRadius($0) }),
+                          label: { "\(SaryFormat.number(Int($0))) كم" },
+                          optionID: { "camp.radius.\(Int($0))" })
         }
     }
 
@@ -205,7 +197,7 @@ struct CampSuggestSheet: View {
                   systemImage: "wind")
                 .saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
             if let s = n.sunset {
-                Label("المغرب \(s.formatted(.dateTime.hour().minute().locale(Locale(identifier: "ar_SA"))))", systemImage: "sunset.fill")
+                Label("المغرب \(SaryFormat.timeOfDay(s))", systemImage: "sunset.fill")
                     .saryText(.footnote).foregroundStyle(p.textSecondary)
             }
             if let v = CampReason.verdictLine(n) {
@@ -261,7 +253,7 @@ struct CampSiteCard: View {
                     .frame(width: 30, height: 30).background(Circle().fill(p.accent))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(place.title)
-                        .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         .accessibilityIdentifier("camp.title.\(rank)")
                     if let sub = place.subtitle {
                         Text(sub).saryText(.caption).foregroundStyle(p.textTertiary).lineLimit(1)
@@ -272,7 +264,8 @@ struct CampSiteCard: View {
                 }
                 Spacer(minLength: 0)
                 Button(action: go) { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
-                    .buttonStyle(.sary(.primary, width: .hug, compact: true))
+                    /* One accent button per sheet: the top suggestion's; the others are secondary. */
+                    .buttonStyle(.sary(rank == 1 ? .primary : .secondary, width: .hug, compact: true))
                     .accessibilityIdentifier("camp.go.\(rank)")
             }
             if let night {
