@@ -72,7 +72,7 @@ struct ProfileView: View {
         .saryDialog($confirmSignOut, systemImage: "rectangle.portrait.and.arrow.right", title: "تخرج من هذا الجهاز؟",
                     message: model.recovery?.active == true
                         ? "تتوقف أي مشاركة، وتُمسح هويتك من هذا الجهاز. ترجع برمز الاسترجاع."
-                        : "ما حفظت رمز استرجاع: إذا خرجت لن تقدر ترجع لهذا الحساب وطلعاته.",
+                        : "ما حفظت رمز استرجاع: إذا طلعت ما راح تقدر ترجع لهالحساب وطلعاته.",
                     confirmTitle: "اخرج") {
             confirmSignOut = false
             Task { await model.signOut() }
@@ -101,7 +101,7 @@ struct ProfileView: View {
             var avatar: String?
             if photoChanged {
                 if let photo {
-                    guard let a = AvatarCodec.dataURL(from: photo) else { error = "تعذّر تجهيز الصورة."; busy = false; return }
+                    guard let a = AvatarCodec.dataURL(from: photo) else { error = "ما قدرنا نجهّز الصورة. جرّب صورة ثانية."; busy = false; return }
                     avatar = a
                 } else { avatar = "" }
             }
@@ -466,8 +466,8 @@ struct NotificationSettingsView: View {
     private var stateCard: some View {
         let (tone, text): (SaryTone, String) = {
             switch push.state {
-            case .registered: return (.success, "مفعّلة: يصلك التنبيه حتى والتطبيق مغلق.")
-            case .off: return (.info, "متوقفة. لن يصلك شيء والتطبيق مغلق.")
+            case .registered: return (.success, "مفعّلة: يوصلك التنبيه حتى والتطبيق مقفل.")
+            case .off: return (.info, "متوقفة. ما يوصلك شي والتطبيق مقفل.")
             case .notAsked: return (.info, "ما فعّلتها للحين. فعّلها عشان يوصلك نداء الطوارئ والتطبيق مقفل.")
             case .denied: return (.warning, "رفضتها في إعدادات iOS. فعّلها من الإعدادات ← سَرى البارق ← الإشعارات.")
             case .waitingForToken: return (.info, "نجهّز التنبيهات مع Apple…")
@@ -517,7 +517,7 @@ struct AboutView: View {
         SaryPage(title: "حول سَرى البارق", back: back) {
             VStack(spacing: theme.space(.s)) {
                 SaryMark(size: 88)
-                Text("سَرى البارق").font(.sary(26, .heavy)).foregroundStyle(p.textPrimary)
+                Text("سَرى البارق").saryText(.title, weight: .heavy).foregroundStyle(p.textPrimary)
                 Text("الإصدار \(SaryFormat.digits(v).replacingOccurrences(of: "٫", with: ".")) (\(SaryFormat.digits(b)))").saryNumber(.subhead).foregroundStyle(p.textSecondary)
                     .accessibilityIdentifier("about.version")
             }
@@ -557,8 +557,7 @@ struct AdvancedSettingsView: View {
         SaryPage(title: "متقدم", back: back) {
             SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط الموقع الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
-                    Text("ما فيه مسار محفوظ على هذا الجوال.").saryText(.subhead).foregroundStyle(p.textSecondary)
-                        .padding(.vertical, theme.space(.s))
+                    SaryInlineState(systemImage: "point.topleft.down.to.point.bottomright.curvepath", text: "ما فيه مسار محفوظ على هالجوال. يتسجّل مسارك أول ما تبدأ طلعة.")
                 }
                 ForEach(Array(gpx.enumerated()), id: \.offset) { n, item in
                     ShareLink(item: item.url) {
@@ -601,15 +600,14 @@ struct BlockedUsersView: View {
             if let error { SaryInlineMessage(text: error, tone: .warning).accessibilityIdentifier("blocked.error") }
             SarySection(footer: "الطوارئ من أي أحد توصلك دايم، حتى لو حاظره. للسلامة.") {
                 if list.isEmpty {
-                    Text("ما حظرت أحد.").saryText(.subhead).foregroundStyle(p.textSecondary)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    SaryInlineState(systemImage: "person.crop.circle.badge.checkmark", text: "ما حظرت أحد. تقدر تحظر من المحادثة بضغطة مطوّلة على الرسالة.")
                         .accessibilityIdentifier("blocked.empty")
                 }
                 ForEach(Array(list.enumerated()), id: \.element.user_id) { i, b in
                     if i > 0 { SaryDivider() }
                     HStack(spacing: theme.space(.m)) {
                         SaryAvatar(name: b.display_name ?? "؟", color: 0x9AA5AD, size: 36)
-                        Text(b.display_name ?? "عضو").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(b.display_name ?? "عضو").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Button { Task { await unblock(b) } } label: {
                             Group {
@@ -617,7 +615,7 @@ struct BlockedUsersView: View {
                             }
                             .foregroundStyle(p.accentText)
                             .padding(.horizontal, theme.space(.m))
-                            .frame(minWidth: 44, minHeight: 44)
+                            .frame(minWidth: theme.minTarget, minHeight: theme.minTarget)
                             .background(Capsule().fill(p.sunken))
                         }
                         .buttonStyle(SaryPressStyle())
