@@ -113,7 +113,7 @@ struct SafetyAlertCard: View {
         VStack(alignment: .leading, spacing: 2) {
             switch alert {
             case let .friendStuck(s):
-                Text("\(s.name) غرّز").saryText(theme.drive ? .headline : .callout, weight: .heavy).lineLimit(1)
+                Text("\(s.name) غرّز").saryText(theme.drive ? .headline : .callout, weight: .heavy).lineLimit(1).minimumScaleFactor(0.85)
                 HStack(spacing: 6) {
                     if s.distanceMeters != nil || s.bearingDegrees != nil {
                         SaryDistanceLabel(meters: s.distanceMeters, bearing: s.bearingDegrees, style: .footnote)

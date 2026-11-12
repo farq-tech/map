@@ -240,6 +240,8 @@ struct VoiceNoteStatusPill: View {
             .frame(height: 34)
             .background(Capsule().fill(p.chromeOpaque.opacity(0.88)))
             .saryGlass(Capsule(), role: .chrome)
+            /* The pill stays 34 tall; the touch area is 44. */
+            .contentShape(Capsule().inset(by: -5))
         }
         .accessibilityIdentifier("voice-note-pill")
     }

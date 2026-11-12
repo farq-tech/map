@@ -1,3 +1,4 @@
+import Combine
 @_spi(Experimental) import MapboxMaps
 import os
 import UIKit
@@ -60,6 +61,8 @@ final class MapVisualsDirector: NSObject {
     private var appliedBuildingsOpacity: Double?
     /// `SandGrade`'s `sarySand` last set on the imported satellite basemap.
     private var appliedSand: Double?
+    /// «ألوان الصور»: follows the setting live (`SandGrade.gradeChanges`).
+    private var gradeWatch: AnyCancellable?
     /// The `line-gradient` each glow layer was last given (the map goes idle after every source
     /// update, and re-setting an unchanged speed-gradient expression each time was wasted work).
     private var glowGradients: [String: NSObject] = [:]
@@ -216,6 +219,10 @@ final class MapVisualsDirector: NSObject {
         appliedSand = nil
         glowGradients = [:]
         let m: MapboxMap = map.mapboxMap
+        SandGrade.pushGrade(m)
+        if gradeWatch == nil {
+            gradeWatch = SandGrade.gradeChanges.sink { [weak self] _ in if let m = self?.map?.mapboxMap { SandGrade.pushGrade(m) } }
+        }
         /* Terrain changes glide (none with Reduce Motion). */
         try? m.setTerrainProperty("exaggeration-transition", value: ["duration": UIAccessibility.isReduceMotionEnabled ? 0 : 400, "delay": 0])
         refresh(force: true)

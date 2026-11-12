@@ -21,7 +21,7 @@ final class MapLayerDataTests: XCTestCase {
 
     func testCatalogStaysConsistentWithDataLayers() {
         XCTAssertEqual(MapLayerCatalogCheck.issues(MapLayerCatalog.all), [])
-        XCTAssertEqual(MapLayerCatalog.all.count, 3 + 4 + 3 + 2, "3 base + 4 weather + camp/osm/qibla + hires/terrain")
+        XCTAssertEqual(MapLayerCatalog.all.count, 3 + 4 + 3 + 2 + 3, "3 base + 4 weather + camp/osm/qibla + hires/terrain + 3 image colours")
     }
 
     func testEveryDataDescriptorHasIDTitleIconCategoryAndDefault() {
@@ -211,20 +211,22 @@ final class MapLayerDataTests: XCTestCase {
     func testSectionsAreGeneratedFromTheCatalogPerMode() {
         let r = registry()
         let explore = MapLayersSheetModel.sections(registry: r, mode: .explore)
-        XCTAssertEqual(explore.map(\.id), ["group.الطقس", "category.data", "category.terrain"])
+        XCTAssertEqual(explore.map(\.id), ["group.الطقس", "group.ألوان الصور", "category.data", "category.terrain"])
         XCTAssertEqual(explore[0].rows.map(\.testID), ["weather.layer.clouds", "weather.layer.rain", "weather.layer.wind", "weather.layer.green"])
         XCTAssertEqual(explore[0].off?.testID, "weather.layer.none")
         XCTAssertEqual(explore[0].off?.isSelected, true, "no weather layer: «بدون» is the selected row")
-        XCTAssertEqual(explore[1].rows.map(\.testID), ["explore-camp-sites", "explore-osm-tracks", "explore-qibla"])
-        XCTAssertEqual(explore[2].rows.map(\.testID), ["explore-hires", "explore-terrain3d"])
+        XCTAssertEqual(explore[1].rows.map(\.testID), ["imagery.grade.natural", "imagery.grade.warm", "imagery.grade.strong"])
+        XCTAssertEqual(explore[1].rows.filter(\.isOn).map(\.testID), ["imagery.grade.natural"], "طبيعي by default")
+        XCTAssertEqual(explore[2].rows.map(\.testID), ["explore-camp-sites", "explore-osm-tracks", "explore-qibla"])
+        XCTAssertEqual(explore[3].rows.map(\.testID), ["explore-hires", "explore-terrain3d"])
 
         r.setActive("weather.rain")
         let again = MapLayersSheetModel.sections(registry: r, mode: .explore)
         XCTAssertEqual(again[0].rows.filter(\.isOn).map(\.testID), ["weather.layer.rain"])
         XCTAssertEqual(again[0].off?.isSelected, false)
 
-        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).map(\.id), ["category.data"], "home offers only what its map draws")
-        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home)[0].rows.map(\.id), ["data.qibla"])
+        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).map(\.id), ["group.ألوان الصور", "category.data"], "home offers only what its map draws (it draws the graded satellite)")
+        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home)[1].rows.map(\.id), ["data.qibla"])
         XCTAssertFalse(MapLayersSheetModel.sections(registry: r, mode: .outing).contains { $0.id == "group.الطقس" })
     }
 

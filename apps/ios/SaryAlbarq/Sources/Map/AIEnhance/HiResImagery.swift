@@ -76,6 +76,8 @@ final class HiResImagery: NSObject {
         /* The basemap's `sarySand` follows the camera (MapVisualsDirector / SandGrade.follow);
            the enhanced tiles must follow it too, or they keep the grade of where they were installed. */
         map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.syncGrade() }.store(in: &cancelables)
+        /* «ألوان الصور»: a change of the setting regrades the enhanced tiles with the basemap. */
+        SandGrade.gradeChanges.sink { [weak self] _ in self?.appliedSand = nil; self?.syncGrade() }.store(in: &bag)
         settings.$userOn.combineLatest(settings.$remoteOn).dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.apply() }.store(in: &bag)

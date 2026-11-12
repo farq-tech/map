@@ -51,25 +51,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private func destination(_ r: HomeRoute) -> some View {
-        let pop = { if !path.isEmpty { path.removeLast() } }
-        switch r {
-        case .details(let id): OutingDetailsView(outingId: id, back: pop)
-        case .summary(let id): TripSummaryView(outingId: id, back: pop)
-        case .history: HistoryView(back: pop, open: { path.append(.summary($0)) })
-        case .profile: ProfileView(back: pop, open: { path.append($0) })
-        case .settings: SettingsView(back: pop, open: { path.append($0) })
-        case .recoveryCode: RecoveryCodeScreen(back: pop)
-        case .appearance: AppearanceScreen(back: pop)
-        case .privacy: PrivacySettingsView(back: pop, open: { path.append($0) })
-        case .deleteAccount: DeleteAccountView(back: pop)
-        case .notifications: NotificationSettingsView(back: pop)
-        case .offlineMaps: OfflineMapsView(back: pop)
-        case .about: AboutView(back: pop)
-        case .advanced: AdvancedSettingsView(back: pop)
-        case .convoyAlerts: ConvoyAlertSettingsView(back: pop)
-        case .blocked: BlockedUsersView(back: pop)
-        case .favorites: FavoritesView(back: pop)
-        }
+        HomeRouteDestination(route: r, path: $path)
     }
 
     /// The map first (UX simplification, after Hudhud's flow): search, categories, shortcuts and
@@ -184,6 +166,34 @@ private struct OutingRowWeather: View {
                 }
             }
             .task { if plan.planPhase == .loading { await plan.loadPlan() } }
+        }
+    }
+}
+
+/// The page behind a `HomeRoute`: shared by the home's stack and the idle map's profile flow (EM3).
+struct HomeRouteDestination: View {
+    let route: HomeRoute
+    @Binding var path: [HomeRoute]
+
+    var body: some View {
+        let pop = { if !path.isEmpty { path.removeLast() } }
+        switch route {
+        case .details(let id): OutingDetailsView(outingId: id, back: pop)
+        case .summary(let id): TripSummaryView(outingId: id, back: pop)
+        case .history: HistoryView(back: pop, open: { path.append(.summary($0)) })
+        case .profile: ProfileView(back: pop, open: { path.append($0) })
+        case .settings: SettingsView(back: pop, open: { path.append($0) })
+        case .recoveryCode: RecoveryCodeScreen(back: pop)
+        case .appearance: AppearanceScreen(back: pop)
+        case .privacy: PrivacySettingsView(back: pop, open: { path.append($0) })
+        case .deleteAccount: DeleteAccountView(back: pop)
+        case .notifications: NotificationSettingsView(back: pop)
+        case .offlineMaps: OfflineMapsView(back: pop)
+        case .about: AboutView(back: pop)
+        case .advanced: AdvancedSettingsView(back: pop)
+        case .convoyAlerts: ConvoyAlertSettingsView(back: pop)
+        case .blocked: BlockedUsersView(back: pop)
+        case .favorites: FavoritesView(back: pop)
         }
     }
 }

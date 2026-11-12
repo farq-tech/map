@@ -186,6 +186,8 @@ struct MapLayersSheet: View {
     private func footer(for section: MapLayerSection) -> String? {
         switch section.id {
         case "group.الطقس": return WeatherLayersSection.footer(for: weather.kind)
+        case "group.\(MapLayerCatalog.imageryGradeGroup)":
+            return "تغيّر ألوان صور الأقمار فقط (الرمل والسيارات والمدن تبقى كما هي). «طبيعي» الأقرب للصورة الحقيقية."
         case "category.data":
             var parts: [String] = []
             if section.rows.contains(where: { $0.id == MapLayerCatalog.camp.id }) {

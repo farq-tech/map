@@ -56,9 +56,11 @@ enum MapLayersSheetModel {
         for d in others { if let t = d.groupTitle, !groupTitles.contains(t) { groupTitles.append(t) } }
         for t in groupTitles {
             let members = others.filter { $0.groupTitle == t }
-            let none = MapLayerOffRow(title: WeatherOverlayKind.none.label, detail: WeatherOverlayKind.none.detail,
-                                      systemImage: WeatherOverlayKind.none.systemImage, testID: "weather.layer.none",
-                                      isSelected: !members.contains { registry.isActive($0.id) })
+            /* Only a group that may be off (weather) offers «بدون»; a plain choice (image colours) always has one chosen. */
+            let mayBeOff = members.contains { if case .optionalChoice = $0.persistence { return true } else { return false } }
+            let none = mayBeOff ? MapLayerOffRow(title: WeatherOverlayKind.none.label, detail: WeatherOverlayKind.none.detail,
+                                                 systemImage: WeatherOverlayKind.none.systemImage, testID: "weather.layer.none",
+                                                 isSelected: !members.contains { registry.isActive($0.id) }) : nil
             out.append(MapLayerSection(id: "group.\(t)", title: t, style: .singleSelect, rows: members.map(row), off: none))
         }
         // 2) the rest by category, independent switches

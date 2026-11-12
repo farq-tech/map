@@ -492,7 +492,8 @@ struct LiveOutingScreen: View {
 
     /// Exploring (Lovable): «درون» and «واقعي» on the right, with «أماكني ومساراتي».
     private var exploreSide: [SaryMapControlItem] {
-        [
+        if controller.idleHome { return idleSide }
+        return [
             SaryMapControlItem(id: "drone", systemImage: "airplane", label: "درون", accessibilityID: "explore-drone",
                                hint: "طيران درون استكشافي حول علامة الوسط"),
             SaryMapControlItem(id: "realistic", systemImage: visuals.cityTilt ? "building.2" : "mountain.2", label: "واقعي", accessibilityID: "explore-realistic",
@@ -500,6 +501,23 @@ struct LiveOutingScreen: View {
                                value: offersCityRealistic(exploring: true, driving: false) ? Self.cityRealisticValue : nil),
         ] + SaryMapControlItem.explore(terrain3D: controller.terrain3D, tracksShown: trackLibrary.shown.count).filter { $0.id == "places" }
             .map { var i = $0; i.label = "أماكني"; return i }
+    }
+
+    /// The idle map (EM3): «موقعي» and the compass, what fits, then ONE «المزيد» (`IdleSideRules`); the layers button is added in front.
+    private var idleSide: [SaryMapControlItem] {
+        IdleSideRules.items(compact: IdleSideRules.isCompact(screenHeight: Double(screenHeight))).map { item in
+            switch item {
+            case .locate:
+                return SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate")
+            case .qibla:
+                return SaryMapControlItem(id: "qibla", systemImage: "location.north.line.fill", label: "القبلة", accessibilityID: "idle-qibla",
+                                          isActive: showQiblaOnMap, hint: "شعاع القبلة على الخريطة")
+            case .places:
+                return SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني", accessibilityID: "explore-places")
+            case .more:
+                return SaryMapControlItem(id: "idleMore", systemImage: "ellipsis", label: "المزيد", accessibilityID: "idle-more")
+            }
+        }
     }
 
     @ViewBuilder
@@ -553,6 +571,8 @@ struct LiveOutingScreen: View {
         case "layers": controller.modal = .layers
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
+        case "qibla": showQiblaOnMap.toggle()
+        case "idleMore": controller.idleMoreOpen = true
         case "tracks": controller.modal = .tracks
         case "realistic": openRealistic(atMapCamera: offersCityRealistic(exploring: controller.exploreActive, driving: false))
         case "drone": if let c = controller.exploreReading.reading?.center { MapVisualsHub.shared.fly(to: c) }

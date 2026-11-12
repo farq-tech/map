@@ -403,7 +403,7 @@ private struct AudiusPicker: View {
                         HStack {
                             Button { Task { await center.play(t.item) } } label: {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(t.title).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                                    Text(t.title).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                                     Text([t.user?.name ?? "", t.duration.map { MediaFormat.ltr(GroupAudioFormat.time($0)) } ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                                         .saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1)
                                 }
