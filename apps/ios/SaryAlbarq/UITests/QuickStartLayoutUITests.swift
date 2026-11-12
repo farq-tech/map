@@ -140,6 +140,11 @@ final class SurfaceKmLayoutUITests: XCTestCase {
         /* Owner's words and digits: Arabic, in the accessibility label of the strip. */
         let label = app.descendants(matching: .any).matching(identifier: "nav.surfaceKm").firstMatch.label
         XCTAssertEqual(label, "أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم")
+        /* At most two lines at normal text: the strip must not grow the card into a tall block. */
+        if !largeText {
+            let strip = app.descendants(matching: .any).matching(identifier: "nav.surfaceKm").firstMatch.frame
+            XCTAssertLessThan(strip.height, 56, "the km strip is at most two lines: \(strip)")
+        }
         shot(largeText ? "surface-km-large" : "surface-km-normal")
     }
 

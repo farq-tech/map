@@ -86,7 +86,7 @@ struct DebugScreen: View {
             SaryPage(title: "المسافات") {
                 NavSurfaceKmStrip(km: NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 0))
                     .padding(12).sarySurface(radius: SaryRadius.m)
-                NavSurfaceKmStrip(km: NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 1_200))
+                NavSurfaceKmStrip(km: NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 1_200), labels: false)
                     .padding(12).sarySurface(radius: SaryRadius.m)
             }
         #endif

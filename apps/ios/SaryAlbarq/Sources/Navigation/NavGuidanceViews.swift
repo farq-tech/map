@@ -271,10 +271,10 @@ struct NavManeuverBanner: View {
             }
             /* Asphalt / dirt / off-road km still ahead, in the map's colours (only when dirt or off-road is left). */
             if !nav.rerouting, let km = nav.remainingSurfaces {
-                NavSurfaceKmStrip(km: km)
+                NavSurfaceKmStrip(km: km, labels: false)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                     .background(p.sunken.opacity(0.7))
             }
         }

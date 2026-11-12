@@ -457,10 +457,20 @@ struct NavSurfaceKmStrip: View {
         return k.showsSplit ? k : nil
     }
 
+    /// `labels`: the surface word beside each number (the route card). Without (the guidance banner): swatch + number only,
+    /// the colours are the same as on the map and the legend is a tap away.
+    var labels = true
+
     var body: some View {
         let list = Self.items(km)
+        let half = (list.count + 1) / 2
+        /* One row when it fits, else two rows (at most two lines), else one per surface (accessibility sizes). */
         ViewThatFits(in: .horizontal) {
             HStack(spacing: theme.space(.m)) { ForEach(list) { cell($0) } }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: theme.space(.m)) { ForEach(Array(list.prefix(half))) { cell($0) } }
+                HStack(spacing: theme.space(.m)) { ForEach(Array(list.dropFirst(half))) { cell($0) } }
+            }
             VStack(alignment: .leading, spacing: 2) { ForEach(list) { cell($0) } }
         }
         .accessibilityElement(children: .ignore)
@@ -472,8 +482,8 @@ struct NavSurfaceKmStrip: View {
         let p = theme.palette
         return HStack(spacing: 4) {
             NavSurfaceSwatch(kind: Self.swatchKind(i.family)).scaleEffect(0.6).frame(width: 22, height: 8)
-            Text(Self.label(i.family)).saryText(.caption, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1)
-            Text(Self.kmText(i.meters)).saryNumber(.caption, weight: .bold).foregroundStyle(p.textSecondary).lineLimit(1)
+            if labels { Text(Self.label(i.family)).saryText(.caption, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1) }
+            Text(Self.kmText(i.meters)).saryNumber(.caption, weight: .bold).foregroundStyle(labels ? p.textSecondary : p.textPrimary).lineLimit(1)
         }
         .fixedSize()
         .accessibilityIdentifier("nav.surfaceKm.\(i.family.rawValue)")
