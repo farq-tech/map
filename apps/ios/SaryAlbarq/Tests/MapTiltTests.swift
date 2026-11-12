@@ -114,16 +114,30 @@ final class MapTiltTests: XCTestCase {
         XCTAssertFalse(SunLook.sunLitRelief)
     }
 
-    func testDawnAndDuskArePlainDayAndNightStaysNight() {
+    func testDawnDuskAndNightArePlainDay() {
         XCTAssertEqual(SunLook.preset(.dawn), .day)
         XCTAssertEqual(SunLook.preset(.dusk), .day)
         XCTAssertEqual(SunLook.preset(.day), .day)
-        XCTAssertEqual(SunLook.preset(.night), .night, "night mode behaves as before")
+        XCTAssertEqual(SunLook.preset(.night), .day, "the map never darkens at night (2026-11-12)")
     }
 
-    func testSkyHasNoGoldenHorizonButKeepsItsNight() {
-        for alt in [-5.0, 0, 3, 10, 40, 80] { XCTAssertEqual(SunLook.skyAltitude(alt), 30, "alt \(alt): a fixed neutral noon") }
-        for alt in [-6.0, -12, -30] { XCTAssertEqual(SunLook.skyAltitude(alt), alt, "alt \(alt): the night sky and its stars") }
+    func testNightLookSwitchIsOffAndMapIsDayAtEveryHourInRiyadh() {
+        XCTAssertFalse(NightLook.mapDarkens, "the DEBUG -SaryNightMapDark switch is not given")
+        let start = ISO8601DateFormatter().date(from: "2026-11-12T00:00:00Z")!
+        for h in 0..<24 {
+            let d = start.addingTimeInterval(Double(h) * 3600)
+            let real = SunLight.preset(d, lat: 24.71, lng: 46.68)
+            XCTAssertEqual(NightLook.preset(forcedNight: false, real: real), .day, "hour \(h) UTC, automatic")
+            XCTAssertEqual(NightLook.preset(forcedNight: true, real: real), .day, "hour \(h) UTC, forced night theme")
+        }
+        // The clock really does reach night in Riyadh, so the loop above is not vacuous.
+        XCTAssertTrue((0..<24).contains { SunLight.preset(start.addingTimeInterval(Double($0) * 3600), lat: 24.71, lng: 46.68) == .night })
+        XCTAssertFalse(NightLook.mapIsDark(nightTheme: true), "casings are contrasted for a light map")
+    }
+
+    func testSkyHasNoGoldenHorizonAndNoNight() {
+        for alt in [-30.0, -12, -6, -5, 0, 3, 10, 40, 80] { XCTAssertEqual(SunLook.skyAltitude(alt), 30, "alt \(alt): a fixed neutral noon, no night sky") }
+        XCTAssertEqual(SkyAtmosphere.sky(sunAltitude: SunLook.skyAltitude(-20)).starIntensity, 0, "no stars")
         // And the noon sky it picks is the plain one: no warm orange horizon colour.
         let sky = SkyAtmosphere.sky(sunAltitude: SunLook.skyAltitude(2))
         XCTAssertGreaterThan(sky.color.r, 200)

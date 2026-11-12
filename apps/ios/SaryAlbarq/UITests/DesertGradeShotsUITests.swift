@@ -19,11 +19,14 @@ final class DesertGradeShotsUITests: XCTestCase {
     /// SARY_GRADE=mild|strong: the variant under review (`SandGrade`, DEBUG only).
     private var grade: [String] { ProcessInfo.processInfo.environment["SARY_GRADE"].flatMap { $0.isEmpty ? nil : ["-SarySandGrade", $0] } ?? [] }
 
-    private func launch(at lat: Double, _ lng: Double, clock: String, _ extra: [String]) -> XCUIApplication {
+    /// SARY_NIGHT_ARGS="-SaryNightMapDark": extra launch arguments for the no-night before / after (DEBUG switch).
+    private var extraArgs: [String] { (ProcessInfo.processInfo.environment["SARY_NIGHT_ARGS"] ?? "").split(separator: " ").map(String.init) }
+
+    private func launch(at lat: Double, _ lng: Double, clock: String, forcedNight: Bool = false, _ extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         let shift = String(format: "%.4f,%.4f", lat - demoBase.lat, lng - demoBase.lng)
-        app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryWeatherDemo", "calm", "-SaryScheme", "dark", "-SaryNight", "0",
-                               "-SaryDrive", "0", "-SaryVisualsClock", clock, "-SaryDemoShift", shift] + grade + extra
+        app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryWeatherDemo", "calm", "-SaryScheme", "dark", "-SaryNight", forcedNight ? "1" : "0",
+                               "-SaryDrive", "0", "-SaryVisualsClock", clock, "-SaryDemoShift", shift] + grade + extraArgs + extra
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -66,6 +69,19 @@ final class DesertGradeShotsUITests: XCTestCase {
         shot(name)
         app.terminate()
     }
+
+    /// The map at night (real sunset clock, or the night theme forced on): the no-night shots.
+    private func nightView(_ name: String, _ lat: Double, _ lng: Double, zoom: Double, pitch: Double, forced: Bool) {
+        let app = launch(at: lat, lng, clock: forced ? day : night, forcedNight: forced,
+                         ["-SaryContext", "stopped", "-SaryVisualsCamera", "\(lat),\(lng),\(zoom),\(pitch),250"])
+        sleep(12)
+        shot(name)
+        app.terminate()
+    }
+
+    func testN1NightRiyadh() { nightView("night-riyadh", 24.7113, 46.6744, zoom: 15, pitch: 60, forced: false) }
+    func testN2NightDesert() { nightView("night-desert", 28.30, 41.40, zoom: 13, pitch: 60, forced: false) }
+    func testN3ForcedNightThemeAtNoonRiyadh() { nightView("forced-night-riyadh", 24.7113, 46.6744, zoom: 15, pitch: 60, forced: true) }
 
     private func driving(_ name: String, _ lat: Double, _ lng: Double, clock: String) {
         let app = launch(at: lat, lng, clock: clock, ["-SaryContext", "driving", "-SaryNavDemo", "-SaryNavDelay", "3", "-SaryRadioRemote",
