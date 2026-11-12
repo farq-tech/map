@@ -110,6 +110,49 @@ extension View {
     }
 }
 
+// MARK: - Sheet header
+
+/// THE header of every sheet that is not a `SaryPage`: one title style (`.title2`), an optional
+/// subtitle, optional trailing controls and the one close control (`SaryIconButton`, ≥ 44 pt).
+/// UI-AUDIT §و: there were four header styles; this is the one left.
+struct SarySheetHeader<Trailing: View>: View {
+    var title: String
+    var subtitle: String? = nil
+    var closeLabel: String = "إغلاق"
+    var closeID: String? = nil
+    var close: (() -> Void)? = nil
+    @ViewBuilder var trailing: Trailing
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        HStack(alignment: .center, spacing: theme.space(.s)) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .saryText(.title2)
+                    .foregroundStyle(p.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .accessibilityAddTraits(.isHeader)
+                if let subtitle {
+                    Text(subtitle).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+            trailing
+            if let close {
+                SaryIconButton(systemImage: SaryIcon.close, label: closeLabel, id: closeID, action: close)
+            }
+        }
+    }
+}
+
+extension SarySheetHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String? = nil, closeLabel: String = "إغلاق", closeID: String? = nil, close: (() -> Void)? = nil) {
+        self.init(title: title, subtitle: subtitle, closeLabel: closeLabel, closeID: closeID, close: close, trailing: { EmptyView() })
+    }
+}
+
 // MARK: - Summary line
 
 /// «٣ مشارك · ٢ مباشر · الأقرب ٩٠٠ م» — the whole minimized sheet. Tapping it
