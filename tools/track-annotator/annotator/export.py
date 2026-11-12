@@ -251,8 +251,11 @@ def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = No
                         "complete": t["complete"],
                         "verified_sources": sorted({f["properties"].get("proposal_source") for f in t["fc"]["features"]
                                                     if f["properties"].get("source") == "human_verified" and f["properties"].get("proposal_source")}),
+                        "verified_levels": sorted({f["properties"].get("verdict_level", "unspecified") for f in t["fc"]["features"]
+                                                   if f["properties"].get("source") == "human_verified"}),
                         "weight_hint": 2.0 if any(f["properties"].get("source") == "human_verified" and f["properties"].get("proposal_source") in
-                                                  ("desertmaps_new", "model", "ridge_filter") for f in t["fc"]["features"]) else 1.0, "ignore_fraction": round(float((ignore > 0).mean()), 4),
+                                                  ("desertmaps_new", "model", "ridge_filter") and f["properties"].get("verdict_level", "unspecified") != "faint"
+                                                  for f in t["fc"]["features"]) else 1.0,
                         "hardneg_categories": sorted({k for k, i in config.NEG_INDEX.items() if (t["hardneg"] == i).any()}),
                         "terrain": t["meta"].get("terrain"), "clarity": t["meta"].get("clarity"),
                         "region_cell": t["meta"]["region_cell"], "centre_wgs84": list(t["grid"].centre_lonlat()),
@@ -282,7 +285,7 @@ def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = No
         "tiles": records,
         "split_report": {"blocks": sp["blocks"], "params": sp["params"], "buffer_dropped": sp["dropped"],
                          "empty_dropped": empty, "leakage_check": leak},
-        "review": {"note": "human_verified = owner said صح on a machine proposal; weight_hint 2.0 = contains a verified NOVEL (non-OSM) track",
+        "review": {"note": "human_verified = owner said صح on a machine proposal; weight_hint 2.0 = contains a CLEAR/unspecified verified NOVEL (non-OSM) track (faint-only = 1.0)",
                    "stats": __import__("annotator.review", fromlist=["x"]).stats()},
         "needs_ignore_mask_loss": any(not r["complete"] for r in records),
         "ignore_mask_note": "extras/*__ignore_mask.png (255 = unlabeled, exclude from the loss). Upstream SAM-Road does NOT read it: "

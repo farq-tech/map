@@ -289,9 +289,11 @@ def validate_geojson(fc: dict) -> dict:
                 raise SampleError("source غير صالح")
             props["source"] = src
             if src == "human_verified":
-                for k in ("proposal_id", "proposal_source", "type_source"):
+                for k in ("proposal_id", "proposal_source", "type_source", "verdict_level"):
                     if p.get(k):
                         props[k] = str(p[k])
+                if p.get("label_confidence") is not None:
+                    props["label_confidence"] = round(float(p["label_confidence"]), 2)
                 props["edited"] = bool(p.get("edited"))
             if src == "model_suggested":
                 if not p.get("suggestion_id"):

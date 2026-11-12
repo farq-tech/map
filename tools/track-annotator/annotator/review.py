@@ -297,6 +297,17 @@ def card_by_id(pid: str) -> dict | None:
     return next((c for c in (d or {}).get("cards", []) if c["pid"] == pid), None)
 
 
+# ------------------------------------------------------------------ verdict levels
+POSITIVE = ("correct_clear", "correct_faint", "correct", "correct_incomplete")   # last two: legacy single «صح»
+CLARITY_OF = {"clear": 1, "unspecified": 2, "faint": 3}
+LABEL_CONF = {"clear": 1.0, "unspecified": 0.75, "faint": 0.5}
+
+
+def level_of(v: str) -> str | None:
+    """clear / faint / unspecified (the 58 legacy `correct` verdicts) / None for non-positive verdicts."""
+    return {"correct_clear": "clear", "correct_faint": "faint", "correct": "unspecified", "correct_incomplete": "unspecified"}.get(v)
+
+
 # ------------------------------------------------------------------ applying verdicts to labels
 def _sample_for(c: dict) -> tuple[dict, str]:
     meta, _ = store.create_from_mosaic(17, c["x0"], c["y0"], 2, 2)
@@ -307,11 +318,11 @@ def _strip(fc: dict, pid: str) -> dict:
     return {"type": "FeatureCollection", "features": [f for f in fc["features"] if f["properties"].get("proposal_id") != pid]}
 
 
-def apply_label(c: dict, verdict: str, reason: str | None, line_lonlat: list | None, edited: bool) -> str | None:
+def apply_label(c: dict, verdict: str, reason: str | None, line_lonlat: list | None, edited: bool, more_tracks: bool = False) -> str | None:
     """Write the label into the card's sample. Returns sample_id (or None when no label)."""
     if c.get("control"):
         return None  # controls never become labels
-    if verdict not in ("correct", "correct_incomplete", "wrong"):
+    if verdict not in (*POSITIVE, "wrong"):
         return None
     if verdict == "wrong" and REASONS.get(reason, (None, None))[1] is None:
         return None
@@ -319,15 +330,17 @@ def apply_label(c: dict, verdict: str, reason: str | None, line_lonlat: list | N
     fc = _strip(store.read_tracks(sid), c["pid"])
     geom = line_lonlat or c["line"]
     base = {"id": uuid.uuid4().hex[:10], "proposal_id": c["pid"], "proposal_source": c["source"]}
-    if verdict in ("correct", "correct_incomplete"):
+    if verdict in POSITIVE:
+        lv = level_of(verdict)
         fc["features"].append({"type": "Feature", "properties": {**base, "kind": "centerline", "track_type": c["type_hint"],
-                               "clarity": 2, "source": "human_verified", "type_source": c["type_source"], "edited": bool(edited)},
+                               "clarity": CLARITY_OF[lv], "source": "human_verified", "type_source": c["type_source"], "edited": bool(edited),
+                               "verdict_level": lv, "label_confidence": LABEL_CONF[lv]},
                                "geometry": {"type": "LineString", "coordinates": geom}})
     else:
         fc["features"].append({"type": "Feature", "properties": {**base, "kind": "negative", "category": REASONS[reason][1], "reason": reason},
                                "geometry": {"type": "LineString", "coordinates": c["line"]}})
     upd = {}
-    if verdict == "correct_incomplete":
+    if verdict == "correct_incomplete" or (verdict in POSITIVE and more_tracks):
         m = store.read_metadata(sid)
         m["review_more_tracks"] = True
         store._write_json(store.sample_dir(sid) / "metadata.json", m)
@@ -336,19 +349,19 @@ def apply_label(c: dict, verdict: str, reason: str | None, line_lonlat: list | N
 
 
 def verdict(pid: str, v: str, reason: str | None = None, ms: int | None = None, line_px_edit: list | None = None,
-            edits: list | None = None) -> dict:
+            edits: list | None = None, more_tracks: bool = False) -> dict:
     c = card_by_id(pid)
     if not c:
         raise KeyError("بطاقة غير معروفة")
-    if v not in ("correct", "correct_incomplete", "wrong", "skip"):
+    if v not in (*POSITIVE, "wrong", "skip"):
         raise ValueError("حكم غير صالح")
     if v == "wrong" and reason not in REASONS:
         raise ValueError("اختر سببًا")
     line = px_to_lonlat(c, line_px_edit) if line_px_edit else None
     edited = bool(line_px_edit) and bool(edits)
-    sid = apply_label(c, v, reason, line, edited)
+    sid = apply_label(c, v, reason, line, edited, more_tracks)
     rec = {"pid": pid, "source": c["source"], "control": c.get("control"), "verdict": v, "reason": reason, "ms": ms,
-           "edited": edited, "edits": edits or [], "sample_id": sid, "ts": _now(), "repeat_of": c.get("repeat_of")}
+           "edited": edited, "edits": edits or [], "more_tracks": bool(more_tracks), "sample_id": sid, "ts": _now(), "repeat_of": c.get("repeat_of")}
     _append(rec)
     return rec
 
@@ -379,18 +392,33 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
     return round((c - h) / d, 3), round((c + h) / d, 3)
 
 
+def _rate(k: int, n: int) -> dict:
+    return {"k": k, "n": n, "p": round(k / n, 3) if n else None, "wilson95": wilson(k, n)}
+
+
 def stats() -> dict:
+    """Per-source precision under TWO definitions + the legacy single «صح».
+
+    strict  = ✓ واضح only (a clear track, line within ~15 m)      -> over verdicts given with the two-level buttons
+    lenient = ✓ واضح + ✓ ضعيف (a track is visible, even if faint/offset)
+    legacy  = the earlier single «صح» (unspecified level), reported separately and in `lenient_all`.
+    """
     vs = read_verdicts()
     out = {}
     for src in SOURCE_LABELS:
         mine = [v for v in vs if v["source"] == src and not v["control"] and v["verdict"] != "skip"]
-        ok = [v for v in mine if v["verdict"] in ("correct", "correct_incomplete")]
+        lv = [level_of(v["verdict"]) for v in mine]
+        clear, faint, unspec = lv.count("clear"), lv.count("faint"), lv.count("unspecified")
+        ok = [v for v in mine if level_of(v["verdict"])]
         raw = [v for v in ok if not v["edited"]]
         wrong = [v for v in mine if v["verdict"] == "wrong" and v["reason"] != "offset"]
         off = [v for v in mine if v["verdict"] == "wrong" and v["reason"] == "offset"]
         n = len(mine)
+        n2 = n - unspec
         out[src] = {"label": SOURCE_LABELS[src], "n": n, "approved": len(ok), "approved_unedited": len(raw), "wrong": len(wrong),
-                    "offset": len(off), "precision_raw": round(len(raw) / n, 3) if n else None,
+                    "offset": len(off), "clear": clear, "faint": faint, "unspecified": unspec,
+                    "strict": _rate(clear, n2), "lenient": _rate(clear + faint, n2), "lenient_all": _rate(len(ok), n),
+                    "precision_raw": round(len(raw) / n, 3) if n else None,
                     "precision_usable": round(len(ok) / n, 3) if n else None, "wilson95_raw": wilson(len(raw), n),
                     "wilson95_usable": wilson(len(ok), n)}
     ctl = [v for v in vs if v["control"] and v["verdict"] != "skip"]
@@ -398,15 +426,29 @@ def stats() -> dict:
     lr = [v for v in ctl if v["control"] == "likely_right"]
     rp = [v for v in ctl if v["control"] == "repeat"]
     first = {v["pid"]: v["verdict"] for v in vs if not v["control"]}
-    agree = [1 if (first.get(v["repeat_of"], "")[:5] == v["verdict"][:5]) else 0 for v in rp if v.get("repeat_of") in first]
+
+    def norm(v):
+        return level_of(v) or v
+    pos = lambda v: bool(level_of(v))
+    agree = [1 if (v["repeat_of"] in first and pos(first[v["repeat_of"]]) == pos(v["verdict"])) else 0 for v in rp if v.get("repeat_of") in first]
+    agree_strict = [1 if (norm(first[v["repeat_of"]]) == norm(v["verdict"]) or "unspecified" in (norm(first[v["repeat_of"]]), norm(v["verdict"])) and
+                          pos(first[v["repeat_of"]]) == pos(v["verdict"])) else 0 for v in rp if v.get("repeat_of") in first]
     ms = [v["ms"] for v in vs if v.get("ms") and v["verdict"] != "skip"]
-    ok_all = [v for v in vs if v["verdict"] in ("correct", "correct_incomplete") and not v["control"]]
+    ok_all = [v for v in vs if level_of(v["verdict"]) and not v["control"]]
     return {"sources": out, "n_verdicts": len(vs),
             "controls": {"shifted_wrong_rejected": f"{sum(1 for v in sw if v['verdict'] == 'wrong')}/{len(sw)}",
                          "likely_right_accepted": f"{sum(1 for v in lr if v['verdict'] != 'wrong')}/{len(lr)}",
-                         "repeat_consistent": f"{sum(agree)}/{len(agree)}"},
+                         "repeat_consistent": f"{sum(agree)}/{len(agree)}",
+                         "repeat_consistent_level": f"{sum(agree_strict)}/{len(agree_strict)}"},
             "median_seconds_per_card": round(float(np.median(ms)) / 1000, 1) if ms else None,
             "edit_rate": round(sum(1 for v in ok_all if v["edited"]) / len(ok_all), 3) if ok_all else None}
+
+
+def current_batch_no(deck: dict) -> int:
+    """The newest batch that still has unjudged cards (cards without `batch` are batch 1)."""
+    done = {v["pid"] for v in read_verdicts()}
+    pend = [c.get("batch", 1) for c in deck["cards"] if c["pid"] not in done]
+    return max(pend) if pend else max((c.get("batch", 1) for c in deck["cards"]), default=1)
 
 
 def progress(deck: dict | None = None) -> dict:
@@ -414,10 +456,12 @@ def progress(deck: dict | None = None) -> dict:
     if not deck:
         return {"total": 0, "done": 0, "left": 0, "minutes_left": 0}
     done = {v["pid"] for v in read_verdicts()}
-    left = [c for c in deck["cards"] if c["pid"] not in done]
+    b = current_batch_no(deck)
+    scope = [c for c in deck["cards"] if c.get("batch", 1) == b]
+    left = [c for c in scope if c["pid"] not in done]
     ms = [v["ms"] for v in read_verdicts() if v.get("ms")]
-    sec = float(np.median(ms)) / 1000 if len(ms) >= 3 else 10.0
-    return {"total": len(deck["cards"]), "done": len(deck["cards"]) - len(left), "left": len(left),
+    sec = float(np.median(ms[-60:])) / 1000 if len(ms) >= 3 else 10.0
+    return {"batch": b, "total": len(scope), "done": len(scope) - len(left), "left": len(left),
             "minutes_left": round(len(left) * sec / 60, 1), "seconds_per_card": round(sec, 1)}
 
 
@@ -425,7 +469,7 @@ def card_payload(c: dict) -> dict:
     return {"pid": c["pid"], "idx": c.get("idx"), "source": c["source"], "source_label": SOURCE_LABELS[c["source"]],
             "detail": c["detail"], "conf": c.get("conf"), "control": bool(c.get("control")), "length_m": c["length_m"],
             "type_hint": c["type_hint"], "line_px": line_px(c), "size": CARD_PX,
-            "img": f"/api/review/img/{c['pid']}.jpg", "why": c.get("why", [])}
+            "img": f"/api/review/img/{c['pid']}.jpg", "why": c.get("why", []), "batch": c.get("batch", 1)}
 
 
 # ------------------------------------------------------------------ one-tap snap (انطباق)
@@ -495,3 +539,61 @@ def start_build(n_cards: int = 60) -> dict:
             JOB.update(state="error", error=str(e)[:300])
     threading.Thread(target=work, daemon=True).start()
     return JOB
+
+
+# ------------------------------------------------------------------ importing a ranked batch (append-only)
+def import_batch(path: Path | str, batch: int = 2, n_shifted: int = 3, n_repeat: int = 2, seed: int = 11) -> dict:
+    """Append a ranked batch (cards in the tool's format) to the deck. Never touches verdicts.
+
+    * cards already in the deck or already judged are skipped (never re-shown);
+    * ``n_shifted`` shifted-wrong controls are derived from batch cards, ``n_repeat`` repeats re-show cards the owner
+      already judged in earlier batches (measures self-consistency across time);
+    * idempotent: a second import of the same file adds nothing.
+    """
+    src = json.load(open(Path(path).expanduser()))
+    deck = load_deck() or {"cards": []}
+    have = {c["pid"] for c in deck["cards"]}
+    judged = {v["pid"] for v in read_verdicts()}
+    rng = random.Random(seed)
+    new = []
+    for c in src["cards"]:
+        if c["pid"] in have or c["pid"] in judged:
+            continue
+        if c["source"] not in SOURCE_LABELS or not c.get("line") or len(c["line"]) < 2:
+            continue
+        c = dict(c)
+        c["x0"], c["y0"] = _tile_origin(c["mid"])        # recompute so the 512-px crop always fits the 2x2 mosaic
+        c["batch"] = batch
+        c["control"] = c.get("control")
+        new.append(c)
+    if not new:
+        return {"added": 0, "reason": "لا بطاقات جديدة (مستوردة سابقًا أو مُحكوم عليها)"}
+    ctl = []
+    for p in rng.sample(new, min(n_shifted, len(new))):
+        s_ = shifted_control(p, rng)
+        s_.update(batch=batch, non_osm=False, x0=_tile_origin(s_["mid"])[0], y0=_tile_origin(s_["mid"])[1])
+        ctl.append(s_)
+    earlier = [c for c in deck["cards"] if c["pid"] in judged and not c.get("control") and not c["pid"].endswith("-rep")]
+    for p in rng.sample(earlier, min(n_repeat, len(earlier))):
+        r = dict(p)
+        r.update(pid=f"{p['pid']}-b{batch}rep", control="repeat", repeat_of=p["pid"], batch=batch)
+        ctl.append(r)
+    cards = new[:]
+    positions = sorted(rng.sample(range(min(8, len(cards) // 2), len(cards) + 1), min(len(ctl), len(cards))))
+    for pos, c in zip(positions, ctl):
+        cards.insert(min(pos, len(cards)), c)
+    start = len(deck["cards"])
+    for i, c in enumerate(cards):
+        c["idx"] = start + i
+    if DECK.is_file():
+        bak = DECK.with_suffix(f".json.bak-before-batch{batch}")
+        if not bak.exists():
+            bak.write_text(DECK.read_text())
+    deck["cards"] = deck["cards"] + cards
+    deck["n_cards"] = len(deck["cards"])
+    deck.setdefault("batches", {})[str(batch)] = {
+        "imported_utc": _now(), "source_file": Path(path).name, "n_cards": len(cards), "created": src.get("created"),
+        "method": src.get("method"), "caveats": src.get("caveats"), "strata_evidence": src.get("strata_evidence"),
+        "composition": src.get("composition"), "controls": {"shifted_wrong": n_shifted, "repeat": n_repeat}}
+    DECK.write_text(json.dumps(deck, ensure_ascii=False))
+    return {"added": len(cards), "cards": len(new), "controls": len(ctl), "total_deck": deck["n_cards"]}

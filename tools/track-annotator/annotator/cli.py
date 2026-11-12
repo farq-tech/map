@@ -45,6 +45,9 @@ def main(argv=None) -> int:
     sg.add_argument("--backend", default="auto", choices=["auto", "ridge", "sam_road"])
     rb = sub.add_parser("review-build", help="بناء طابور بطاقات المراجعة (صح/خطأ)")
     rb.add_argument("--cards", type=int, default=60)
+    ib = sub.add_parser("review-import-batch", help="استيراد دفعة مرتبة (JSON) إلى طابور المراجعة بلا مسّ بالأحكام")
+    ib.add_argument("path")
+    ib.add_argument("--batch", type=int, default=2)
     c = sub.add_parser("check", help="جودة عينة واحدة")
     c.add_argument("sample_id")
     a = ap.parse_args(argv)
@@ -90,6 +93,9 @@ def main(argv=None) -> int:
         from . import review
         d = review.build_deck(a.cards)
         print(d["n_cards"], "بطاقة", d["sources_count"], d["controls"], "غير-OSM", d["non_osm_share"])
+    elif a.cmd == "review-import-batch":
+        from . import review
+        print(review.import_batch(a.path, a.batch))
     elif a.cmd == "suggest":
         from . import suggest
         fc = suggest.suggest(a.sample_id, a.backend)
