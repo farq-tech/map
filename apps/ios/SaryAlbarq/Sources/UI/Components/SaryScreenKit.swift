@@ -12,33 +12,80 @@ import SwiftUI
 
 /// One screen = header (big title right, ✕ left) + content + ONE primary button pinned below.
 /// A screen passes at most one `primary`; everything else on it is secondary.
-struct SaryScreenScaffold<Content: View>: View {
+/// Optional (defaults keep the original layout): `subtitle` under the title, `scrolls: false` for a
+/// content area that does not scroll (a camera square), and `bottom` — extra pinned rows under the
+/// primary (a secondary button, a note) for screens whose primary needs more than a title.
+struct SaryScreenScaffold<Content: View, Bottom: View>: View {
     var title: String
-    var closeID: String = "window-close"
+    var subtitle: String?
+    var closeID: String
     var onClose: () -> Void
     var primaryTitle: String?
     var primaryImage: String?
-    var primaryID: String = "primary-button"
-    var onPrimary: () -> Void = {}
-    @ViewBuilder var content: Content
+    var primaryID: String
+    var onPrimary: () -> Void
+    var scrolls: Bool
+    var content: Content
+    var bottom: Bottom
     @Environment(\.sary) private var theme
+
+    init(title: String, subtitle: String? = nil, closeID: String = "window-close", onClose: @escaping () -> Void,
+         primaryTitle: String? = nil, primaryImage: String? = nil, primaryID: String = "primary-button",
+         onPrimary: @escaping () -> Void = {}, scrolls: Bool = true,
+         @ViewBuilder content: () -> Content, @ViewBuilder bottom: () -> Bottom) {
+        self.title = title; self.subtitle = subtitle; self.closeID = closeID; self.onClose = onClose
+        self.primaryTitle = primaryTitle; self.primaryImage = primaryImage; self.primaryID = primaryID
+        self.onPrimary = onPrimary; self.scrolls = scrolls; self.content = content(); self.bottom = bottom()
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             SaryWindowTitle(title, closeID: closeID, onClose: onClose)
-            ScrollView {
+            if let subtitle {
+                Text(subtitle)
+                    .saryType(.body)
+                    .foregroundStyle(theme.palette.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, SarySpace.l.rawValue)
+                    .padding(.bottom, SarySpace.s.rawValue)
+            }
+            if scrolls {
+                ScrollView {
+                    content
+                        .padding(.horizontal, SarySpace.l.rawValue)
+                        .padding(.vertical, SarySpace.s.rawValue)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            } else {
                 content
                     .padding(.horizontal, SarySpace.l.rawValue)
                     .padding(.vertical, SarySpace.s.rawValue)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 0)
             }
             if let primaryTitle {
                 SaryPrimaryButton(primaryTitle, systemImage: primaryImage, id: primaryID, action: onPrimary)
                     .padding(.horizontal, SarySpace.l.rawValue)
                     .padding(.vertical, SarySpace.m.rawValue)
             }
+            if Bottom.self != EmptyView.self {
+                VStack(spacing: SarySpace.s.rawValue) { bottom }
+                    .padding(.horizontal, SarySpace.l.rawValue)
+                    .padding(.bottom, SarySpace.m.rawValue)
+            }
         }
         .background(theme.palette.background.ignoresSafeArea())
+    }
+}
+
+extension SaryScreenScaffold where Bottom == EmptyView {
+    init(title: String, subtitle: String? = nil, closeID: String = "window-close", onClose: @escaping () -> Void,
+         primaryTitle: String? = nil, primaryImage: String? = nil, primaryID: String = "primary-button",
+         onPrimary: @escaping () -> Void = {}, scrolls: Bool = true, @ViewBuilder content: () -> Content) {
+        self.init(title: title, subtitle: subtitle, closeID: closeID, onClose: onClose, primaryTitle: primaryTitle,
+                  primaryImage: primaryImage, primaryID: primaryID, onPrimary: onPrimary, scrolls: scrolls,
+                  content: content, bottom: { EmptyView() })
     }
 }
 
