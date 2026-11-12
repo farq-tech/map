@@ -198,6 +198,8 @@ final class LiveOutingController: ObservableObject {
     @Published var picking: (moving: Bool, active: Bool) = (false, false)
     /// The modal whose sheet really appeared (set by the sheet content); `LiveOutingScreen.watchModal` compares it.
     var modalShownID: String?
+    /// The thin thread between the convoy's two ends (`ConvoyLink`), nil when there is nothing to draw.
+    @Published private(set) var convoyLink: ConvoyLinkInfo?
     @Published var modal: LiveModal? {
         didSet {
             if oldValue == .navOptions, modal != .navOptions { navOptionsClosed() }
@@ -723,6 +725,8 @@ final class LiveOutingController: ObservableObject {
         let convoyOn = session.view?.convoy?.isOn == true
         let cars = convoyOn || session.view?.status == .active ? LiveOutingPresenter.mapMembers(input, hideNotes: true) : nil
         checkConvoyIntel(members: cars)
+        let link = convoyOn ? ConvoyLink.info(convoy: session.view?.convoy, members: cars ?? []) : nil
+        if convoyLink != link { convoyLink = link }
         guard convoyOn else { features.evaluateConvoy(members: []); return cars }
         features.evaluateConvoy(members: cars ?? [])
         return cars

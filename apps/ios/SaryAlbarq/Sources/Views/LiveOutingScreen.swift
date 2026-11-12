@@ -117,6 +117,9 @@ struct LiveOutingScreen: View {
                         .ignoresSafeArea()
                 }
 
+                ConvoyLinkLayer(overlay: controller.overlay, info: controller.convoyLink)
+                    .ignoresSafeArea()
+
                 EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full),
                                driving: controller.liveContext(drive: theme.drive) == .driving, alerting: controller.alertingMemberIds(ui: ui),
                                parts: Dictionary(ui.participantsTab.participants.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }))
