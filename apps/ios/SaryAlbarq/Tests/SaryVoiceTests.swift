@@ -7,7 +7,7 @@ import XCTest
 final class SaryVoiceClipsTests: XCTestCase {
     func testManifestIsInTheBundleAndEveryClipDecodes() throws {
         let entries = SaryVoiceCatalog.entries
-        XCTAssertEqual(entries.count, 226, "the owner's 226 phrases")
+        XCTAssertEqual(entries.filter { $0.section != "offroad" }.count, 226, "the owner's 226 phrases (the off-road clips are imported later)")
         XCTAssertEqual(Set(entries.map(\.key)).count, entries.count, "keys are unique")
         XCTAssertEqual(Set(entries.map(\.file)).count, entries.count, "files are unique")
         var rate: Double?
@@ -34,7 +34,7 @@ final class SaryVoiceClipsTests: XCTestCase {
     /// true peak after oversampling is checked by `scripts/sary-voice-lint.py`).
     func testAssetLinterLoudnessIsUniform() throws {
         let entries = SaryVoiceCatalog.entries
-        XCTAssertEqual(entries.count, 226)
+        XCTAssertEqual(entries.filter { $0.section != "offroad" }.count, 226)
         XCTAssertEqual(Set(entries.map(\.key)).count, entries.count, "duplicate key")
         XCTAssertEqual(Set(entries.map(\.file)).count, entries.count, "duplicate file")
         for e in entries { XCTAssertEqual(e.file, e.key + ".m4a", "file is named after its key") }

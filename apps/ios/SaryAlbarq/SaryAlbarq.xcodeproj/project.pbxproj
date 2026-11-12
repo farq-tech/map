@@ -103,6 +103,7 @@
 		2AF04C664C03718542548443 /* SaryPTT.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087D07928C7AC61627BD3A63 /* SaryPTT.swift */; };
 		2B115D428C173D9063FDCDD9 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31571952C88A8EFB16D42C17 /* HomeView.swift */; };
 		2B5758AC6E38B537D3F8EF80 /* OutingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D91B934841C11948875B8B21 /* OutingActivityAttributes.swift */; };
+		2C1B2B1440643AA5C41D6C8B /* OffRoadVoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 269FC9594D4D3AD8B8F21112 /* OffRoadVoiceTests.swift */; };
 		2C4539C7EB1476966EEF4242 /* QuickStartLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2929C8B8A684CE8B9FAE4108 /* QuickStartLayoutUITests.swift */; };
 		2C8CA83B7B0C94582E449D58 /* VoiceNoteUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 201AAA2B35385AA6AC04720D /* VoiceNoteUploader.swift */; };
 		2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7375A05885429491947FFF5 /* OutingStateTests.swift */; };
@@ -322,6 +323,7 @@
 		836BF6F435EE0474F9DD3F85 /* PlaceBriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D7C101498AD3576122F231 /* PlaceBriefTests.swift */; };
 		838A4B2A305EBA4D66C0ADE1 /* FollowCameraUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 377E7121059C982DAAABD4CF /* FollowCameraUITests.swift */; };
 		83D13F4CB09361EA83612818 /* PlanMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02B3E6ED8AC59F71287211D4 /* PlanMapView.swift */; };
+		8431F174641AAF6A612AC984 /* OffRoadVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19699BB7EA80921B0BD80F8 /* OffRoadVoice.swift */; };
 		8526A0F5CF7C91C21EEDD2D3 /* NavGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CF0FFE28C1FAE7AEAF8B805 /* NavGlyph.swift */; };
 		858159506E7E19489DDB1147 /* PersonalInvitesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62EAD5D5D15C3EBCA897CB30 /* PersonalInvitesSection.swift */; };
 		85C7304DA76D182075D64FE6 /* ServerRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */; };
@@ -730,6 +732,7 @@
 		26396E337F5BA2511BCFB2F2 /* OfflineFixQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineFixQueue.swift; sourceTree = "<group>"; };
 		26412D7E37DB5FDC4068D007 /* OffroadTracks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffroadTracks.swift; sourceTree = "<group>"; };
 		26444FB642192D73393CFABD /* NavGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavGuidance.swift; sourceTree = "<group>"; };
+		269FC9594D4D3AD8B8F21112 /* OffRoadVoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffRoadVoiceTests.swift; sourceTree = "<group>"; };
 		26A2D5E7719A828DE7D7A254 /* RadioSoundsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioSoundsTests.swift; sourceTree = "<group>"; };
 		27A05AE2BDFDC55031112972 /* MotionFX.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionFX.swift; sourceTree = "<group>"; };
 		28D20037D03EABCC832D131B /* ScreenKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenKit.swift; sourceTree = "<group>"; };
@@ -1015,6 +1018,7 @@
 		9FF5F9877B2FBB60DF60356C /* OfflineMapsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapsView.swift; sourceTree = "<group>"; };
 		A03AC033CA2F5A3B5DF26E24 /* CarPlayManeuvers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayManeuvers.swift; sourceTree = "<group>"; };
 		A047AD1C6D7BCD8732E010D9 /* SearchLexicon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchLexicon.swift; sourceTree = "<group>"; };
+		A19699BB7EA80921B0BD80F8 /* OffRoadVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffRoadVoice.swift; sourceTree = "<group>"; };
 		A1F8FEFC78FDF837D13AF242 /* PersonalInvitesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalInvitesTests.swift; sourceTree = "<group>"; };
 		A2131F99E5536E594F29D904 /* Tajawal-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-Regular.ttf"; sourceTree = "<group>"; };
 		A2465681F01A3FB3327E1844 /* NavVoiceSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavVoiceSettingsUITests.swift; sourceTree = "<group>"; };
@@ -1357,6 +1361,7 @@
 				09CC2A7D1B405A7068A2C693 /* NavTargets.swift */,
 				826A2810F7AE639B91EB56BD /* NavText.swift */,
 				BD648519581F42E46FE7A945 /* NavVoice.swift */,
+				A19699BB7EA80921B0BD80F8 /* OffRoadVoice.swift */,
 				F1B6A588A04A7CB4E01FD499 /* RestrictedZones.swift */,
 				7ADCF07BA3725250771E931F /* RouteAdherence.swift */,
 				EFCE098B3D9D73601DF1B926 /* SaryVoice.swift */,
@@ -1692,6 +1697,7 @@
 				8395E766FD74F9D3636588C2 /* NavPromptTimingTests.swift */,
 				009848C40DEEB8AAFB07C0CD /* NearbyMeshTests.swift */,
 				F02A2BDA2267CBCF3917825E /* NewUITests.swift */,
+				269FC9594D4D3AD8B8F21112 /* OffRoadVoiceTests.swift */,
 				6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */,
 				11CDC8B81053C2BF40C8AB6B /* OutingFlowTests.swift */,
 				B7375A05885429491947FFF5 /* OutingStateTests.swift */,
@@ -2738,6 +2744,7 @@
 				B2C064913E779272911E6DB6 /* NavigationTests.swift in Sources */,
 				176A27E679C285AEDC9FB79C /* NearbyMeshTests.swift in Sources */,
 				F454E7B60D7E76CC62DA01F2 /* NewUITests.swift in Sources */,
+				2C1B2B1440643AA5C41D6C8B /* OffRoadVoiceTests.swift in Sources */,
 				8DC94CC5C6F716F6414B2314 /* OutingActivityTests.swift in Sources */,
 				00AD374339F0D6FD212815E3 /* OutingFlowTests.swift in Sources */,
 				2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */,
@@ -2976,6 +2983,7 @@
 				D4541F556F2ABB8010C6D705 /* NavigationSessionProviding.swift in Sources */,
 				997F43BC613C7888B7DAD066 /* NearbyMesh.swift in Sources */,
 				D2E0D99A52F89178AB51363F /* NewUI.swift in Sources */,
+				8431F174641AAF6A612AC984 /* OffRoadVoice.swift in Sources */,
 				88F6B664A274BA2C5862D120 /* OfflineFixQueue.swift in Sources */,
 				86B80A0CAF9A0FECB38A6F8D /* OfflineMaps.swift in Sources */,
 				33F4F4423348F7788A65F9CF /* OfflineMapsView.swift in Sources */,

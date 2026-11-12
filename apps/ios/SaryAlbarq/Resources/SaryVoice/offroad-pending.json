@@ -1,0 +1,206 @@
+[
+  {
+    "key": "offr_01",
+    "section": "offroad",
+    "text": "توكلنا على الله، اتبع مسارك",
+    "file": "offr_01.m4a"
+  },
+  {
+    "key": "offr_02",
+    "section": "offroad",
+    "text": "باقي خمسين كيلو على مسارك",
+    "file": "offr_02.m4a"
+  },
+  {
+    "key": "offr_03",
+    "section": "offroad",
+    "text": "باقي عشرين كيلو على مسارك",
+    "file": "offr_03.m4a"
+  },
+  {
+    "key": "offr_04",
+    "section": "offroad",
+    "text": "باقي عشرة كيلو على مسارك",
+    "file": "offr_04.m4a"
+  },
+  {
+    "key": "offr_05",
+    "section": "offroad",
+    "text": "باقي خمسة كيلو على مسارك",
+    "file": "offr_05.m4a"
+  },
+  {
+    "key": "offr_06",
+    "section": "offroad",
+    "text": "باقي كيلوين على مسارك",
+    "file": "offr_06.m4a"
+  },
+  {
+    "key": "offr_07",
+    "section": "offroad",
+    "text": "باقي كيلو واحد على مسارك",
+    "file": "offr_07.m4a"
+  },
+  {
+    "key": "offr_08",
+    "section": "offroad",
+    "text": "قربنا، ثمنمية متر",
+    "file": "offr_08.m4a"
+  },
+  {
+    "key": "offr_09",
+    "section": "offroad",
+    "text": "قربنا، خمسمية متر",
+    "file": "offr_09.m4a"
+  },
+  {
+    "key": "offr_10",
+    "section": "offroad",
+    "text": "وصلنا تقريبًا، ميتين متر",
+    "file": "offr_10.m4a"
+  },
+  {
+    "key": "offr_11",
+    "section": "offroad",
+    "text": "وصلنا، الحمد لله على السلامة",
+    "file": "offr_11.m4a"
+  },
+  {
+    "key": "offr_12",
+    "section": "offroad",
+    "text": "خذ يمينك بعد ثلاثمية متر",
+    "file": "offr_12.m4a"
+  },
+  {
+    "key": "offr_13",
+    "section": "offroad",
+    "text": "خذ يسارك بعد ثلاثمية متر",
+    "file": "offr_13.m4a"
+  },
+  {
+    "key": "offr_14",
+    "section": "offroad",
+    "text": "ميّل شوي لليمين",
+    "file": "offr_14.m4a"
+  },
+  {
+    "key": "offr_15",
+    "section": "offroad",
+    "text": "ميّل شوي لليسار",
+    "file": "offr_15.m4a"
+  },
+  {
+    "key": "offr_16",
+    "section": "offroad",
+    "text": "لف وارجع، الاتجاه غلط",
+    "file": "offr_16.m4a"
+  },
+  {
+    "key": "offr_17",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع شمالًا",
+    "file": "offr_17.m4a"
+  },
+  {
+    "key": "offr_18",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع شمال شرق",
+    "file": "offr_18.m4a"
+  },
+  {
+    "key": "offr_19",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع شرقًا",
+    "file": "offr_19.m4a"
+  },
+  {
+    "key": "offr_20",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع جنوب شرق",
+    "file": "offr_20.m4a"
+  },
+  {
+    "key": "offr_21",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع جنوبًا",
+    "file": "offr_21.m4a"
+  },
+  {
+    "key": "offr_22",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع جنوب غرب",
+    "file": "offr_22.m4a"
+  },
+  {
+    "key": "offr_23",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع غربًا",
+    "file": "offr_23.m4a"
+  },
+  {
+    "key": "offr_24",
+    "section": "offroad",
+    "text": "ابتعدت عن مسارك، ارجع شمال غرب",
+    "file": "offr_24.m4a"
+  },
+  {
+    "key": "offr_25",
+    "section": "offroad",
+    "text": "بعدت كثير عن مسارك",
+    "file": "offr_25.m4a"
+  },
+  {
+    "key": "offr_26",
+    "section": "offroad",
+    "text": "رجعت على مسارك",
+    "file": "offr_26.m4a"
+  },
+  {
+    "key": "offr_27",
+    "section": "offroad",
+    "text": "ما لقينا مسار قريب، امش للوجهة بخط مستقيم",
+    "file": "offr_27.m4a"
+  },
+  {
+    "key": "offr_28",
+    "section": "offroad",
+    "text": "أرض وعرة قدامك، خفّف",
+    "file": "offr_28.m4a"
+  },
+  {
+    "key": "offr_29",
+    "section": "offroad",
+    "text": "أحد أصدقائك بعيد عنك ثلاثة كيلو",
+    "file": "offr_29.m4a"
+  },
+  {
+    "key": "offr_30",
+    "section": "offroad",
+    "text": "أحد أصدقائك ما ظهر من فترة",
+    "file": "offr_30.m4a"
+  },
+  {
+    "key": "offr_31",
+    "section": "offroad",
+    "text": "أقرب محطة بنزين قدامك أربعين كيلو",
+    "file": "offr_31.m4a"
+  },
+  {
+    "key": "offr_32",
+    "section": "offroad",
+    "text": "ما فيه محطة قريبة، تأكد من وقودك",
+    "file": "offr_32.m4a"
+  },
+  {
+    "key": "offr_33",
+    "section": "offroad",
+    "text": "ما عندك إنترنت الآن، الخرائط محفوظة عندك",
+    "file": "offr_33.m4a"
+  },
+  {
+    "key": "offr_34",
+    "section": "offroad",
+    "text": "الشمس تغيب بعد أربعين دقيقة",
+    "file": "offr_34.m4a"
+  }
+]
