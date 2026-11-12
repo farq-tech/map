@@ -52,12 +52,13 @@ final class LayersButtonUITests: XCTestCase {
             button.tap()
             XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10), "\(mode): the shared layers sheet opens")
             for id in ["layer.satellite", "layer.standard", "layer.topo"] { XCTAssertTrue(el(app, id).waitForExistence(timeout: 5), "\(mode): \(id)") }
-            // The mode decides the data rows: weather only where its overlay is drawn (exploration).
+            // Weather is offered in every outing state, not only exploration (owner's Build 44 report, PR #239): the quick chips and the section.
+            for k in ["clouds", "rain", "wind"] { XCTAssertTrue(el(app, "weather.quick.\(k)").waitForExistence(timeout: 5), "\(mode): quick weather chip \(k)") }
             let rain = el(app, "weather.layer.rain")
             var found = rain.exists
             let page = app.scrollViews.firstMatch
             for _ in 0..<4 where !found { page.swipeUp(velocity: .slow); found = rain.exists }
-            XCTAssertEqual(found, mode == .exploring, "\(mode): weather rows only in exploration")
+            XCTAssertTrue(found, "\(mode): weather rows are offered in every outing state")
             app.terminate()
         }
     }
