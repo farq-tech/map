@@ -5,8 +5,13 @@ import SwiftUI
 /// only the action rows (camp suggestion, desert route, realistic mode, offline maps) are written by hand.
 /// Same accessibility identifiers as the old `ExploreLayersSheet`, so every existing UI test keeps working.
 struct MapLayersSheet: View {
-    @ObservedObject var controller: LiveOutingController
+    /// The live map's controller (explore / outing); nil on the home map, which has no outing: only the registry's rows show there.
+    var controller: LiveOutingController?
     var mode: MapLayerMode = .explore
+    /// Closes the sheet (the live screen clears its modal; the home map its own flag).
+    var close: () -> Void
+    /// Told when a base layer is chosen, so a map that does not read the controller (home) can follow.
+    var onBaseChosen: ((MapLayer) -> Void)? = nil
     @ObservedObject private var registry = MapLayerRegistry.shared
     @ObservedObject private var offline = OfflineMaps.shared
     @ObservedObject private var weather = WeatherLayers.shared
@@ -16,7 +21,7 @@ struct MapLayersSheet: View {
         let p = theme.palette
         let rows = MapLayersSheetModel.baseRows(registry: registry, mode: mode, areas: offline.completeAreas, topoAreas: offline.topoAreas)
         VStack(spacing: 0) {
-        SaryPage(title: "الطبقات", close: { controller.modal = nil }) {
+        SaryPage(title: "الطبقات", close: close) {
             VStack(spacing: theme.space(.s)) {
                 ForEach(rows) { row in
                     Button { choose(row.id) } label: {
@@ -85,10 +90,12 @@ struct MapLayersSheet: View {
                                 .padding(.horizontal, theme.space(.m))
                         }
                         if r.id == MapLayerCatalog.camp.id {
+                            if let controller {
                             SaryNavRow(title: "اقترح لي مكان كشتة", detail: "أفضل خمسة مواقع وطقس الليلة", systemImage: "tent", id: "explore-camp-suggest") {
                                 controller.performAction("camp")
                             }
                             .padding(.horizontal, theme.space(.m))
+                            }
                         }
                     }
                 }
@@ -198,6 +205,7 @@ struct MapLayersSheet: View {
     // MARK: Actions (not layers)
 
     @ViewBuilder private var actionSections: some View {
+        if let controller {
         SarySection(title: "دروب البر", footer: "اختر مسارًا مقترحًا للوجهة من بيانات صور الأقمار. تظهر الخيارات عند تحديد وجهة للطلعة.") {
             SaryNavRow(title: "مسار برّي إلى الوجهة", detail: "الأسهل أو المتوازن أو الأقصر",
                        systemImage: "point.topleft.down.to.point.bottomright.filled.curvepath", id: "explore-desert-route") {
@@ -223,6 +231,7 @@ struct MapLayersSheet: View {
             }
             .padding(.horizontal, theme.space(.m))
         }
+        }
     }
 
     /// A data layer on/off: the registry stores it (under the key the app always used), then the object that draws it is told.
@@ -235,6 +244,9 @@ struct MapLayersSheet: View {
     /// the same key through `MapLayer.saved`, so both always agree).
     private func choose(_ id: MapLayerID) {
         registry.setActive(id)
-        if let legacy = MapLayerCatalog.legacy(id) { controller.mapLayer = legacy }
+        if let legacy = MapLayerCatalog.legacy(id) {
+            controller?.mapLayer = legacy
+            onBaseChosen?(legacy)
+        }
     }
 }
