@@ -530,6 +530,7 @@
 		EA9E5DA7E199DAEA298D691C /* CloudOutlookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF4B78797B11EC749105504 /* CloudOutlookTests.swift */; };
 		EB117F3CB14386B3BD6E2D74 /* GroupAudioCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7329A626C21DA36D0C6394 /* GroupAudioCenter.swift */; };
 		EB3D166085B88F1DBB4698CB /* MapLayerRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21F79C2AFE114E37400B332A /* MapLayerRegistryTests.swift */; };
+		EB4FF40AC252BCF8F3688A93 /* HomeFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488DFDCA01410744F1EC659E /* HomeFlowUITests.swift */; };
 		EBA818268ADEED8837BA885D /* AlertLaneUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF8235E8B2B0DB268D32902 /* AlertLaneUITests.swift */; };
 		ECC05342C40A5D9AC7C042B2 /* SaryColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E4678268B288A88DA575A6 /* SaryColors.swift */; };
 		ECC2A21694CBDC1B7EB5FB39 /* TripProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8A1A61FE8E2FEBBA4FACA4 /* TripProgressTests.swift */; };
@@ -770,6 +771,7 @@
 		46E9A24AE0838E89CB099C32 /* HiResSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiResSettings.swift; sourceTree = "<group>"; };
 		471FE3D33FBD794FC1A7E01C /* VoiceNotesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceNotesUITests.swift; sourceTree = "<group>"; };
 		4848F0CE919477A276D09440 /* NavPromptBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavPromptBudgetTests.swift; sourceTree = "<group>"; };
+		488DFDCA01410744F1EC659E /* HomeFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFlowUITests.swift; sourceTree = "<group>"; };
 		49A3565CAFC838A5267BB20F /* SaryAlbarq-CarPlay.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SaryAlbarq-CarPlay.entitlements"; sourceTree = "<group>"; };
 		49C1A5D2B4ACEC01517DF4A4 /* Speed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speed.swift; sourceTree = "<group>"; };
 		4A22357CE58C65549DAD3F43 /* LiveOutingController+Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveOutingController+Chat.swift"; sourceTree = "<group>"; };
@@ -1936,6 +1938,7 @@
 				377E7121059C982DAAABD4CF /* FollowCameraUITests.swift */,
 				96C332A0106FE4F16F9025D3 /* GroupAudioUITests.swift */,
 				B96E3B534452C1D2A5BABD3F /* HiResImageryUITests.swift */,
+				488DFDCA01410744F1EC659E /* HomeFlowUITests.swift */,
 				B8161B8B4725CAA9EAF536CF /* IntroUITests.swift */,
 				01B0DAF6B193493CA914742C /* LayersButtonUITests.swift */,
 				0921F492E8E19485FBB1D911 /* LayersSheetUITests.swift */,
@@ -2518,6 +2521,7 @@
 				838A4B2A305EBA4D66C0ADE1 /* FollowCameraUITests.swift in Sources */,
 				B1CC39862DF6CFB43ADE1C2C /* GroupAudioUITests.swift in Sources */,
 				AB34CD5D53607F7565277ED7 /* HiResImageryUITests.swift in Sources */,
+				EB4FF40AC252BCF8F3688A93 /* HomeFlowUITests.swift in Sources */,
 				D8048225C7DDBD4AC05B6C0A /* IntroUITests.swift in Sources */,
 				0B51284C23AD5C8E22F798A6 /* LayersButtonUITests.swift in Sources */,
 				81A9BCCE8722DDF532EC128F /* LayersSheetUITests.swift in Sources */,
