@@ -206,14 +206,31 @@ enum NavDriveLayout {
         card ? 48 : (driving ? 60 : 52)
     }
 
-    /// The bar's peek: the numbers row, the surfaces strip (or the thin progress bar), the footer.
+    /// The bar's peek, summed from its real rows (`v2Body`): the sheet's top inset, the numbers row,
+    /// the surfaces strip (or the thin progress bar), the footer row. Nothing under the footer: the
+    /// system adds the home indicator's safe area under a `.height` detent itself. Build 46 had a
+    /// 164/150 pt guess here, ~40 pt taller than the rows, so the bar showed a blank band under its footer.
     static func peekHeight(drive: Bool, surfaces: Bool) -> CGFloat {
-        let base: CGFloat = drive ? 164 : 150
-        return base + (surfaces ? SheetDetentUI.surfacesExtra(drive: drive) : progressExtra)
+        sheetTopInset + numbersRowHeight(drive: drive) + barSpacing + footerControl(drive: drive)
+            + (surfaces ? SheetDetentUI.surfacesExtra(drive: drive) : progressExtra)
     }
 
-    /// The thin progress bar's row on an all-asphalt route.
-    static let progressExtra: CGFloat = 12
+    /// `LiveSheet`'s top padding over the bar (`theme.space(.s)` at the regular density).
+    static let sheetTopInset: CGFloat = 8
+    /// The bar's rows' spacing (`v2Body`).
+    static let barSpacing: CGFloat = 8
+    /// The numbers row at the default text size: the time left in `.display` (34 pt, +15 % driving)
+    /// beside the trip line (`.headline`) over the destination (`.subhead`). Measured on Build 46: 42 pt.
+    static func numbersRowHeight(drive: Bool) -> CGFloat { drive ? 48 : 42 }
+    /// The thin progress bar.
+    static let progressBarHeight: CGFloat = 5
+    /// The thin progress bar's row on an all-asphalt route, with the spacing above it.
+    static let progressExtra: CGFloat = progressBarHeight + barSpacing
+
+    /// The trip's whole length: the road plus a final off-road leg (`remainingMeters` counts that leg too).
+    static func tripTotal(roadM: Double?, offRoadM: Double?) -> Double? {
+        roadM.map { $0 + (offRoadM ?? 0) }
+    }
 
     /// Share of the trip already driven (0…1), for the thin bar on a route without dirt.
     static func progress(totalM: Double?, remainingM: Double?) -> Double? {
@@ -397,12 +414,17 @@ struct NavManeuverBanner: View {
             let next = nav.nextStep.flatMap { NavHUD.showsThen(step, next: $0) ? $0 : nil }
             if lanes || next != nil {
                 HStack(spacing: theme.space(.s)) {
+                    /* The lanes alone: a compact chip centred under the card (Build 46: a full-width bar). */
+                    if next == nil { Spacer(minLength: 0) }
                     if let next { thenChip(next) }
                     if lanes {
-                        NavLanesView(lanes: step.lanes)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .navPanel(theme)
+                        /* Hugs its tiles, in the «ثم …» chip's shape: a capsule, 40 pt high at least. */
+                        NavLanesView(lanes: step.lanes, fill: false)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .frame(minHeight: 40)
+                            .background(Capsule().fill(p.chromeOpaque.opacity(theme.drive ? 1 : 0.92)))
+                            .fixedSize()
                     }
                     Spacer(minLength: 0)
                 }
@@ -629,6 +651,8 @@ struct NavETARow: View {
 /// Lanes as painted, left to right (a physical order: not mirrored).
 struct NavLanesView: View {
     var lanes: [NavLane]
+    /// Spread to the container's width (the classic banner centres them in its panel); false: hug the tiles.
+    var fill = true
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -643,7 +667,7 @@ struct NavLanesView: View {
                     .overlay { if l.preferred { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(p.onNavBlue, lineWidth: 2) } }
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: fill ? .infinity : nil)
         .environment(\.layoutDirection, .leftToRight)
         .accessibilityElement()
         .accessibilityLabel(Text("المسارات: \(SaryFormat.number(lanes.filter(\.valid).count)) من \(SaryFormat.number(lanes.count)) تؤدي لطريقك"))
@@ -825,7 +849,7 @@ struct NavBottomBar: View {
     private var v2Body: some View {
         let arrived = nav.phase == .arrived
         let items = NavDriveLayout.footer(friends: friends != nil, friendCount: friends == nil ? 0 : 1, talk: talk != nil, arrived: arrived)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: NavDriveLayout.barSpacing) {
             if arrived {
                 HStack(spacing: theme.space(.m)) {
                     Text(nav.auto ? "وصلتوا إلى \(nav.target?.name ?? "وجهتكم")" : "وصلت إلى \(nav.target?.name ?? "وجهتك")")
@@ -834,9 +858,12 @@ struct NavBottomBar: View {
                 }
             } else {
                 v2Numbers
+                /* The total counts the off-road leg like `remainingMeters` does: without it the bar sat at 0
+                 * until the road left was shorter than that leg. */
                 if surfaces, let ahead = nav.surfaceAhead {
                     NavSurfaceAheadStrip(ui: ahead)
-                } else if let done = NavDriveLayout.progress(totalM: nav.active?.distanceM, remainingM: nav.remainingMeters) {
+                } else if let done = NavDriveLayout.progress(totalM: NavDriveLayout.tripTotal(roadM: nav.active?.distanceM, offRoadM: nav.offRoad?.distanceM),
+                                                             remainingM: nav.remainingMeters) {
                     progressBar(done)
                 }
             }
@@ -903,16 +930,17 @@ struct NavBottomBar: View {
         .accessibilityIdentifier("nav.banner.eta")
     }
 
-    /// The trip so far on an all-asphalt route: a thin bar, the driven part in the live colour.
+    /// The trip so far on an all-asphalt route: a thin bar, the driven part in the live colour. The track
+    /// is a faint tint of the text colour (Build 46: `sunken` on the dark bar read as an empty black bar).
     private func progressBar(_ done: Double) -> some View {
         let p = theme.palette
         return GeometryReader { g in
             ZStack(alignment: .leading) {
-                Capsule().fill(p.sunken)
-                Capsule().fill(p.liveText).frame(width: g.size.width * CGFloat(done))
+                Capsule().fill(p.textPrimary.opacity(0.16))
+                Capsule().fill(p.live).frame(width: g.size.width * CGFloat(done))
             }
         }
-        .frame(height: 5)
+        .frame(height: NavDriveLayout.progressBarHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("قطعت \(SaryFormat.number(Int((done * 100).rounded())))٪ من الطريق"))
         .accessibilityIdentifier("nav.progress")

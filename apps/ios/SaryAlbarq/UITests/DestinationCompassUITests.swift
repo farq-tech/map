@@ -9,7 +9,7 @@ final class DestinationCompassUITests: XCTestCase {
     func testCompassWhileDrivingOpensTheTargets() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryScheme", "dark",
-                               "-SaryDrive", "1", "-SaryContext", "driving"]
+                               "-SaryDrive", "1", "-SaryContext", "driving", "-SaryNewUI"]
         app.launch()
         app.allowLocationIfAsked()
         let compass = el(app, "live.compass")

@@ -1226,6 +1226,18 @@ final class NavDriveLayoutTests: XCTestCase {
         XCTAssertGreaterThan(NavDriveLayout.peekHeight(drive: true, surfaces: false), NavDriveLayout.peekHeight(drive: false, surfaces: false))
     }
 
+    func testPeekIsTheRowsAndNoBlankBand() {
+        /* Build 46: the 150 + 12 pt guess left ~40 pt blank under the footer (plus the home indicator's inset). */
+        XCTAssertEqual(NavDriveLayout.progressExtra, 13, "the 5 pt bar and the 8 pt spacing above it")
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: false, surfaces: false), 8 + 42 + 8 + 52 + 13)
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: true, surfaces: false), 8 + 48 + 8 + 56 + 13)
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: false, surfaces: true), 8 + 42 + 8 + 52 + 30)
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: true, surfaces: true), 8 + 48 + 8 + 56 + 34)
+        for drive in [true, false] {
+            XCTAssertLessThan(NavDriveLayout.peekHeight(drive: drive, surfaces: false), drive ? 164 + 12 : 150 + 12, "shorter than the old guess")
+        }
+    }
+
     func testProgressIsClamped() {
         XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 2_500) ?? -1, 0.75, accuracy: 0.0001)
         XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 12_000), 0, "a reroute longer than the route")
@@ -1250,8 +1262,18 @@ final class NavDriveLayoutTests: XCTestCase {
         XCTAssertEqual(NavDriveLayout.friendsLabel(3), "٣ معك")
     }
 
-    func testTheRedesignIsOnByDefault() {
-        /* `-SaryDriveV1` (DEBUG) brings the previous layout back; the unit tests run without it. */
-        XCTAssertEqual(NavDriveLayout.v2, !ProcessInfo.processInfo.arguments.contains("-SaryDriveV1"))
+    func testTheRedesignFollowsTheNewUISwitch() {
+        XCTAssertEqual(NavDriveLayout.v2, NewUI.enabled, "off by default: the previous driving layout")
+    }
+
+    func testProgressCountsTheOffRoadLegInTheTotal() {
+        /* A route whose last part is off-road without a road: `remainingMeters` counts that leg, so the total must too,
+         * or the bar stays at zero until the road left is shorter than the leg. */
+        XCTAssertEqual(NavDriveLayout.tripTotal(roadM: 10_000, offRoadM: 4_000), 14_000)
+        XCTAssertEqual(NavDriveLayout.tripTotal(roadM: 10_000, offRoadM: nil), 10_000)
+        XCTAssertNil(NavDriveLayout.tripTotal(roadM: nil, offRoadM: 4_000))
+        let total = NavDriveLayout.tripTotal(roadM: 10_000, offRoadM: 4_000)
+        XCTAssertEqual(NavDriveLayout.progress(totalM: total, remainingM: 13_000) ?? -1, 1.0 / 14.0, accuracy: 0.0001, "1 km driven: not zero")
+        XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 13_000), 0, "the old total: stuck at zero")
     }
 }

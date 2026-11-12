@@ -97,4 +97,20 @@ final class NewGuidanceUITests: XCTestCase {
         shot(app, "end-sheet")
         app.terminate()
     }
+
+    /// The compass closed (in every shot above) and open: the five options, the chosen one marked.
+    func testCompassMenuOpens() throws {
+        let app = launch()
+        let compass = el(app, "live.compass")
+        guard compass.waitForExistence(timeout: 25) else { throw XCTSkip("no recent GPS fix: the compass is hidden by design") }
+        XCTAssertTrue(compass.isHittable)
+        compass.tap()
+        sleep(1)
+        shot(app, "compass-menu")
+        for id in ["destination", "back", "qibla", "rain", "spring"] {
+            XCTAssertTrue(el(app, "live.compass.\(id)").waitForExistence(timeout: 5), id)
+        }
+        XCTAssertTrue(el(app, "live.compass.qibla").isEnabled)
+        app.terminate()
+    }
 }

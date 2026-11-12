@@ -45,6 +45,8 @@ enum CameraTiltRules {
 
     /// The button names the view a tap leads to (as Apple Maps does): «٣د» while flat, «٢د» while tilted.
     static func glyph(is3D: Bool) -> String { is3D ? "٢د" : "٣د" }
+    /// The button's icon: the view a tap leads to (SF Symbols `view.2d` / `view.3d`).
+    static func symbol(is3D: Bool) -> String { is3D ? "view.2d" : "view.3d" }
     static let label = "٣د / ٢د"
     static func hint(is3D: Bool) -> String { is3D ? "اعرض الخريطة من الأعلى" : "اعرض الخريطة مائلة بثلاثة أبعاد" }
     static func value(is3D: Bool) -> String { is3D ? "ثلاثي الأبعاد" : "من الأعلى" }
@@ -161,11 +163,17 @@ final class MapTiltBinding {
 extension SaryMapControlItem {
     /// THE camera-angle button (docs/ONE-MAP-UNIFICATION.md §6): one glyph, one identifier (`map.tilt`), second in the
     /// side column after the layers button on every map. `is3D` is the current choice; the glyph names the view a tap leads to.
-    static func cameraTilt(is3D: Bool, settledPitch: Int? = nil) -> SaryMapControlItem {
+    static func cameraTilt(is3D: Bool, settledPitch: Int? = nil, newUI: Bool = NewUI.enabled) -> SaryMapControlItem {
         var value = CameraTiltRules.value(is3D: is3D)
         #if DEBUG
         if let settledPitch { value += " pitch=\(settledPitch)" }
         #endif
+        /* An icon, not «٢د» / «٣د»: beside the guidance bar's «٢ د» (minutes) the text read as a second ETA (owner, Build 46). */
+        if newUI {
+            return SaryMapControlItem(id: "tilt", systemImage: CameraTiltRules.symbol(is3D: is3D), label: CameraTiltRules.label, accessibilityID: "map.tilt",
+                                      isActive: false, hint: CameraTiltRules.hint(is3D: is3D), value: value)
+        }
+        /* The previous design (flag off): the «٢د» / «٣د» glyph, unchanged. */
         return SaryMapControlItem(id: "tilt", systemImage: "view.3d", label: CameraTiltRules.label, accessibilityID: "map.tilt",
                                   isActive: false, hint: CameraTiltRules.hint(is3D: is3D), value: value, glyph: CameraTiltRules.glyph(is3D: is3D))
     }

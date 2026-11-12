@@ -346,6 +346,19 @@ final class LiveFitTests: XCTestCase {
         XCTAssertEqual(LiveFit.dock(width: 0, ptt: 200, speed: 76, cta: 100, cluster: 0), LiveFit.Dock(pttMinWidth: 200, ctaOwnRow: false), "not measured yet")
     }
 
+    func testGuidingSpeedSlotBudgetsTheLimitSignBeforeTheFirstReading() {
+        XCTAssertEqual(LiveFit.guidingSpeedWidth(guiding: false, everRead: true, drive: true, limit: true), 0)
+        XCTAssertEqual(LiveFit.guidingSpeedWidth(guiding: true, everRead: true, drive: true, limit: true),
+                       LiveFit.navSpeedClusterWidth(drive: true, limit: true))
+        /* Build 46: the limit sign alone sat over «وصلنا»; it is now its own slot of the row. */
+        XCTAssertEqual(LiveFit.guidingSpeedWidth(guiding: true, everRead: false, drive: true, limit: true), 62)
+        XCTAssertEqual(LiveFit.guidingSpeedWidth(guiding: true, everRead: false, drive: false, limit: true), 52)
+        XCTAssertEqual(LiveFit.guidingSpeedWidth(guiding: true, everRead: false, drive: true, limit: false), 0)
+        /* The sign and «وصلنا» side by side fit even the zoomed SE. */
+        let row = LiveFit.guidingSpeedWidth(guiding: true, everRead: false, drive: true, limit: true) + 8 + LiveFit.compactCTAWidth(title: "وصلنا")
+        XCTAssertLessThanOrEqual(row, zoomedSE.width - 32)
+    }
+
     func testTextScaleGrowsAndIsCappedAtTheDockCap() {
         XCTAssertEqual(LiveFit.textScale(.large), 1)
         XCTAssertLessThan(LiveFit.textScale(.small), 1)
