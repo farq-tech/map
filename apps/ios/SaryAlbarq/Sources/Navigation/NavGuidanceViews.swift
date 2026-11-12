@@ -409,12 +409,17 @@ struct NavManeuverBanner: View {
             let next = nav.nextStep.flatMap { NavHUD.showsThen(step, next: $0) ? $0 : nil }
             if lanes || next != nil {
                 HStack(spacing: theme.space(.s)) {
+                    /* The lanes alone: a compact chip centred under the card (Build 46: a full-width bar). */
+                    if next == nil { Spacer(minLength: 0) }
                     if let next { thenChip(next) }
                     if lanes {
-                        NavLanesView(lanes: step.lanes)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .navPanel(theme)
+                        /* Hugs its tiles, in the «ثم …» chip's shape: a capsule, 40 pt high at least. */
+                        NavLanesView(lanes: step.lanes, fill: false)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .frame(minHeight: 40)
+                            .background(Capsule().fill(p.chromeOpaque.opacity(theme.drive ? 1 : 0.92)))
+                            .fixedSize()
                     }
                     Spacer(minLength: 0)
                 }
@@ -641,6 +646,8 @@ struct NavETARow: View {
 /// Lanes as painted, left to right (a physical order: not mirrored).
 struct NavLanesView: View {
     var lanes: [NavLane]
+    /// Spread to the container's width (the classic banner centres them in its panel); false: hug the tiles.
+    var fill = true
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -655,7 +662,7 @@ struct NavLanesView: View {
                     .overlay { if l.preferred { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(p.onNavBlue, lineWidth: 2) } }
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: fill ? .infinity : nil)
         .environment(\.layoutDirection, .leftToRight)
         .accessibilityElement()
         .accessibilityLabel(Text("المسارات: \(SaryFormat.number(lanes.filter(\.valid).count)) من \(SaryFormat.number(lanes.count)) تؤدي لطريقك"))
