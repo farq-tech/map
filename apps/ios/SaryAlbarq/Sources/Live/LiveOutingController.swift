@@ -396,6 +396,10 @@ final class LiveOutingController: ObservableObject {
         if let d = arg("-SaryFriendSOS").flatMap(Double.init) {
             DispatchQueue.main.asyncAfter(deadline: .now() + d) { [weak self] in self?.session.demoFriendSOS() }
         }
+        /* Build 47 group C shots: the return-timer editor, the walkie-talkie channels, «اطلب إنجاد». */
+        if arg("-SaryLiveModal") == "timer" { DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.safety.editorOpen = true } }
+        if arg("-SaryLiveModal") == "ptt" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .pttChannels } }
+        if arg("-SaryLiveModal") == "enjad" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.openEnjad(.stuck) } }
         if arg("-SaryLiveModal") == "qibla" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .qibla } }
         #endif
         /* One GPS fix publishes several properties (`lastFix`, `displayFix`, `quality`, the session's
