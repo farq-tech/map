@@ -176,7 +176,26 @@ enum WeatherLayerAPI {
         absolute("/api/weather/green/tile/{z}/{x}/{y}.png", base: base)
     }
 
+    #if DEBUG
+    /// `-SaryCloudFramesStub` (UI tests): a fixed timeline of 6 frames, 10 min apart, ending now, so a test of the
+    /// card's timeline (scrubber) does not depend on the live API or the network. The tile URLs point nowhere (the
+    /// map just shows no cloud pictures); only the card's state is under test.
+    static func stubCloudFrames(now: Date = Date(), count: Int = 6) -> CloudFramesResponse {
+        let iso = ISO8601DateFormatter(); iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let ids = DateFormatter(); ids.locale = Locale(identifier: "en_US_POSIX"); ids.timeZone = TimeZone(identifier: "UTC")
+        ids.dateFormat = "yyyyMMdd'T'HHmm'Z'"
+        let frames = (0..<count).map { i -> CloudFramesResponse.Frame in
+            let t = now.addingTimeInterval(-Double(count - 1 - i) * 600)
+            return .init(id: ids.string(from: t), time: iso.string(from: t), label_ar: "\(i + 1)", tile_url: "http://127.0.0.1:9/stub/\(i)/{z}/{x}/{y}.png")
+        }
+        return CloudFramesResponse(ok: true, frames: frames, minzoom: 0, maxzoom: 9, bounds: [25, 8, 65, 40], attribution: nil)
+    }
+    #endif
+
     static func cloudFrames(base: URL = Endpoints.apiBase, session: URLSession = .shared) async throws -> CloudFramesResponse {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-SaryCloudFramesStub") { return stubCloudFrames() }
+        #endif
         let url = base.appendingPathComponent("api/weather/clouds/tiles")
         var req = URLRequest(url: url, timeoutInterval: 20)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
