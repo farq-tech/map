@@ -58,6 +58,8 @@ enum DemoFeatures {
         if var tail = v.positions[sultan] {
             tail.lat = 24.7090
             tail.lng = 46.6758
+            /* `-demoConvoyFar`: the tail drifted ~900 m further back (the thread stretches, its label shows). */
+            if ProcessInfo.processInfo.arguments.contains("-demoConvoyFar") { tail.lat -= 0.0082 }
             tail.speed = 0
             tail.heading = nil
             tail.recorded_at = ago(1)

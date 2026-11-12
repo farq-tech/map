@@ -1470,8 +1470,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 if p.leader {
                     let attach = CGPoint(x: p.frame.midX, y: p.frame.maxY <= p.anchor.y ? p.frame.maxY : p.frame.minY)
-                    leaders.move(to: p.anchor)
-                    leaders.addLine(to: attach)
+                    LeaderStyle.add(to: leaders, from: p.anchor, to: attach)
                 }
             }
             let grouped = Set(result.groups.flatMap(\.ids))
@@ -1493,8 +1492,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 box.frame = CGRect(x: g.frame.midX - box.ideal.width / 2, y: g.frame.maxY - box.ideal.height, width: box.ideal.width, height: box.ideal.height)
                 for id in g.ids {
                     if let r = recs[id] {
-                        leaders.move(to: screen(r.shown.coordinate))
-                        leaders.addLine(to: CGPoint(x: box.frame.midX, y: box.frame.maxY))
+                        LeaderStyle.add(to: leaders, from: screen(r.shown.coordinate), to: CGPoint(x: box.frame.midX, y: box.frame.maxY))
                     }
                 }
             }
@@ -1509,7 +1507,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             /* The palette is fixed RGB per theme: convert the SwiftUI colours once per theme, not every frame. */
             if leaderColors?.theme != theme {
-                leaderColors = (theme, UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor, UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor)
+                leaderColors = (theme, UIColor(theme.palette.textPrimary.opacity(LeaderStyle.lineAlpha)).cgColor, UIColor(theme.palette.chromeOpaque.opacity(LeaderStyle.haloAlpha)).cgColor)
             }
             overlay.leaders.path = leaders
             overlay.leaders.strokeColor = leaderColors?.stroke
@@ -2002,7 +2000,8 @@ final class ChipOverlayView: UIView {
         super.init(frame: frame)
         backgroundColor = .clear
         isOpaque = false
-        for (l, w) in [(leaderHalo, 3.5), (leaders, 1.5)] as [(CAShapeLayer, CGFloat)] {
+        /* Quiet by design: a fine line with a faint halo, never a heavy cable between the car and its chip. */
+        for (l, w) in [(leaderHalo, LeaderStyle.haloWidth), (leaders, LeaderStyle.lineWidth)] as [(CAShapeLayer, CGFloat)] {
             l.fillColor = nil
             l.lineWidth = w
             l.lineCap = .round
@@ -2484,5 +2483,34 @@ extension MapCameraMotion {
         let stored = UserDefaults.standard.data(forKey: AppearanceSettings.storageKey)
             .flatMap { try? JSONDecoder().decode(AppearancePreferences.self, from: $0) }
         return reduce(preference: stored?.motion ?? .system, system: UIAccessibility.isReduceMotionEnabled)
+    }
+}
+
+
+/// The thin line from a car to its moved (or grouped) name chip: it follows the real screen distance
+/// (it stretches as the chip is pushed further from the car), starts at the car marker's edge instead
+/// of its centre, and is drawn light — 1 pt over a faint 2.2 pt halo.
+enum LeaderStyle {
+    static let lineWidth: CGFloat = 1
+    static let haloWidth: CGFloat = 2.2
+    static let lineAlpha = 0.5
+    static let haloAlpha = 0.35
+    /// About the car marker's radius.
+    static let carInset: CGFloat = 14
+    /// A shorter visible stretch is not worth a line.
+    static let minVisible: CGFloat = 8
+
+    /// The segment to draw between `car` and `chip`, the car end pulled in by `carInset`; nil when too short.
+    static func segment(from car: CGPoint, to chip: CGPoint) -> (CGPoint, CGPoint)? {
+        let dx = chip.x - car.x, dy = chip.y - car.y
+        let d = hypot(dx, dy)
+        guard d.isFinite, d - carInset >= minVisible else { return nil }
+        return (CGPoint(x: car.x + dx / d * carInset, y: car.y + dy / d * carInset), chip)
+    }
+
+    static func add(to path: CGMutablePath, from car: CGPoint, to chip: CGPoint) {
+        guard let (a, b) = segment(from: car, to: chip) else { return }
+        path.move(to: a)
+        path.addLine(to: b)
     }
 }
