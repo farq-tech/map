@@ -28,7 +28,12 @@ const cache = new Lru(Number(process.env.WEATHER_OUTLOOK_CACHE) || 40);
 const inflight = new Map();
 /* Last good window per 1° cell: served (with its true, older age) while a fresh one is being read. */
 const lastGood = new Lru(Number(process.env.WEATHER_OUTLOOK_STALE_CACHE) || 40); // ~1.5 MiB a window: bounded
-const STALE_MAX_MIN = 35;
+/* A last-good window is served (with its true age and `stale: true` past 90 min) up to this old while a
+ * fresh one loads; beyond it the estimate would mean nothing. */
+const STALE_MAX_AGE_MIN = Number(process.env.CLOUD_OUTLOOK_STALE_MAX_MIN) || 180;
+const STALE_FLAG_MIN = clouds.STALE_AFTER_MIN;
+const WINDOW_TIMEOUT_MS = Number(process.env.CLOUD_WINDOW_TIMEOUT_MS) || 40_000; // one upstream attempt
+const WINDOW_LOAD_MAX_MS = 200_000; // all frames of a window, retries included
 
 function toMercator(lat, lng) {
   const x = (R * lng * Math.PI) / 180;
@@ -79,10 +84,10 @@ function fieldsFromPng(buf) {
 
 async function loadFields(box, tMs) {
   const url = clouds.wmsMapUrl(box, WINDOW_PX, WINDOW_PX, tMs);
-  /* EUMETView answers 504 or a blank picture now and then: retry twice. */
-  for (let k = 0; k < 3; k++) {
+  /* EUMETView answers 504 or a blank picture now and then: one retry (each attempt hard-capped). */
+  for (let k = 0; k < 2; k++) {
     try {
-      const r = await fetchBuffer(url, { timeoutMs: 60_000 });
+      const r = await fetchBuffer(url, { timeoutMs: WINDOW_TIMEOUT_MS, queueTimeoutMs: 20_000, label: 'clouds' });
       if (r.status === 200 && /png/.test(r.type)) {
         const f = fieldsFromPng(r.body);
         if (f) return f;
@@ -144,15 +149,15 @@ async function outlook(lat, lng, nowMs = Date.now()) {
     const w = { box, newer: got[0], older: got[1], oldest: got[2] || null, sel };
     lastGood.set(`${cell.lat}/${cell.lng}`, w);
     return w;
-  });
+  }, { timeoutMs: WINDOW_LOAD_MAX_MS });
   let win = cache.get(key);
   if (!win) {
     const prev = lastGood.get(`${cell.lat}/${cell.lng}`);
-    if (prev && (nowMs - Date.parse(prev.sel.newer.time)) / 60000 <= STALE_MAX_MIN + 70) {
+    if (prev && (nowMs - Date.parse(prev.sel.newer.time)) / 60000 <= STALE_MAX_AGE_MIN) {
       load().catch(() => {}); // refresh in the background
       win = prev;
     } else {
-      win = await load();
+      win = await load().catch(() => null);
     }
   }
   if (!win) return { ok: false, error: 'upstream_unavailable' };
@@ -194,6 +199,7 @@ async function outlook(lat, lng, nowMs = Date.now()) {
     scanned_km: o.scannedKm ?? null,
     image_time: win.sel.newer.time,
     image_age_min: Math.round(ageMin),
+    stale: ageMin > STALE_FLAG_MIN,
     compared_with: [win.sel.older.time, win.sel.oldest ? win.sel.oldest.time : null].filter(Boolean),
     dt_minutes: Math.round(win.sel.dtMin),
     cross_check: a.consistency == null ? null : Math.round(a.consistency * 100) / 100,

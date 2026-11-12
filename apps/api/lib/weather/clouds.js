@@ -25,7 +25,14 @@ const { tileBbox3857, tileBox, intersects, tilesFor } = require('./mercator');
 
 const WMS = process.env.EUMETSAT_WMS_URL || 'https://view.eumetsat.int/geoserver/wms';
 const LAYER = 'mtg_fd:ir105_hrfi';
-const CAPS = 'https://view.eumetsat.int/geoserver/mtg_fd/ir105_hrfi/ows?service=WMS&version=1.3.0&request=GetCapabilities';
+const CAPS = process.env.EUMETSAT_CAPS_URL || 'https://view.eumetsat.int/geoserver/mtg_fd/ir105_hrfi/ows?service=WMS&version=1.3.0&request=GetCapabilities';
+/* Hard caps on every upstream call. Measured 2026-11-12: capabilities 0.4 s, but one 256 px GetMap tile took 38.6 s,
+ * so tiles get 60 s; people never wait that long (route deadline 11 s) and the work continues in the background. */
+const CAPS_TIMEOUT_MS = Number(process.env.CLOUD_CAPS_TIMEOUT_MS) || 8_000;
+const TILE_TIMEOUT_MS = Number(process.env.CLOUD_TILE_TIMEOUT_MS) || 60_000;
+const CAPS_FRESH_MS = 4 * 60_000; // the capabilities time is re-read at most this often
+const CAPS_STALE_MAX_MS = (Number(process.env.CLOUD_STALE_MAX_HOURS) || 6) * 3600_000; // last good time kept this long
+const STALE_AFTER_MIN = 90; // a newest frame older than this is flagged `stale: true`
 const STEP_MIN = 10;
 const FREE_LATENCY_MIN = 60;
 const WINDOW_MIN = 120;
@@ -106,22 +113,69 @@ function latestFromCapabilities(xml) {
   return Number.isFinite(t) ? t : null;
 }
 
-let capsCache = { at: 0, latest: null };
+let capsCache = { at: 0, latest: null, ok_at: 0, error: null };
+let capsInflight = null;
+
+/**
+ * One read of the WMS capabilities, shared by everyone who asks while it runs. Always settles
+ * (timeout + queue timeout) and always clears `capsInflight`; a failure keeps the last good time.
+ */
+function refreshCaps(nowMs) {
+  if (capsInflight) return capsInflight;
+  const p = (async () => {
+    try {
+      const r = await fetchBuffer(CAPS, { timeoutMs: CAPS_TIMEOUT_MS, queueTimeoutMs: 4_000, label: 'clouds' });
+      const t = r.status === 200 ? latestFromCapabilities(r.body.toString('utf8')) : null;
+      if (t) capsCache = { at: nowMs, latest: t, ok_at: nowMs, error: null };
+      else capsCache = { ...capsCache, error: `caps_status_${r.status}` };
+    } catch (e) {
+      capsCache = { ...capsCache, error: e.code || e.name || 'error' };
+    } finally {
+      capsInflight = null;
+    }
+    return capsCache.latest;
+  })();
+  capsInflight = p;
+  return p;
+}
+
+/**
+ * Newest image time (ms) in the capabilities. Stale-while-revalidate: a cached time younger than
+ * 4 min is returned as is; an older one (up to CLOUD_STALE_MAX_HOURS) is returned at once while a
+ * refresh runs in the background; only a cold start waits for the upstream (bounded: ≤ ~12 s).
+ */
 async function latestImageTime(nowMs = Date.now()) {
-  if (capsCache.latest && nowMs - capsCache.at < 4 * 60_000) return capsCache.latest;
-  try {
-    const r = await fetchBuffer(CAPS, { timeoutMs: 20_000 });
-    const t = r.status === 200 ? latestFromCapabilities(r.body.toString('utf8')) : null;
-    if (t) capsCache = { at: nowMs, latest: t };
-  } catch {
-    /* keep the last known time */
+  const age = nowMs - capsCache.at;
+  if (capsCache.latest && age < CAPS_FRESH_MS) return capsCache.latest;
+  if (capsCache.latest && age < CAPS_STALE_MAX_MS) {
+    refreshCaps(nowMs);
+    return capsCache.latest;
   }
-  return capsCache.latest;
+  const fresh = await refreshCaps(nowMs);
+  return fresh && nowMs - capsCache.at < CAPS_STALE_MAX_MS ? fresh : null; // too old to show as news
+}
+
+/** How fresh our knowledge of the upstream is (for the payload and for logs). */
+function capsStatus(nowMs = Date.now()) {
+  return {
+    checked_at: capsCache.ok_at ? new Date(capsCache.ok_at).toISOString() : null,
+    checked_age_min: capsCache.ok_at ? Math.max(0, Math.round((nowMs - capsCache.ok_at) / 60000)) : null,
+    last_error: capsCache.error,
+  };
 }
 
 async function framesPayload(nowMs = Date.now()) {
   const latest = await latestImageTime(nowMs);
-  const frames = planFrames(latest, nowMs).map((f) => ({ ...f, tile_url: `/api/weather/clouds/tile/${f.id}/{z}/{x}/{y}.png?v=2` }));
+  const plan = planFrames(latest, nowMs);
+  const frames = plan.map((f) => ({
+    ...f,
+    image_age_min: Math.max(0, Math.round((nowMs - Date.parse(f.time)) / 60000)),
+    tile_url: `/api/weather/clouds/tile/${f.id}/{z}/{x}/{y}.png?v=2`,
+  }));
+  const newest = frames.length ? frames[frames.length - 1] : null;
+  const ageMin = newest ? newest.image_age_min : null;
+  const stale = newest ? ageMin > STALE_AFTER_MIN : true;
+  const caps = capsStatus(nowMs);
   const year = new Date(nowMs).getUTCFullYear();
   return {
     ok: frames.length > 0,
@@ -131,6 +185,13 @@ async function framesPayload(nowMs = Date.now()) {
     attribution_ar: `يحتوي على بيانات معدّلة من EUMETSAT Meteosat ${year}`,
     licence: realtimeLicensed() ? 'EUMETSAT real-time licence' : 'CC BY 4.0 (hourly) + ≥1 h delayed 10-min frames',
     latest_image: latest ? new Date(latest).toISOString() : null,
+    newest_frame_time: newest ? newest.time : null,
+    age_min: ageMin,
+    stale,
+    stale_after_min: STALE_AFTER_MIN,
+    upstream_checked_at: caps.checked_at,
+    upstream_checked_age_min: caps.checked_age_min,
+    upstream_error: caps.last_error,
     frames,
     minzoom: MIN_ZOOM,
     maxzoom: MAX_ZOOM,
@@ -258,7 +319,7 @@ function emptyPng() {
  * One overlay tile. Returns { status, body } — 404 for a frame the licence does not allow
  * yet or a bad tile, an empty PNG outside the region.
  */
-async function tile(id, z, x, y, nowMs = Date.now(), { legacy = false } = {}) {
+async function tile(id, z, x, y, nowMs = Date.now(), { legacy = false, background = false } = {}) {
   const t = parseFrameId(id);
   if (t == null || !Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y)) return { status: 400 };
   if (z < MIN_ZOOM || z > MAX_ZOOM || x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z) return { status: 404 };
@@ -270,44 +331,79 @@ async function tile(id, z, x, y, nowMs = Date.now(), { legacy = false } = {}) {
     const size = 256;
     const [a, b, c, d] = tileBbox3857(z, x, y);
     const url = wmsMapUrl([a, b, c, d], size, size, t);
-    const r = await fetchBuffer(url, { timeoutMs: 45_000 });
+    const r = await fetchBuffer(url, {
+      timeoutMs: TILE_TIMEOUT_MS, queueTimeoutMs: background ? 120_000 : 20_000, background, label: 'clouds',
+    });
     if (r.status !== 200 || !/png/.test(r.type)) return null;
     const src = PNG.sync.read(r.body);
     const png = new PNG({ width: src.width, height: src.height });
     /* `legacy` = the Build 41–43 look (white on a thin curve), kept only to compare before/after. */
     png.data = legacy ? irToOverlay(src.data) : cloudTileRgba(src.data, src.width, src.height);
     return PNG.sync.write(png, { colorType: 6 });
-  });
+  }, { timeoutMs: TILE_TIMEOUT_MS + 25_000 });
   if (!body) return { status: 502 };
   return { status: 200, body };
 }
 
 /**
  * Warm the tile cache for the newest frames over the Kingdom (z3–z5, ~25 tiles a frame), so the first
- * person to open «السحاب الآن» after a new picture does not watch the map fill in square by square
- * (EUMETView takes ~20 s a tile). The fetcher's concurrency cap keeps us a polite client.
+ * person to open «السحاب الآن» after a new picture does not watch the map fill in square by square.
+ * It is strictly BACKGROUND work: at most WARM_CONCURRENCY tiles at a time, low priority in the
+ * fetcher (which keeps half of the slots free for people), one run at a time, a time budget, and a
+ * stop after repeated failures — so a slow EUMETView can never queue up in front of a user request.
  */
-async function warm(nowMs = Date.now(), { frames = 4 } = {}) {
-  const latest = await latestImageTime(nowMs);
-  const plan = planFrames(latest, nowMs).slice(-frames).reverse(); // newest first
-  const KSA_BOX = { west: 34, south: 16, east: 56, north: 33 };
-  const base = [0, 1, 2, 3, 4, 5].flatMap((z) => tilesFor(KSA_BOX, z));
-  /* The newest picture also gets z6 (what a person zoomed in a little asks for). Deeper zooms (up to z9)
-   * would be thousands of ~20 s upstream tiles a frame, so they stay on demand. */
-  const closer = tilesFor(KSA_BOX, 6);
-  let total = 0;
-  for (const [i, f] of plan.entries()) {
-    const tiles = i === 0 ? base.concat(closer) : base;
-    total += tiles.length;
-    await Promise.all(tiles.map((t) => tile(f.id, t.z, t.x, t.y, nowMs).catch(() => null)));
+const WARM_CONCURRENCY = Number(process.env.CLOUD_WARM_CONCURRENCY) || 2;
+const WARM_BUDGET_MS = Number(process.env.CLOUD_WARM_BUDGET_MS) || 4 * 60_000;
+const WARM_MAX_FAILS = 6;
+let warming = false;
+
+async function warm(nowMs = Date.now(), { frames = 4, concurrency = WARM_CONCURRENCY, budgetMs = WARM_BUDGET_MS } = {}) {
+  if (warming) return { skipped: 'already_running', frames: 0, tiles: 0 };
+  warming = true;
+  const started = Date.now();
+  try {
+    const latest = await latestImageTime(nowMs);
+    const plan = planFrames(latest, nowMs).slice(-frames).reverse(); // newest first
+    const KSA_BOX = { west: 34, south: 16, east: 56, north: 33 };
+    const base = [0, 1, 2, 3, 4, 5].flatMap((z) => tilesFor(KSA_BOX, z));
+    /* The newest picture also gets z6 (what a person zoomed in a little asks for). Deeper zooms (up to z9)
+     * would be thousands of upstream tiles a frame, so they stay on demand. */
+    const closer = tilesFor(KSA_BOX, 6);
+    const jobs = plan.flatMap((f, i) => (i === 0 ? base.concat(closer) : base).map((t) => ({ id: f.id, ...t })));
+    let next = 0;
+    let fails = 0;
+    let done = 0;
+    const stop = () => fails >= WARM_MAX_FAILS || Date.now() - started > budgetMs;
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, jobs.length)) }, async () => {
+      while (next < jobs.length && !stop()) {
+        const j = jobs[next++];
+        try {
+          const r = await tile(j.id, j.z, j.x, j.y, nowMs, { background: true });
+          if (r.status === 502) fails++;
+          else if (r.body !== emptyPng()) fails = 0; // a real upstream success (not the empty off-region tile)
+        } catch {
+          fails++;
+        }
+        done++;
+      }
+    }));
+    const out = { frames: plan.length, tiles: jobs.length, done, failed_streak: fails, ms: Date.now() - started };
+    if (done < jobs.length) out.stopped = fails >= WARM_MAX_FAILS ? 'upstream_failing' : 'budget';
+    if (!process.env.NODE_TEST_CONTEXT) console.log(`[clouds] warm ${JSON.stringify(out)}`);
+    return out;
+  } finally {
+    warming = false;
   }
-  return { frames: plan.length, tiles: total };
 }
 
 module.exports = {
   LAYER, REGION, MIN_ZOOM, MAX_ZOOM,
-  frameId, parseFrameId, frameAllowed, planFrames, warm, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, cloudTileRgba, TILE_CURVE, tile, riyadhLabel, attribution,
+  frameId, parseFrameId, frameAllowed, planFrames, warm, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, capsStatus, STALE_AFTER_MIN, irToOverlay, cloudTileRgba, TILE_CURVE, tile, riyadhLabel, attribution,
   _reset() {
-    capsCache = { at: 0, latest: null };
+    capsCache = { at: 0, latest: null, ok_at: 0, error: null };
+    capsInflight = null;
+    warming = false;
+    tileCache.map.clear();
+    inflight.clear();
   },
 };
