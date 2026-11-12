@@ -358,6 +358,7 @@
 		94A82E0D57CB2023C035AF9F /* SettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A6552211824B45AF52FE26 /* SettingsScreens.swift */; };
 		96389C8934EC33E5DE8AB9F9 /* DesertGazetteerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E54B25EBD5C732217F0BC83 /* DesertGazetteerUITests.swift */; };
 		9683B5144DEA287171AD5D5C /* NavOffRoad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C2A55E1F28EF06C99515B5 /* NavOffRoad.swift */; };
+		EA8372C06A28BF2CDFEA7D07 /* DestinationCompassView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A0189C4DA0B4A761661D3FC /* DestinationCompassView.swift */; };
 		966610345905F6CA48C6B1BE /* DestinationCompass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B66E43656F6AD35263CE0DD /* DestinationCompass.swift */; };
 		96E1EE0558E57803F6C58FF6 /* SafetyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74764502578EE2BF2B879A25 /* SafetyViews.swift */; };
 		97A100225D3CD8937DEA30EB /* TripAutoNavUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B3DBC08695A8D21743AB97 /* TripAutoNavUITests.swift */; };
@@ -641,6 +642,7 @@
 		0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointLayout.swift; sourceTree = "<group>"; };
 		087D07928C7AC61627BD3A63 /* SaryPTT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryPTT.swift; sourceTree = "<group>"; };
 		08C2A55E1F28EF06C99515B5 /* NavOffRoad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavOffRoad.swift; sourceTree = "<group>"; };
+		6A0189C4DA0B4A761661D3FC /* DestinationCompassView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationCompassView.swift; sourceTree = "<group>"; };
 		5B66E43656F6AD35263CE0DD /* DestinationCompass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationCompass.swift; sourceTree = "<group>"; };
 		08DD20251B09C1DA7E125E91 /* ReturnTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReturnTimer.swift; sourceTree = "<group>"; };
 		08E2519FFC2EC9250B408870 /* PTTJitterBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTJitterBuffer.swift; sourceTree = "<group>"; };
@@ -1290,6 +1292,7 @@
 				83DB035B026496CEB1DDED4F /* NavMapLayer.swift */,
 				DACC87B0D190CEAD26C08D02 /* NavModels.swift */,
 				08C2A55E1F28EF06C99515B5 /* NavOffRoad.swift */,
+				6A0189C4DA0B4A761661D3FC /* DestinationCompassView.swift */,
 				5B66E43656F6AD35263CE0DD /* DestinationCompass.swift */,
 				7E93B21DF625D320A704ACF1 /* NavOptionsSheet.swift */,
 				6DB7E17BECD126DB7A02890D /* NavPictureInPicture.swift */,
@@ -2852,6 +2855,7 @@
 				A9597B9DBFD594DF50416428 /* NavMapLayer.swift in Sources */,
 				5943A0D1147BFDBE7D8E5CFC /* NavModels.swift in Sources */,
 				9683B5144DEA287171AD5D5C /* NavOffRoad.swift in Sources */,
+				EA8372C06A28BF2CDFEA7D07 /* DestinationCompassView.swift in Sources */,
 				966610345905F6CA48C6B1BE /* DestinationCompass.swift in Sources */,
 				B03944730428454F4F738462 /* NavOptionsSheet.swift in Sources */,
 				A807800E233BEB9EBDA2D968 /* NavPictureInPicture.swift in Sources */,

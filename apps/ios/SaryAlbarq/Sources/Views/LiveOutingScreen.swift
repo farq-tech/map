@@ -44,6 +44,10 @@ struct LiveOutingScreen: View {
     @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
+    /// «البوصلة» while driving: the target chosen for this outing (nil: the default, `DestinationCompass.resolve`)
+    /// and its «أقرب مطر» / «أقرب ربيع» lookups, in memory only.
+    @State private var compassTarget: DestinationCompass.Target?
+    @StateObject private var compassNearby = CompassNearbyStore()
 
     var body: some View {
         /* One presenter pass per render: the map's members and the edge arrows reuse it. */
@@ -228,7 +232,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "ptt-channel", "convoy", "top", "picking", "speed", "speedlimit", "readout", "recenter"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "ptt-channel", "convoy", "top", "picking", "speed", "speedlimit", "readout", "recenter", "compass"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -330,6 +334,20 @@ struct LiveOutingScreen: View {
                         .padding(.bottom, lift + theme.space(.m))
                     }
                 } else if !ended {
+                    /* «البوصلة» (owner's request): bottom-left, above the convoy line and the speed, driving or guiding at
+                     * the sheet's peek. Not on the off-road leg (its own arrow card is up) nor on a short screen. */
+                    if DestinationCompass.shows(driving: driving, guiding: controller.nav.phase == .guiding, offRoad: controller.nav.phase == .offRoad,
+                                                exploring: exploring, ended: ended, peek: controller.sheetDetent == .peek,
+                                                sosFocused: controller.sosFocused, bellOpen: controller.bellOpen, screenHeight: full.height) {
+                        HStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            DestinationCompassHost(controller: controller, nav: controller.nav, nearby: compassNearby,
+                                                   chosen: $compassTarget, online: app.online)
+                        }
+                        .padding(.horizontal, 16)
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                        .transition(.opacity)
+                    }
                     if driving, controller.nav.isActive, controller.sheetDetent == .peek, LiveScreenRules.showsConvoyLine(ui.alerts),
                        let line = LiveCalmRules.convoyLine(ui.participantsTab.participants) {
                         ConvoyLinePill(text: line) { controller.selectedTab = .group; controller.sheetDetent = .half }
