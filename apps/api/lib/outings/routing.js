@@ -27,6 +27,7 @@
 const express = require('express');
 const { asyncHandler } = require('../async-handler');
 const { createRateLimiter } = require('./rate-limit');
+const { surfaceBody, attachSurfaces, SURFACE_TIMEOUT_MS } = require('./route-surfaces');
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -125,6 +126,13 @@ function parseRouteRequest(raw, { now = Date.now() } = {}) {
     alternates = raw.alternates;
   }
 
+  /* Opt-in: ask for the per-surface split (a second, bounded Valhalla request). Older clients never send it. */
+  let surfaces = false;
+  if (raw.surfaces != null) {
+    if (typeof raw.surfaces !== 'boolean') return fail('invalid_surfaces');
+    surfaces = raw.surfaces;
+  }
+
   const language = raw.language == null ? 'ar-SA' : raw.language;
   if (!LANGUAGES.has(language)) return fail('invalid_language');
 
@@ -154,6 +162,7 @@ function parseRouteRequest(raw, { now = Date.now() } = {}) {
   }
 
   const value = { locations, costing, options, alternates, language, departAt };
+  if (surfaces) value.surfaces = true;
   if (excludePolygons && excludePolygons.length) value.excludePolygons = excludePolygons;
   return { ok: true, value };
 }
@@ -220,7 +229,7 @@ async function readCapped(res, max) {
 }
 
 /** POST <origin>/route with only our own headers. Resolves the OSRM JSON or throws RoutingError. */
-async function fetchRoute(config, body, { fetchImpl = globalThis.fetch, timeoutMs = REQUEST_TIMEOUT_MS, maxBytes = MAX_RESPONSE_BYTES } = {}) {
+async function fetchRoute(config, body, { fetchImpl = globalThis.fetch, timeoutMs = REQUEST_TIMEOUT_MS, maxBytes = MAX_RESPONSE_BYTES, expect = 'osrm' } = {}) {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   timer.unref?.();
@@ -257,6 +266,10 @@ async function fetchRoute(config, body, { fetchImpl = globalThis.fetch, timeoutM
     throw new RoutingError(m.status, m.code);
   }
   if (!json || typeof json !== 'object' || Array.isArray(json)) throw new RoutingError(502, 'routing_failed');
+  if (expect === 'json') {
+    if (!json.trip || typeof json.trip !== 'object') throw new RoutingError(502, 'routing_failed');
+    return json;
+  }
   if (typeof json.code === 'string' && json.code !== 'Ok') {
     const m = mapUpstreamError(422, json);
     throw new RoutingError(m.status, m.code);
@@ -274,7 +287,7 @@ function clientKey(req) {
  * Mounted at /api/outings/routing by routes/outings.js.
  * `authenticate(token) → user|null` is the outings identity check (null service → 503 outings_unconfigured).
  */
-function createRoutingRouter({ authenticate, config = routingConfigFromEnv(), limits = {}, fetchImpl, timeoutMs, maxBytes } = {}) {
+function createRoutingRouter({ authenticate, config = routingConfigFromEnv(), limits = {}, fetchImpl, timeoutMs, maxBytes, surfaces = process.env.ROUTING_SURFACES !== '0', surfaceTimeoutMs = SURFACE_TIMEOUT_MS } = {}) {
   logOffOnce(config);
   const router = express.Router();
   const userMinute = createRateLimiter({ limit: limits.routesPerMinute ?? 30, windowMs: 60_000 });
@@ -300,8 +313,17 @@ function createRoutingRouter({ authenticate, config = routingConfigFromEnv(), li
     const parsed = parseRouteRequest(req.body);
     if (!parsed.ok) return res.status(parsed.status).json({ ok: false, error: parsed.reason });
     try {
-      const json = await fetchRoute(config, valhallaRouteBody(parsed.value), { fetchImpl, timeoutMs, maxBytes });
-      res.json({ ...json, provider: 'farq-valhalla' });
+      const body = valhallaRouteBody(parsed.value);
+      const wantSurfaces = surfaces && parsed.value.surfaces === true;
+      /* The surface request runs in parallel (latency = the slower one, not the sum) and can only ever
+       * add a field: a failure or a timeout there is swallowed and the route goes out unchanged. */
+      const [json, extra] = await Promise.all([
+        fetchRoute(config, body, { fetchImpl, timeoutMs, maxBytes }),
+        wantSurfaces
+          ? fetchRoute(config, surfaceBody(body), { fetchImpl, timeoutMs: Math.min(surfaceTimeoutMs, timeoutMs ?? surfaceTimeoutMs), maxBytes, expect: 'json' }).catch(() => null)
+          : null,
+      ]);
+      res.json({ ...(extra ? attachSurfaces(json, extra) : json), provider: 'farq-valhalla' });
     } catch (e) {
       if (e instanceof RoutingError) return res.status(e.status).json({ ok: false, error: e.code });
       throw e;
