@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// One generated row of the layers sheet. Pure data: the sheet only draws it.
 struct MapLayerRow: Identifiable, Equatable {
@@ -25,6 +26,15 @@ enum MapLayersSheetModel {
                 note: legacy.map { ExploreRules.offlineNote($0, areas: areas, topoAreas: topoAreas) },
                 noteIsPositive: legacy.map { $0.canBeOffline && ($0 == .satellite ? areas : topoAreas) > 0 } ?? false)
         }
+    }
+
+    /// Height of the strip at the sheet's bottom that the floating SOS disc owns (`SOSOverlayWindow`: disc + 16 pt, `space(.s)` above the
+    /// home-indicator inset). The sheet's scroll area ends above it.
+    static func sosReserve(disc: CGFloat, small: CGFloat) -> CGFloat { disc + 16 + small }
+
+    /// Which rows the live map's sheet offers: exploration, guidance, or the outing otherwise.
+    static func mode(exploring: Bool, navigating: Bool) -> MapLayerMode {
+        exploring ? .explore : (navigating ? .navigate : .outing)
     }
 
     /// Registered non-base layers, as one flat list (kept for callers that only need "is anything else registered").

@@ -15,6 +15,7 @@ struct MapLayersSheet: View {
     var body: some View {
         let p = theme.palette
         let rows = MapLayersSheetModel.baseRows(registry: registry, mode: mode, areas: offline.completeAreas, topoAreas: offline.topoAreas)
+        VStack(spacing: 0) {
         SaryPage(title: "الطبقات", close: { controller.modal = nil }) {
             VStack(spacing: theme.space(.s)) {
                 ForEach(rows) { row in
@@ -53,6 +54,13 @@ struct MapLayersSheet: View {
                 sectionView(section)
             }
             actionSections
+        }
+        /* The floating SOS disc (its own window, bottom left, over every sheet) used to sit on top of the last visible rows
+         * while the sheet scrolled. The scroll area now ends above the disc's strip, so a row is never under it. */
+        Color.clear.frame(height: MapLayersSheetModel.sosReserve(disc: theme.bigButton, small: theme.space(.s)))
+            .background(p.background)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .onAppear { offline.reload(); MapLayerOwners.pull(registry, controller: controller) }
         .onReceive(MapLayerOwners.changes(controller: controller)) { MapLayerOwners.pull(registry, controller: controller) }

@@ -44,9 +44,29 @@ final class LiveCalmTests: XCTestCase {
                        "ended: «المزيد» on the banner replaces «+»")
     }
 
+    /// S5: ONE layers button (`map.layers`) leads the side column in every mode; the two-button limit is for the others.
+    func testLayersButtonLeadsTheColumnInEveryMode() {
+        let layers = SaryMapControlItem.layers()
+        XCTAssertEqual(layers.accessibilityID, "map.layers")
+        XCTAssertEqual(layers.systemImage, "square.3.layers.3d")
+        let back = SaryMapControlItem(id: "backtrack", systemImage: "x", label: "طريق الرجعة", accessibilityID: "outing-backtrack")
+        let stopped = LiveCalmRules.sideItems(camera: camera, backTrack: back, plusBadge: nil, driving: false, ended: false)
+        XCTAssertEqual(LiveCalmRules.withLayers(stopped, layers: layers).map(\.id), ["layers", "locate", "backtrack"])
+        let driving = LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: true, ended: false)
+        XCTAssertEqual(LiveCalmRules.withLayers(driving, layers: layers).map(\.id), ["layers"], "driving: the layers button alone")
+        XCTAssertEqual(LiveCalmRules.withLayers([], layers: layers).map(\.id), ["layers"], "after the end / any empty column")
+        XCTAssertEqual(LiveCalmRules.withLayers(SaryMapControlItem.explore(terrain3D: false, tracksShown: 0), layers: layers).filter { $0.id == "layers" }.count, 1,
+                       "never twice")
+    }
+
+    func testLayersButtonLightsWithTerrain() {
+        XCTAssertTrue(SaryMapControlItem.layers(active: true).isActive)
+        XCTAssertFalse(SaryMapControlItem.layers().isActive)
+    }
+
     func testExplorationKeepsThreeButtons() {
         let ids = SaryMapControlItem.explore(terrain3D: false, tracksShown: 2).map(\.accessibilityID)
-        XCTAssertEqual(ids, ["explore-layers", "explore-places", "outing-locate"])
+        XCTAssertEqual(ids, ["map.layers", "explore-places", "outing-locate"])
         XCTAssertEqual(SaryMapControlItem.explore(terrain3D: false, tracksShown: 2)[1].badge, 2, "shown tracks still counted")
     }
 

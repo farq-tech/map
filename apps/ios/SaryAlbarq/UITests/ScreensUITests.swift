@@ -321,7 +321,7 @@ final class ExploreTapsUITests: XCTestCase {
         if app.buttons["page-close"].exists { app.buttons["page-close"].tap() } else { app.swipeDown() }
         sleep(2)
         /* The side buttons. */
-        for id in ["explore-drone", "explore-realistic", "explore-layers"] {
+        for id in ["explore-drone", "explore-realistic", "map.layers"] {
             let b = any(id)
             XCTAssertTrue(b.exists && b.isHittable, "\(id) hittable")
         }
