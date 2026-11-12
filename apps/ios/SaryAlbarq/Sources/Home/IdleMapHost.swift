@@ -17,6 +17,7 @@ struct IdleMapHost: View {
             c.idleHome = true
             c.exploreActive = true
             c.planModel = model.plans.model(s.id)
+            c.idleNavigate = { [weak model] d in model?.openSolo(to: d) }
             return c
         }())
     }
@@ -25,6 +26,7 @@ struct IdleMapHost: View {
         LiveOutingScreen(controller: controller)
             .task { await model.refresh() }
             .onAppear {
+                model.idleMapShown = true
                 session.open()
                 /* The navigation map's 3D look, centred on me (R02); the person can change it with two fingers. */
                 let hot = ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
@@ -34,7 +36,10 @@ struct IdleMapHost: View {
                     controller.ask(.tilt(pitch))
                 }
             }
-            .onDisappear { session.close() }
+            .onDisappear {
+                model.idleMapShown = false
+                session.close()
+            }
     }
 }
 

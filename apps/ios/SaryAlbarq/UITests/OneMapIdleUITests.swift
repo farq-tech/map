@@ -84,4 +84,51 @@ final class OneMapIdleUITests: XCTestCase {
         sleep(8)
         shot("idle-hires-off")
     }
+
+    // MARK: EM2: the idle session holds up as a screen of the app
+
+    /// An invite link opened on the idle map is shown once, from the idle map's own sheet (the root has nothing else to present from).
+    func testInviteOnTheIdleMapShowsExactlyOnce() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryDemoInvite", "group", "-SaryOneMap", "-SaryScheme", "light"]
+        app.launch()
+        app.allowLocationIfAsked()
+        XCTAssertTrue(app.buttons["invite.join"].waitForExistence(timeout: 30), "the invite shows over the idle map")
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "invite.join").count, 1, "never twice")
+        shot("idle-invite")
+    }
+
+    /// «طلعاتي» in the idle sheet opens the outing; the idle map is gone (the outing's own screen replaces it).
+    func testOpeningAnOutingFromTheIdleSheetLeavesTheIdleMap() {
+        let app = launch()
+        XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
+        app.allowLocationIfAsked(within: 3)
+        let row = app.buttons["outing-row"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "the active outing is on the idle sheet")
+        row.tap()
+        XCTAssertTrue(el(app, "idle.search").waitForNonExistence(timeout: 20), "the outing's screen replaced the idle map")
+        shot("idle-opened-outing")
+    }
+
+    /// «ملاحة إلى هنا» on a place brief opened from the idle map starts a real solo outing, not a plan on the carrier session.
+    func testNavigateFromTheIdleBriefOpensASoloOuting() {
+        let app = launch()
+        XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
+        app.allowLocationIfAsked(within: 3)
+        el(app, "idle.search").tap()
+        let field = el(app, "live.search.field")
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("24.7590, 46.7491")
+        let row = el(app, "live.search.coordinate")
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.buttons.firstMatch.exists ? row.buttons.firstMatch.tap() : row.tap()
+        XCTAssertTrue(el(app, "point.sheet.scroll").waitForExistence(timeout: 15))
+        let go = el(app, "point.navigate")
+        for _ in 0..<4 where !go.exists || !go.isHittable { app.swipeUp() }
+        XCTAssertTrue(go.waitForExistence(timeout: 5), "«ملاحة إلى هنا» is on the brief")
+        go.tap()
+        XCTAssertTrue(el(app, "idle.search").waitForNonExistence(timeout: 25), "the solo outing replaced the idle map")
+        shot("idle-navigate-solo")
+    }
 }

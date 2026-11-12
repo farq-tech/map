@@ -241,6 +241,8 @@ final class LiveOutingController: ObservableObject {
     var exploreAuto = false
     /// EM1: this controller carries the idle navigation map (no trip); exploration's capabilities stay on and it never "exits".
     var idleHome = false
+    /// EM2: set by the idle host: guidance from the idle map starts a real solo outing (`AppModel.openSolo`).
+    var idleNavigate: ((OutingDestination) -> Void)?
     /// A finger moved the map since the last settle (auto-exploration needs a real pan).
     var userPannedMap = false
     /// «ذكاء القافلة»: separation / unexpected-stop watch (Core/ConvoyWatch.swift).

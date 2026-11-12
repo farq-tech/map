@@ -26,6 +26,10 @@ enum IdleMapRules {
         lowPower || thermalHot ? reducedPitch : pitch
     }
 
+    /// Who presents an invite link: the root when nothing else is presented, else the live sheet (session or idle map).
+    /// Two presenters at once would show it twice, or (a sheet over the always-presented live sheet) not at all.
+    static func rootShowsInvite(hasSession: Bool, idleMapShown: Bool) -> Bool { !hasSession && !idleMapShown }
+
     /// «طلعاتي» rows in the idle sheet: the active one first, then paused, then not started; ended ones never; at most `limit`.
     static func visibleOutings(_ all: [OutingSummary], limit: Int = 3) -> [OutingSummary] {
         func rank(_ s: OutingStatus) -> Int {
@@ -61,6 +65,15 @@ extension OutingSession {
 }
 
 extension LiveOutingController {
+    /// On the idle map «اتجه» does not plan on the carrier session: it hands the destination to the app, which opens the solo outing.
+    func handOffToSolo(_ t: NavTarget) -> Bool {
+        guard idleHome, let go = idleNavigate else { return false }
+        modal = nil
+        let d = OutingDestination(name: String(t.name.prefix(TripPlan.destinationNameMax)), lat: t.position.lat, lng: t.position.lng)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { go(d) }
+        return true
+    }
+
     /// A place picked in the idle search: the camera goes there and its brief opens (the same card a tap on the map opens).
     func idlePickPlace(_ d: OutingDestination) {
         let p = LngLat(lng: d.lng, lat: d.lat)
