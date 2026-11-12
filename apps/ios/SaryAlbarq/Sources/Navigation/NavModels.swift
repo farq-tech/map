@@ -545,3 +545,116 @@ enum NavSurface {
         return out
     }
 }
+
+/// One stretch of one surface along the route, in driving order: «زفلت ١٢ كم».
+struct NavSurfaceSpan: Equatable {
+    /// `NavSurfaceAhead.displayKind`: the approximate grid join reads as unknown ground.
+    var kind: NavSurfaceKind
+    /// Metres from the route's start.
+    var startM: Double
+    var meters: Double
+    var endM: Double { startM + meters }
+}
+
+/// The route's surfaces in driving order, while guiding: «زفلت ١٢ كم ← ترابي ٢ كم ← بر مفتوح ٤ كم»
+/// (owner's request: «كم زفلت وبعدها كم بري»). Pure, unit-tested in `NavSurfaceAheadTests`.
+enum NavSurfaceAhead {
+    /// Stretches shorter than this are folded into a neighbour (a driveway, a cell-centre join).
+    static let minSpanM = 100.0
+    /// The text line lists at most this many, then «+».
+    static let maxListed = 3
+
+    struct Piece: Equatable {
+        var kind: NavSurfaceKind
+        var meters: Double
+    }
+
+    static func displayKind(_ k: NavSurfaceKind) -> NavSurfaceKind { k == .gridSnap ? .unknown : k }
+
+    /// Each run's length, in order: from the cached running sums (`NavRouteMetrics.Tables.surfaceCum`) when
+    /// they match, else measured.
+    static func pieces(_ runs: [NavSurfaceRun], cum: [[Double]]? = nil) -> [Piece] {
+        var out: [Piece] = []
+        for (i, run) in runs.enumerated() where run.coordinates.count >= 2 {
+            if let cum, cum.count == runs.count, cum[i].count == run.coordinates.count, let first = cum[i].first, let last = cum[i].last {
+                out.append(Piece(kind: run.kind, meters: last - first))
+                continue
+            }
+            let m = zip(run.coordinates, run.coordinates.dropFirst()).reduce(0.0) { $0 + Vehicle.distanceMeters($1.0, $1.1) }
+            out.append(Piece(kind: run.kind, meters: m))
+        }
+        return out
+    }
+
+    /// Adjacent pieces of the same surface merged; pieces under `minSpanM` folded into the stretch before
+    /// them (into the next one at the very start). The total length is kept.
+    static func spans(_ pieces: [Piece]) -> [NavSurfaceSpan] {
+        var merged: [Piece] = []
+        for p in pieces where p.meters > 0 && p.meters.isFinite {
+            let k = displayKind(p.kind)
+            if let last = merged.last, last.kind == k {
+                merged[merged.count - 1].meters += p.meters
+            } else {
+                merged.append(Piece(kind: k, meters: p.meters))
+            }
+        }
+        var folded: [Piece] = []
+        var carry = 0.0
+        for p in merged {
+            if p.meters < minSpanM {
+                if folded.isEmpty { carry += p.meters } else { folded[folded.count - 1].meters += p.meters }
+                continue
+            }
+            if let last = folded.last, last.kind == p.kind {
+                folded[folded.count - 1].meters += p.meters + carry
+            } else {
+                folded.append(Piece(kind: p.kind, meters: p.meters + carry))
+            }
+            carry = 0
+        }
+        if folded.isEmpty, let longest = merged.max(by: { $0.meters < $1.meters }) {
+            folded = [Piece(kind: longest.kind, meters: carry)]
+        }
+        var out: [NavSurfaceSpan] = []
+        var at = 0.0
+        for f in folded {
+            out.append(NavSurfaceSpan(kind: f.kind, startM: at, meters: f.meters))
+            at += f.meters
+        }
+        return out
+    }
+
+    /// What is left after `done` metres, in order; the stretch under the car is cut where it is, and a
+    /// leftover sliver under `minSpanM` at the front is folded into the next stretch.
+    static func remaining(_ spans: [NavSurfaceSpan], done: Double) -> [NavSurfaceSpan] {
+        var out: [NavSurfaceSpan] = []
+        for s in spans where s.endM > done {
+            let start = max(s.startM, done)
+            out.append(NavSurfaceSpan(kind: s.kind, startM: start, meters: s.endM - start))
+        }
+        if out.count >= 2, out[0].meters < minSpanM {
+            out[1].meters += out[0].meters
+            out[1].startM = out[0].startM
+            out.removeFirst()
+        }
+        return out
+    }
+
+    /// Worth showing: dirt or off-road is on the route (all asphalt, or only unknown ground, is not).
+    static func shows(_ spans: [NavSurfaceSpan]) -> Bool {
+        spans.contains { $0.kind == .unpaved || $0.kind == .terrain || $0.kind == .rough }
+    }
+
+    static func label(_ k: NavSurfaceKind) -> String { NavSurfaceLegend.label(k) }
+
+    /// «زفلت ١٢ كم ← ترابي ٢ كم ← بر مفتوح ٤ كم» (and « ← +» when more follow).
+    static func line(_ spans: [NavSurfaceSpan]) -> String {
+        let shown = spans.prefix(maxListed).map { "\(label($0.kind)) \(SaryFormat.distance(meters: $0.meters))" }
+        return shown.joined(separator: " ← ") + (spans.count > maxListed ? " ← +" : "")
+    }
+
+    /// VoiceOver: every stretch, in order.
+    static func accessibility(_ spans: [NavSurfaceSpan]) -> String {
+        "الباقي من الطريق: " + spans.map { "\(label($0.kind)) \(SaryFormat.distance(meters: $0.meters))" }.joined(separator: "، ثم ")
+    }
+}
