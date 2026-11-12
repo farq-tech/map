@@ -1,0 +1,49 @@
+{
+  "_comment": "Minimum annotation targets per track type before the smart-collection panel stops asking. Pilot-level numbers, not a statistical guarantee.",
+  "default": {
+    "min_tracks": 20,
+    "min_length_km": 8.0,
+    "min_regions": 3
+  },
+  "per_type": {
+    "rocky": {
+      "min_tracks": 15,
+      "min_length_km": 6.0,
+      "min_regions": 3
+    },
+    "faint": {
+      "min_tracks": 25,
+      "min_length_km": 10.0,
+      "min_regions": 4
+    }
+  },
+  "split": {
+    "train": 0.7,
+    "validation": 0.15,
+    "test": 0.15
+  },
+  "quality_gate": {
+    "min_tiles": {
+      "train": 60,
+      "validation": 10,
+      "test": 10
+    },
+    "min_tiles_per_type_train": 5,
+    "min_blocks": 3,
+    "width_px_range": [
+      3.0,
+      6.5
+    ],
+    "max_p95_offset_px": 3.0,
+    "max_offset_px": 3.6,
+    "min_line_recall": 0.98,
+    "coverage_range": [
+      0.0005,
+      0.25
+    ],
+    "min_image_std": 3.0,
+    "max_roundtrip_px": 0.0001,
+    "under_represented_share": 0.1,
+    "_comment": "cv2.line(thickness=3) - used by SAM-Road's own generate_labels.py - renders ~5 px wide (OpenCV quirk), so the export width gate is 3-6.5 px and the offset gate is half-width(~2.5 px)+<=0.5-1 px quantisation."
+  }
+}

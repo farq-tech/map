@@ -1,0 +1,7281 @@
+{
+ "generated_utc": "2026-11-12T06:36:48+00:00",
+ "tool": "scripts/build_candidates.py",
+ "source": "OSM weak labels (research pipeline) + earlier study-area centres",
+ "attribution": "© OpenStreetMap contributors (ODbL 1.0); hints only, not ground truth",
+ "window_spec": {
+  "zoom": 17,
+  "nx": 3,
+  "ny": 3,
+  "scale": 2
+ },
+ "windows": [
+  {
+   "id": "w17_78186_54864_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78186,
+    "y0": 54864,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    34.748383,
+    28.107115
+   ],
+   "bbox": [
+    34.744263,
+    28.103481,
+    34.752502,
+    28.110749
+   ],
+   "region_cell": "r335_344",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1702.4,
+    "winding": 856.8
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 1702 م"
+  },
+  {
+   "id": "w17_78204_54846_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78204,
+    "y0": 54846,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    34.797821,
+    28.150714
+   ],
+   "bbox": [
+    34.793701,
+    28.147081,
+    34.801941,
+    28.154347
+   ],
+   "region_cell": "r335_345",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1592.8
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1593 م"
+  },
+  {
+   "id": "w17_78207_54846_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78207,
+    "y0": 54846,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    34.806061,
+    28.150714
+   ],
+   "bbox": [
+    34.801941,
+    28.147081,
+    34.810181,
+    28.154347
+   ],
+   "region_cell": "r335_345",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 2261.9,
+    "dirt": 148.1
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade4 2262 م، track 148 م"
+  },
+  {
+   "id": "w17_78210_54855_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78210,
+    "y0": 54855,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    34.814301,
+    28.128917
+   ],
+   "bbox": [
+    34.810181,
+    28.125283,
+    34.81842,
+    28.13255
+   ],
+   "region_cell": "r335_344",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 2648.9,
+    "dirt": 30.1,
+    "winding": 1612.1
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 2649 م، track 30 م"
+  },
+  {
+   "id": "w17_78453_55038_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78453,
+    "y0": 55038,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    35.48172,
+    27.684744
+   ],
+   "bbox": [
+    35.4776,
+    27.681096,
+    35.48584,
+    27.688392
+   ],
+   "region_cell": "r342_339",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1632.1,
+    "faint": 140.3,
+    "dirt": 364.3
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade4 1352 م، track 364 م، track_grade5 281 م"
+  },
+  {
+   "id": "w17_78504_54810_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78504,
+    "y0": 54810,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    35.621796,
+    28.237859
+   ],
+   "bbox": [
+    35.617676,
+    28.23423,
+    35.625916,
+    28.241489
+   ],
+   "region_cell": "r343_346",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1436.2
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1436 م"
+  },
+  {
+   "id": "w17_78504_55140_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78504,
+    "y0": 55140,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    35.621796,
+    27.436384
+   ],
+   "bbox": [
+    35.617676,
+    27.432728,
+    35.625916,
+    27.44004
+   ],
+   "region_cell": "r343_337",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1524.6,
+    "mixed": 1524.6,
+    "winding": 425.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1525 م"
+  },
+  {
+   "id": "w17_78726_55467_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78726,
+    "y0": 55467,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    36.231537,
+    26.636411
+   ],
+   "bbox": [
+    36.227417,
+    26.632729,
+    36.235657,
+    26.640094
+   ],
+   "region_cell": "r349_327",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1429.6,
+    "mixed": 1429.6,
+    "winding": 844.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1430 م"
+  },
+  {
+   "id": "w17_78732_54501_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78732,
+    "y0": 54501,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    36.248016,
+    28.982916
+   ],
+   "bbox": [
+    36.243896,
+    28.979312,
+    36.252136,
+    28.98652
+   ],
+   "region_cell": "r349_354",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 6852.7,
+    "dirt": 810.4
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade4 6853 م، track 810 م"
+  },
+  {
+   "id": "w17_78732_54504_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78732,
+    "y0": 54504,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    36.248016,
+    28.975708
+   ],
+   "bbox": [
+    36.243896,
+    28.972104,
+    36.252136,
+    28.979312
+   ],
+   "region_cell": "r349_354",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 3980.0
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 3980 م"
+  },
+  {
+   "id": "w17_78735_55170_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78735,
+    "y0": 55170,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    36.256256,
+    27.36323
+   ],
+   "bbox": [
+    36.252136,
+    27.359571,
+    36.260376,
+    27.366889
+   ],
+   "region_cell": "r349_336",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4964.5,
+    "sandy": 148.4,
+    "winding": 1231.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "sandy": 0.7,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4964 م، track_grade4 148 م"
+  },
+  {
+   "id": "w17_78777_55575_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78777,
+    "y0": 55575,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    36.371613,
+    26.370955
+   ],
+   "bbox": [
+    36.367493,
+    26.367264,
+    36.375732,
+    26.374646
+   ],
+   "region_cell": "r350_324",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1791.4,
+    "mixed": 1791.4,
+    "winding": 1514.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1791 م"
+  },
+  {
+   "id": "w17_78888_54717_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 78888,
+    "y0": 54717,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    36.676483,
+    28.462655
+   ],
+   "bbox": [
+    36.672363,
+    28.459033,
+    36.680603,
+    28.466277
+   ],
+   "region_cell": "r353_348",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4493.1,
+    "winding": 540.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4493 م"
+  },
+  {
+   "id": "w17_79020_55260_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79020,
+    "y0": 55260,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.039032,
+    27.143479
+   ],
+   "bbox": [
+    37.034912,
+    27.139813,
+    37.043152,
+    27.147145
+   ],
+   "region_cell": "r357_333",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1079.6,
+    "mixed": 1079.6,
+    "winding": 914.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1080 م"
+  },
+  {
+   "id": "w17_79023_55260_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79023,
+    "y0": 55260,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.047272,
+    27.143479
+   ],
+   "bbox": [
+    37.043152,
+    27.139813,
+    37.051392,
+    27.147145
+   ],
+   "region_cell": "r357_333",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1249.5,
+    "mixed": 1082.2,
+    "winding": 1082.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1082 م، track 167 م"
+  },
+  {
+   "id": "w17_79089_55239_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79089,
+    "y0": 55239,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.228546,
+    27.194793
+   ],
+   "bbox": [
+    37.224426,
+    27.191128,
+    37.232666,
+    27.198457
+   ],
+   "region_cell": "r359_334",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1544.0,
+    "faint": 295.6,
+    "winding": 952.8
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 953 م، track_grade5 591 م"
+  },
+  {
+   "id": "w17_79095_56058_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79095,
+    "y0": 56058,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.245026,
+    25.176359
+   ],
+   "bbox": [
+    37.240906,
+    25.172631,
+    37.249146,
+    25.180088
+   ],
+   "region_cell": "r359_311",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1086.3,
+    "mixed": 1086.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1086 م"
+  },
+  {
+   "id": "w17_79194_56055_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79194,
+    "y0": 56055,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.516937,
+    25.183816
+   ],
+   "bbox": [
+    37.512817,
+    25.180088,
+    37.521057,
+    25.187544
+   ],
+   "region_cell": "r361_311",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1713.9
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1714 م"
+  },
+  {
+   "id": "w17_79200_56052_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79200,
+    "y0": 56052,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.533417,
+    25.191272
+   ],
+   "bbox": [
+    37.529297,
+    25.187544,
+    37.537537,
+    25.195
+   ],
+   "region_cell": "r362_311",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1756.8
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1757 م"
+  },
+  {
+   "id": "w17_79206_56061_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79206,
+    "y0": 56061,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.549896,
+    25.168902
+   ],
+   "bbox": [
+    37.545776,
+    25.165173,
+    37.554016,
+    25.172631
+   ],
+   "region_cell": "r362_311",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1724.9
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1725 م"
+  },
+  {
+   "id": "w17_79212_55248_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79212,
+    "y0": 55248,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.566376,
+    27.172804
+   ],
+   "bbox": [
+    37.562256,
+    27.169139,
+    37.570496,
+    27.176469
+   ],
+   "region_cell": "r362_334",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1662.6,
+    "faint": 831.3,
+    "winding": 213.8
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1663 م"
+  },
+  {
+   "id": "w17_79266_55407_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79266,
+    "y0": 55407,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.714691,
+    26.783621
+   ],
+   "bbox": [
+    37.710571,
+    26.779943,
+    37.718811,
+    26.787299
+   ],
+   "region_cell": "r363_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1116.4,
+    "mixed": 1116.4,
+    "winding": 1116.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1116 م"
+  },
+  {
+   "id": "w17_79278_55410_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79278,
+    "y0": 55410,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.74765,
+    26.776265
+   ],
+   "bbox": [
+    37.74353,
+    26.772587,
+    37.75177,
+    26.779943
+   ],
+   "region_cell": "r364_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 91.8,
+    "dirt": 1675.4,
+    "mixed": 1675.4,
+    "winding": 1675.4
+   },
+   "confidence": {
+    "faint": 0.4,
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1675 م، path 92 م"
+  },
+  {
+   "id": "w17_79278_55419_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79278,
+    "y0": 55419,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.74765,
+    26.754195
+   ],
+   "bbox": [
+    37.74353,
+    26.750516,
+    37.75177,
+    26.757873
+   ],
+   "region_cell": "r364_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1498.0,
+    "mixed": 1498.0,
+    "winding": 1405.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1498 م"
+  },
+  {
+   "id": "w17_79305_55395_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79305,
+    "y0": 55395,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.821808,
+    26.813041
+   ],
+   "bbox": [
+    37.817688,
+    26.809364,
+    37.825928,
+    26.816717
+   ],
+   "region_cell": "r364_330",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1437.2,
+    "faint": 718.6,
+    "dirt": 114.6
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade5 1437 م، track 115 م"
+  },
+  {
+   "id": "w17_79326_55404_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79326,
+    "y0": 55404,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.879486,
+    26.790977
+   ],
+   "bbox": [
+    37.875366,
+    26.787299,
+    37.883606,
+    26.794654
+   ],
+   "region_cell": "r365_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1342.8,
+    "mixed": 1342.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1343 م"
+  },
+  {
+   "id": "w17_79329_55398_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79329,
+    "y0": 55398,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.887726,
+    26.805686
+   ],
+   "bbox": [
+    37.883606,
+    26.802009,
+    37.891846,
+    26.809364
+   ],
+   "region_cell": "r365_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1067.7,
+    "mixed": 1067.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1068 م"
+  },
+  {
+   "id": "w17_79347_56469_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79347,
+    "y0": 56469,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.937164,
+    24.150513
+   ],
+   "bbox": [
+    37.933044,
+    24.146754,
+    37.941284,
+    24.154272
+   ],
+   "region_cell": "r366_299",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1781.7
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1782 م"
+  },
+  {
+   "id": "w17_79350_55500_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79350,
+    "y0": 55500,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.945404,
+    26.555365
+   ],
+   "bbox": [
+    37.941284,
+    26.55168,
+    37.949524,
+    26.55905
+   ],
+   "region_cell": "r366_327",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 4980.5,
+    "winding": 887.6
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 4981 م"
+  },
+  {
+   "id": "w17_79350_56469_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79350,
+    "y0": 56469,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.945404,
+    24.150513
+   ],
+   "bbox": [
+    37.941284,
+    24.146754,
+    37.949524,
+    24.154272
+   ],
+   "region_cell": "r366_299",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1810.2
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1810 م"
+  },
+  {
+   "id": "w17_79362_56133_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79362,
+    "y0": 56133,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    37.978363,
+    24.989792
+   ],
+   "bbox": [
+    37.974243,
+    24.986058,
+    37.982483,
+    24.993526
+   ],
+   "region_cell": "r366_309",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3069.1,
+    "winding": 2814.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3069 م"
+  },
+  {
+   "id": "w17_79413_53847_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79413,
+    "y0": 53847,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.118439,
+    30.542156
+   ],
+   "bbox": [
+    38.114319,
+    30.538608,
+    38.122559,
+    30.545704
+   ],
+   "region_cell": "r367_371",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1558.6,
+    "faint": 779.3,
+    "winding": 155.2
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1559 م"
+  },
+  {
+   "id": "w17_79416_53850_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79416,
+    "y0": 53850,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.126678,
+    30.535059
+   ],
+   "bbox": [
+    38.122559,
+    30.531511,
+    38.130798,
+    30.538608
+   ],
+   "region_cell": "r367_371",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1538.5,
+    "faint": 769.2,
+    "winding": 1538.5
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1538 م"
+  },
+  {
+   "id": "w17_79440_54009_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79440,
+    "y0": 54009,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.192596,
+    30.158189
+   ],
+   "bbox": [
+    38.188477,
+    30.154627,
+    38.196716,
+    30.161752
+   ],
+   "region_cell": "r368_367",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 814.6,
+    "faint": 1502.8,
+    "winding": 1071.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1503 م، track 815 م"
+  },
+  {
+   "id": "w17_79440_54012_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79440,
+    "y0": 54012,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.192596,
+    30.151065
+   ],
+   "bbox": [
+    38.188477,
+    30.147502,
+    38.196716,
+    30.154627
+   ],
+   "region_cell": "r368_367",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 426.5,
+    "faint": 3061.4,
+    "winding": 2910.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 3061 م، track 427 م"
+  },
+  {
+   "id": "w17_79584_53889_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79584,
+    "y0": 53889,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.588104,
+    30.442754
+   ],
+   "bbox": [
+    38.583984,
+    30.439202,
+    38.592224,
+    30.446306
+   ],
+   "region_cell": "r372_370",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1837.7,
+    "faint": 918.9
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade5 1838 م"
+  },
+  {
+   "id": "w17_79605_53865_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79605,
+    "y0": 53865,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.645782,
+    30.499568
+   ],
+   "bbox": [
+    38.641663,
+    30.496018,
+    38.649902,
+    30.503117
+   ],
+   "region_cell": "r372_371",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1884.4,
+    "faint": 942.2
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade5 1884 م"
+  },
+  {
+   "id": "w17_79611_53862_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79611,
+    "y0": 53862,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.662262,
+    30.506667
+   ],
+   "bbox": [
+    38.658142,
+    30.503117,
+    38.666382,
+    30.510217
+   ],
+   "region_cell": "r373_371",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1511.0,
+    "faint": 755.5,
+    "winding": 562.6
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1511 م"
+  },
+  {
+   "id": "w17_79629_53940_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79629,
+    "y0": 53940,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.7117,
+    30.321915
+   ],
+   "bbox": [
+    38.707581,
+    30.318359,
+    38.71582,
+    30.325471
+   ],
+   "region_cell": "r373_369",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 2098.6,
+    "dirt": 142.6,
+    "winding": 345.1
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 2099 م، track 143 م"
+  },
+  {
+   "id": "w17_79629_53949_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79629,
+    "y0": 53949,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.7117,
+    30.300575
+   ],
+   "bbox": [
+    38.707581,
+    30.297018,
+    38.71582,
+    30.304132
+   ],
+   "region_cell": "r373_369",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1854.2
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1854 م"
+  },
+  {
+   "id": "w17_79641_53889_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79641,
+    "y0": 53889,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.744659,
+    30.442754
+   ],
+   "bbox": [
+    38.74054,
+    30.439202,
+    38.748779,
+    30.446306
+   ],
+   "region_cell": "r373_370",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1510.0,
+    "faint": 755.0,
+    "winding": 1510.0
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1510 م"
+  },
+  {
+   "id": "w17_79656_53889_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79656,
+    "y0": 53889,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    38.785858,
+    30.442754
+   ],
+   "bbox": [
+    38.781738,
+    30.439202,
+    38.789978,
+    30.446306
+   ],
+   "region_cell": "r374_370",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1504.5,
+    "faint": 752.2,
+    "winding": 1504.5
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1504 م"
+  },
+  {
+   "id": "w17_79773_57192_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79773,
+    "y0": 57192,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.107208,
+    22.325941
+   ],
+   "bbox": [
+    39.103088,
+    22.32213,
+    39.111328,
+    22.329752
+   ],
+   "region_cell": "r377_277",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 6195.9,
+    "mixed": 135.6,
+    "rocky": 373.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "rocky": 0.25
+   },
+   "hint_note": "OSM: track 5312 م، track_grade2 748 م، track_grade3 136 م"
+  },
+  {
+   "id": "w17_79773_57195_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79773,
+    "y0": 57195,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.107208,
+    22.318319
+   ],
+   "bbox": [
+    39.103088,
+    22.314508,
+    39.111328,
+    22.32213
+   ],
+   "region_cell": "r377_277",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5101.6,
+    "mixed": 71.1,
+    "winding": 430.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5030 م، track_grade3 71 م"
+  },
+  {
+   "id": "w17_79842_54087_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79842,
+    "y0": 54087,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.296722,
+    29.972781
+   ],
+   "bbox": [
+    39.292603,
+    29.969212,
+    39.300842,
+    29.976349
+   ],
+   "region_cell": "r379_365",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2108.0,
+    "rocky": 1054.0,
+    "winding": 245.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade2 2108 م"
+  },
+  {
+   "id": "w17_79860_57576_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79860,
+    "y0": 57576,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.346161,
+    21.346944
+   ],
+   "bbox": [
+    39.342041,
+    21.343107,
+    39.350281,
+    21.350781
+   ],
+   "region_cell": "r379_266",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4206.0,
+    "winding": 2924.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4206 م"
+  },
+  {
+   "id": "w17_79860_57579_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79860,
+    "y0": 57579,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.346161,
+    21.339269
+   ],
+   "bbox": [
+    39.342041,
+    21.335432,
+    39.350281,
+    21.343107
+   ],
+   "region_cell": "r379_266",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4490.3,
+    "winding": 888.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4490 م"
+  },
+  {
+   "id": "w17_79863_54105_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79863,
+    "y0": 54105,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.354401,
+    29.929945
+   ],
+   "bbox": [
+    39.350281,
+    29.926374,
+    39.358521,
+    29.933515
+   ],
+   "region_cell": "r379_365",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2172.1,
+    "rocky": 1086.1,
+    "winding": 651.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade2 2172 م"
+  },
+  {
+   "id": "w17_79905_56565_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79905,
+    "y0": 56565,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.469757,
+    23.909693
+   ],
+   "bbox": [
+    39.465637,
+    23.905927,
+    39.473877,
+    23.91346
+   ],
+   "region_cell": "r380_296",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2749.4,
+    "winding": 2569.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2749 م"
+  },
+  {
+   "id": "w17_79965_56376_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79965,
+    "y0": 56376,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.634552,
+    24.383375
+   ],
+   "bbox": [
+    39.630432,
+    24.379623,
+    39.638672,
+    24.387127
+   ],
+   "region_cell": "r382_301",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4483.0
+   },
+   "confidence": {
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track 4483 م"
+  },
+  {
+   "id": "w17_79974_54102_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 79974,
+    "y0": 54102,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.659271,
+    29.937085
+   ],
+   "bbox": [
+    39.655151,
+    29.933515,
+    39.663391,
+    29.940655
+   ],
+   "region_cell": "r382_365",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1208.9,
+    "mixed": 1129.9,
+    "winding": 1208.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1130 م، track 79 م"
+  },
+  {
+   "id": "w17_80007_56355_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80007,
+    "y0": 56355,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.749908,
+    24.435898
+   ],
+   "bbox": [
+    39.745789,
+    24.432147,
+    39.754028,
+    24.439648
+   ],
+   "region_cell": "r383_302",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2359.5,
+    "winding": 1067.0
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2359 م"
+  },
+  {
+   "id": "w17_80007_57609_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80007,
+    "y0": 57609,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.749908,
+    21.262501
+   ],
+   "bbox": [
+    39.745789,
+    21.258661,
+    39.754028,
+    21.26634
+   ],
+   "region_cell": "r383_265",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 6729.8,
+    "dirt": 3768.0,
+    "winding": 1264.1
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 6730 م، track 403 م"
+  },
+  {
+   "id": "w17_80007_57612_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80007,
+    "y0": 57612,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.749908,
+    21.254822
+   ],
+   "bbox": [
+    39.745789,
+    21.250982,
+    39.754028,
+    21.258661
+   ],
+   "region_cell": "r383_265",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 8242.5,
+    "dirt": 4121.3,
+    "winding": 1285.9
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 8243 م"
+  },
+  {
+   "id": "w17_80058_54195_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80058,
+    "y0": 54195,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.889984,
+    29.715489
+   ],
+   "bbox": [
+    39.885864,
+    29.71191,
+    39.894104,
+    29.719067
+   ],
+   "region_cell": "r384_362",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 6370.7
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 6371 م"
+  },
+  {
+   "id": "w17_80085_53841_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80085,
+    "y0": 53841,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    39.964142,
+    30.556348
+   ],
+   "bbox": [
+    39.960022,
+    30.5528,
+    39.968262,
+    30.559896
+   ],
+   "region_cell": "r385_372",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2873.4,
+    "mixed": 1215.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track 1658 م، track_grade3 1215 م"
+  },
+  {
+   "id": "w17_80160_54042_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80160,
+    "y0": 54042,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    40.170135,
+    30.07979
+   ],
+   "bbox": [
+    40.166016,
+    30.076225,
+    40.174255,
+    30.083355
+   ],
+   "region_cell": "r387_366",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 916.6,
+    "dirt": 458.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 917 م"
+  },
+  {
+   "id": "w17_80166_54045_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80166,
+    "y0": 54045,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    40.186615,
+    30.072659
+   ],
+   "bbox": [
+    40.182495,
+    30.069094,
+    40.190735,
+    30.076225
+   ],
+   "region_cell": "r387_366",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 995.8,
+    "dirt": 497.9
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 996 م"
+  },
+  {
+   "id": "w17_80178_57651_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80178,
+    "y0": 57651,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    40.219574,
+    21.154958
+   ],
+   "bbox": [
+    40.215454,
+    21.151115,
+    40.223694,
+    21.1588
+   ],
+   "region_cell": "r388_263",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1758.6,
+    "winding": 1428.7
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1759 م"
+  },
+  {
+   "id": "w17_80181_57651_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80181,
+    "y0": 57651,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    40.227814,
+    21.154958
+   ],
+   "bbox": [
+    40.223694,
+    21.151115,
+    40.231934,
+    21.1588
+   ],
+   "region_cell": "r388_263",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2255.5,
+    "dirt": 762.9,
+    "winding": 3018.3
+   },
+   "confidence": {
+    "faint": 0.4,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2255 م، track 763 م"
+  },
+  {
+   "id": "w17_80244_57591_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80244,
+    "y0": 57591,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    40.400848,
+    21.308567
+   ],
+   "bbox": [
+    40.396729,
+    21.304728,
+    40.404968,
+    21.312405
+   ],
+   "region_cell": "r389_265",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4456.9,
+    "winding": 2161.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4457 م"
+  },
+  {
+   "id": "w17_80409_57828_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80409,
+    "y0": 57828,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    40.854034,
+    20.700885
+   ],
+   "bbox": [
+    40.849915,
+    20.697031,
+    40.858154,
+    20.704739
+   ],
+   "region_cell": "r394_258",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2693.3,
+    "winding": 2693.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2693 م"
+  },
+  {
+   "id": "w17_80454_53667_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80454,
+    "y0": 53667,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    40.977631,
+    30.967012
+   ],
+   "bbox": [
+    40.973511,
+    30.963479,
+    40.98175,
+    30.970544
+   ],
+   "region_cell": "r395_376",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1876.9
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1877 م"
+  },
+  {
+   "id": "w17_80559_58032_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80559,
+    "y0": 58032,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.266022,
+    20.175856
+   ],
+   "bbox": [
+    41.261902,
+    20.171989,
+    41.270142,
+    20.179724
+   ],
+   "region_cell": "r398_252",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1529.1
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1529 م"
+  },
+  {
+   "id": "w17_80562_58032_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80562,
+    "y0": 58032,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.274261,
+    20.175856
+   ],
+   "bbox": [
+    41.270142,
+    20.171989,
+    41.278381,
+    20.179724
+   ],
+   "region_cell": "r398_252",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1501.8,
+    "winding": 1275.9
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1502 م"
+  },
+  {
+   "id": "w17_80655_58488_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80655,
+    "y0": 58488,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.529694,
+    18.995907
+   ],
+   "bbox": [
+    41.525574,
+    18.992012,
+    41.533813,
+    18.999803
+   ],
+   "region_cell": "r400_238",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5192.8,
+    "winding": 609.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5193 م"
+  },
+  {
+   "id": "w17_80655_58506_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80655,
+    "y0": 58506,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.529694,
+    18.949155
+   ],
+   "bbox": [
+    41.525574,
+    18.945258,
+    41.533813,
+    18.953051
+   ],
+   "region_cell": "r400_237",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4701.1,
+    "winding": 1608.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4701 م"
+  },
+  {
+   "id": "w17_80667_58188_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80667,
+    "y0": 58188,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.562653,
+    19.773165
+   ],
+   "bbox": [
+    41.558533,
+    19.769288,
+    41.566772,
+    19.777042
+   ],
+   "region_cell": "r401_247",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3304.2,
+    "winding": 3180.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3304 م"
+  },
+  {
+   "id": "w17_80667_58521_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80667,
+    "y0": 58521,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.562653,
+    18.910184
+   ],
+   "bbox": [
+    41.558533,
+    18.906286,
+    41.566772,
+    18.914082
+   ],
+   "region_cell": "r401_236",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3864.3,
+    "winding": 2633.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3864 م"
+  },
+  {
+   "id": "w17_80676_58533_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80676,
+    "y0": 58533,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.587372,
+    18.879001
+   ],
+   "bbox": [
+    41.583252,
+    18.875103,
+    41.591492,
+    18.882899
+   ],
+   "region_cell": "r401_236",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4498.9,
+    "winding": 982.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4499 م"
+  },
+  {
+   "id": "w17_80679_58236_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80679,
+    "y0": 58236,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.595612,
+    19.649054
+   ],
+   "bbox": [
+    41.591492,
+    19.645174,
+    41.599731,
+    19.652934
+   ],
+   "region_cell": "r401_245",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2837.8,
+    "winding": 2837.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2838 م"
+  },
+  {
+   "id": "w17_80691_53787_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80691,
+    "y0": 53787,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.628571,
+    30.683983
+   ],
+   "bbox": [
+    41.624451,
+    30.68044,
+    41.63269,
+    30.687526
+   ],
+   "region_cell": "r401_373",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1980.2,
+    "rocky": 990.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25
+   },
+   "hint_note": "OSM: track_grade2 1980 م"
+  },
+  {
+   "id": "w17_80709_58509_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80709,
+    "y0": 58509,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    41.678009,
+    18.941361
+   ],
+   "bbox": [
+    41.673889,
+    18.937464,
+    41.682129,
+    18.945258
+   ],
+   "region_cell": "r402_237",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1470.0,
+    "mixed": 1470.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1470 م"
+  },
+  {
+   "id": "w17_80835_58398_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80835,
+    "y0": 58398,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.024078,
+    19.229473
+   ],
+   "bbox": [
+    42.019958,
+    19.225583,
+    42.028198,
+    19.233363
+   ],
+   "region_cell": "r405_240",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2556.7,
+    "winding": 2556.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2557 م"
+  },
+  {
+   "id": "w17_80916_54918_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80916,
+    "y0": 54918,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.246552,
+    27.976211
+   ],
+   "bbox": [
+    42.242432,
+    27.972572,
+    42.250671,
+    27.979849
+   ],
+   "region_cell": "r407_343",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1782.9,
+    "winding": 125.0
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1783 م"
+  },
+  {
+   "id": "w17_80925_54924_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80925,
+    "y0": 54924,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.271271,
+    27.961656
+   ],
+   "bbox": [
+    42.267151,
+    27.958017,
+    42.275391,
+    27.965295
+   ],
+   "region_cell": "r407_343",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1590.5,
+    "dirt": 860.1,
+    "winding": 2015.5
+   },
+   "confidence": {
+    "faint": 0.4,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1590 م، track 860 م"
+  },
+  {
+   "id": "w17_80925_54927_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80925,
+    "y0": 54927,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.271271,
+    27.954378
+   ],
+   "bbox": [
+    42.267151,
+    27.950739,
+    42.275391,
+    27.958017
+   ],
+   "region_cell": "r407_342",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2038.0,
+    "winding": 771.7
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2038 م"
+  },
+  {
+   "id": "w17_80931_54945_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80931,
+    "y0": 54945,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.28775,
+    27.910699
+   ],
+   "bbox": [
+    42.28363,
+    27.907058,
+    42.29187,
+    27.91434
+   ],
+   "region_cell": "r408_342",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1569.5
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1570 م"
+  },
+  {
+   "id": "w17_80943_58695_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80943,
+    "y0": 58695,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.320709,
+    18.457465
+   ],
+   "bbox": [
+    42.316589,
+    18.453557,
+    42.324829,
+    18.461373
+   ],
+   "region_cell": "r408_231",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2674.3,
+    "winding": 2674.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2674 م"
+  },
+  {
+   "id": "w17_80946_54915_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80946,
+    "y0": 54915,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.328949,
+    27.983487
+   ],
+   "bbox": [
+    42.324829,
+    27.979849,
+    42.333069,
+    27.987126
+   ],
+   "region_cell": "r408_343",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 733.6,
+    "faint": 1816.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1816 م، track 734 م"
+  },
+  {
+   "id": "w17_80949_54915_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80949,
+    "y0": 54915,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.337189,
+    27.983487
+   ],
+   "bbox": [
+    42.333069,
+    27.979849,
+    42.341309,
+    27.987126
+   ],
+   "region_cell": "r408_343",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 254.3,
+    "faint": 1766.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1766 م، track 254 م"
+  },
+  {
+   "id": "w17_80949_54933_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80949,
+    "y0": 54933,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.337189,
+    27.93982
+   ],
+   "bbox": [
+    42.333069,
+    27.936181,
+    42.341309,
+    27.94346
+   ],
+   "region_cell": "r408_342",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 878.7,
+    "faint": 1979.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1980 م، track 879 م"
+  },
+  {
+   "id": "w17_80949_58701_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80949,
+    "y0": 58701,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.337189,
+    18.441833
+   ],
+   "bbox": [
+    42.333069,
+    18.437925,
+    42.341309,
+    18.445741
+   ],
+   "region_cell": "r408_231",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2557.2,
+    "winding": 2557.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2557 م"
+  },
+  {
+   "id": "w17_80976_58809_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80976,
+    "y0": 58809,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.411346,
+    18.160206
+   ],
+   "bbox": [
+    42.407227,
+    18.156291,
+    42.415466,
+    18.164121
+   ],
+   "region_cell": "r409_227",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2781.7,
+    "winding": 2781.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2782 م"
+  },
+  {
+   "id": "w17_80979_58815_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 80979,
+    "y0": 58815,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.419586,
+    18.144547
+   ],
+   "bbox": [
+    42.415466,
+    18.140632,
+    42.423706,
+    18.148462
+   ],
+   "region_cell": "r409_227",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2831.5,
+    "winding": 2831.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2831 م"
+  },
+  {
+   "id": "w17_81099_59352_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81099,
+    "y0": 59352,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.749176,
+    16.737482
+   ],
+   "bbox": [
+    42.745056,
+    16.733537,
+    42.753296,
+    16.741428
+   ],
+   "region_cell": "r412_210",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1457.3,
+    "faint": 236.5
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade4 984 م، track_grade5 473 م"
+  },
+  {
+   "id": "w17_81102_59352_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81102,
+    "y0": 59352,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.757416,
+    16.737482
+   ],
+   "bbox": [
+    42.753296,
+    16.733537,
+    42.761536,
+    16.741428
+   ],
+   "region_cell": "r412_210",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1841.1,
+    "faint": 539.0
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade5 1078 م، track_grade4 763 م"
+  },
+  {
+   "id": "w17_81120_58764_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81120,
+    "y0": 58764,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.806854,
+    18.277606
+   ],
+   "bbox": [
+    42.802734,
+    18.273694,
+    42.810974,
+    18.281518
+   ],
+   "region_cell": "r413_229",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4539.1,
+    "winding": 1951.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4539 م"
+  },
+  {
+   "id": "w17_81123_58767_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81123,
+    "y0": 58767,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.815094,
+    18.269782
+   ],
+   "bbox": [
+    42.810974,
+    18.26587,
+    42.819214,
+    18.273694
+   ],
+   "region_cell": "r413_229",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1869.6,
+    "winding": 484.5
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1870 م"
+  },
+  {
+   "id": "w17_81129_58761_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81129,
+    "y0": 58761,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.831573,
+    18.28543
+   ],
+   "bbox": [
+    42.827454,
+    18.281518,
+    42.835693,
+    18.289342
+   ],
+   "region_cell": "r413_229",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1127.0,
+    "dirt": 563.5,
+    "winding": 1127.0
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 1127 م"
+  },
+  {
+   "id": "w17_81129_58764_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81129,
+    "y0": 58764,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.831573,
+    18.277606
+   ],
+   "bbox": [
+    42.827454,
+    18.273694,
+    42.835693,
+    18.281518
+   ],
+   "region_cell": "r413_229",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1229.7,
+    "rocky": 1496.0,
+    "winding": 1496.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 1496 م، track 482 م"
+  },
+  {
+   "id": "w17_81165_59061_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81165,
+    "y0": 59061,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.93045,
+    17.501319
+   ],
+   "bbox": [
+    42.926331,
+    17.497389,
+    42.93457,
+    17.505248
+   ],
+   "region_cell": "r414_219",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4514.5,
+    "winding": 3897.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4514 م"
+  },
+  {
+   "id": "w17_81171_59058_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81171,
+    "y0": 59058,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.94693,
+    17.509177
+   ],
+   "bbox": [
+    42.94281,
+    17.505248,
+    42.95105,
+    17.513106
+   ],
+   "region_cell": "r414_219",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5105.4,
+    "winding": 4540.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5105 م"
+  },
+  {
+   "id": "w17_81180_59238_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81180,
+    "y0": 59238,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.971649,
+    17.03709
+   ],
+   "bbox": [
+    42.967529,
+    17.033151,
+    42.975769,
+    17.041029
+   ],
+   "region_cell": "r414_214",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 7731.3,
+    "faint": 3865.7,
+    "winding": 1529.2
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 7731 م"
+  },
+  {
+   "id": "w17_81183_59052_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81183,
+    "y0": 59052,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.979889,
+    17.524892
+   ],
+   "bbox": [
+    42.975769,
+    17.520963,
+    42.984009,
+    17.528821
+   ],
+   "region_cell": "r414_220",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4298.1,
+    "winding": 3020.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4298 م"
+  },
+  {
+   "id": "w17_81183_59238_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81183,
+    "y0": 59238,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.979889,
+    17.03709
+   ],
+   "bbox": [
+    42.975769,
+    17.033151,
+    42.984009,
+    17.041029
+   ],
+   "region_cell": "r414_214",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 4225.2,
+    "faint": 2112.6,
+    "winding": 525.6
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 4225 م"
+  },
+  {
+   "id": "w17_81186_59094_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81186,
+    "y0": 59094,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.988129,
+    17.414856
+   ],
+   "bbox": [
+    42.984009,
+    17.410925,
+    42.992249,
+    17.418787
+   ],
+   "region_cell": "r414_218",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2614.6,
+    "winding": 2557.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2615 م"
+  },
+  {
+   "id": "w17_81186_59103_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81186,
+    "y0": 59103,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    42.988129,
+    17.391269
+   ],
+   "bbox": [
+    42.984009,
+    17.387337,
+    42.992249,
+    17.3952
+   ],
+   "region_cell": "r414_218",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3922.1,
+    "winding": 2624.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3922 م"
+  },
+  {
+   "id": "w17_81198_59109_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81198,
+    "y0": 59109,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.021088,
+    17.375542
+   ],
+   "bbox": [
+    43.016968,
+    17.37161,
+    43.025208,
+    17.379474
+   ],
+   "region_cell": "r415_218",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3643.9,
+    "winding": 3543.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3644 م"
+  },
+  {
+   "id": "w17_81201_59082_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81201,
+    "y0": 59082,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.029327,
+    17.446302
+   ],
+   "bbox": [
+    43.025208,
+    17.442372,
+    43.033447,
+    17.450232
+   ],
+   "region_cell": "r415_219",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3990.3,
+    "winding": 3575.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3990 م"
+  },
+  {
+   "id": "w17_81204_58998_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81204,
+    "y0": 58998,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.037567,
+    17.666268
+   ],
+   "bbox": [
+    43.033447,
+    17.662343,
+    43.041687,
+    17.670194
+   ],
+   "region_cell": "r415_221",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2824.4,
+    "winding": 2824.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2824 م"
+  },
+  {
+   "id": "w17_81204_59088_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81204,
+    "y0": 59088,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.037567,
+    17.43058
+   ],
+   "bbox": [
+    43.033447,
+    17.426649,
+    43.041687,
+    17.434511
+   ],
+   "region_cell": "r415_219",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3312.4,
+    "winding": 2971.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3312 م"
+  },
+  {
+   "id": "w17_81207_59109_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81207,
+    "y0": 59109,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.045807,
+    17.375542
+   ],
+   "bbox": [
+    43.041687,
+    17.37161,
+    43.049927,
+    17.379474
+   ],
+   "region_cell": "r415_218",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3906.7,
+    "winding": 3599.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3907 م"
+  },
+  {
+   "id": "w17_81207_59127_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81207,
+    "y0": 59127,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.045807,
+    17.328353
+   ],
+   "bbox": [
+    43.041687,
+    17.32442,
+    43.049927,
+    17.332286
+   ],
+   "region_cell": "r415_217",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1734.5,
+    "winding": 1266.3
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 1735 م"
+  },
+  {
+   "id": "w17_81207_59157_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81207,
+    "y0": 59157,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.045807,
+    17.249679
+   ],
+   "bbox": [
+    43.041687,
+    17.245744,
+    43.049927,
+    17.253613
+   ],
+   "region_cell": "r415_216",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2603.2,
+    "winding": 2603.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2603 م"
+  },
+  {
+   "id": "w17_81207_59160_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81207,
+    "y0": 59160,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.045807,
+    17.241809
+   ],
+   "bbox": [
+    43.041687,
+    17.237875,
+    43.049927,
+    17.245744
+   ],
+   "region_cell": "r415_216",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2599.5,
+    "winding": 2599.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2599 م"
+  },
+  {
+   "id": "w17_81210_59121_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81210,
+    "y0": 59121,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.054047,
+    17.344084
+   ],
+   "bbox": [
+    43.049927,
+    17.340152,
+    43.058167,
+    17.348017
+   ],
+   "region_cell": "r415_217",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3597.3,
+    "winding": 2649.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3597 م"
+  },
+  {
+   "id": "w17_81234_59058_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81234,
+    "y0": 59058,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.119965,
+    17.509177
+   ],
+   "bbox": [
+    43.115845,
+    17.505248,
+    43.124084,
+    17.513106
+   ],
+   "region_cell": "r416_219",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3054.3,
+    "winding": 3054.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3054 م"
+  },
+  {
+   "id": "w17_81237_59226_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81237,
+    "y0": 59226,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.128204,
+    17.0686
+   ],
+   "bbox": [
+    43.124084,
+    17.064662,
+    43.132324,
+    17.072539
+   ],
+   "region_cell": "r416_214",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3565.6,
+    "winding": 2755.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3566 م"
+  },
+  {
+   "id": "w17_81240_59109_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81240,
+    "y0": 59109,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.136444,
+    17.375542
+   ],
+   "bbox": [
+    43.132324,
+    17.37161,
+    43.140564,
+    17.379474
+   ],
+   "region_cell": "r416_218",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1536.0,
+    "dirt": 686.6,
+    "winding": 1112.9
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 1536 م، track 687 م"
+  },
+  {
+   "id": "w17_81243_59142_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81243,
+    "y0": 59142,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.144684,
+    17.28902
+   ],
+   "bbox": [
+    43.140564,
+    17.285087,
+    43.148804,
+    17.292954
+   ],
+   "region_cell": "r416_217",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 72.3,
+    "faint": 1631.2,
+    "winding": 1247.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1631 م، track 72 م"
+  },
+  {
+   "id": "w17_81243_59187_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81243,
+    "y0": 59187,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.144684,
+    17.170971
+   ],
+   "bbox": [
+    43.140564,
+    17.167034,
+    43.148804,
+    17.174907
+   ],
+   "region_cell": "r416_215",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5142.2,
+    "winding": 4908.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5142 م"
+  },
+  {
+   "id": "w17_81249_59154_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81249,
+    "y0": 59154,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.161163,
+    17.257548
+   ],
+   "bbox": [
+    43.157043,
+    17.253613,
+    43.165283,
+    17.261482
+   ],
+   "region_cell": "r416_216",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2581.4,
+    "faint": 1428.7,
+    "winding": 2825.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2581 م، path 1429 م"
+  },
+  {
+   "id": "w17_81258_59145_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81258,
+    "y0": 59145,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.185883,
+    17.281153
+   ],
+   "bbox": [
+    43.181763,
+    17.277219,
+    43.190002,
+    17.285087
+   ],
+   "region_cell": "r416_217",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2994.5,
+    "winding": 2562.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2995 م"
+  },
+  {
+   "id": "w17_81315_55890_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81315,
+    "y0": 55890,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.342438,
+    25.593233
+   ],
+   "bbox": [
+    43.338318,
+    25.589517,
+    43.346558,
+    25.596948
+   ],
+   "region_cell": "r418_316",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1023.1,
+    "rocky": 980.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25
+   },
+   "hint_note": "OSM: track_grade1 981 م، track 533 م"
+  },
+  {
+   "id": "w17_81318_55914_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81318,
+    "y0": 55914,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.350677,
+    25.533768
+   ],
+   "bbox": [
+    43.346558,
+    25.53005,
+    43.354797,
+    25.537485
+   ],
+   "region_cell": "r418_315",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 926.5,
+    "dirt": 463.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 927 م"
+  },
+  {
+   "id": "w17_81333_55722_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81333,
+    "y0": 55722,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.391876,
+    26.008658
+   ],
+   "bbox": [
+    43.387756,
+    26.004956,
+    43.395996,
+    26.012361
+   ],
+   "region_cell": "r418_320",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4864.4,
+    "winding": 2437.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4864 م"
+  },
+  {
+   "id": "w17_81354_55740_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81354,
+    "y0": 55740,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.449554,
+    25.964218
+   ],
+   "bbox": [
+    43.445435,
+    25.960514,
+    43.453674,
+    25.967922
+   ],
+   "region_cell": "r419_320",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5614.6,
+    "winding": 1346.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5615 م"
+  },
+  {
+   "id": "w17_81438_59004_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81438,
+    "y0": 59004,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.680267,
+    17.650565
+   ],
+   "bbox": [
+    43.676147,
+    17.646639,
+    43.684387,
+    17.654491
+   ],
+   "region_cell": "r421_221",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1188.7,
+    "mixed": 1188.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1189 م"
+  },
+  {
+   "id": "w17_81438_59007_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81438,
+    "y0": 59007,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.680267,
+    17.642713
+   ],
+   "bbox": [
+    43.676147,
+    17.638787,
+    43.684387,
+    17.646639
+   ],
+   "region_cell": "r421_221",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1076.9,
+    "mixed": 1076.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1077 م"
+  },
+  {
+   "id": "w17_81447_58986_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81447,
+    "y0": 58986,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.704987,
+    17.69767
+   ],
+   "bbox": [
+    43.700867,
+    17.693745,
+    43.709106,
+    17.701595
+   ],
+   "region_cell": "r421_222",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1309.4,
+    "mixed": 1309.4,
+    "winding": 1309.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1309 م"
+  },
+  {
+   "id": "w17_81450_58983_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81450,
+    "y0": 58983,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.713226,
+    17.70552
+   ],
+   "bbox": [
+    43.709106,
+    17.701595,
+    43.717346,
+    17.709445
+   ],
+   "region_cell": "r421_222",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1409.5,
+    "mixed": 1409.5,
+    "winding": 841.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1410 م"
+  },
+  {
+   "id": "w17_81456_55521_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81456,
+    "y0": 55521,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.729706,
+    26.50376
+   ],
+   "bbox": [
+    43.725586,
+    26.500073,
+    43.733826,
+    26.507447
+   ],
+   "region_cell": "r421_326",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4910.7,
+    "winding": 858.2
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4911 م"
+  },
+  {
+   "id": "w17_81462_55482_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81462,
+    "y0": 55482,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.746185,
+    26.599579
+   ],
+   "bbox": [
+    43.742065,
+    26.595895,
+    43.750305,
+    26.603263
+   ],
+   "region_cell": "r422_327",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5362.8,
+    "winding": 2942.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5363 م"
+  },
+  {
+   "id": "w17_81498_55227_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81498,
+    "y0": 55227,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.845062,
+    27.224105
+   ],
+   "bbox": [
+    43.840942,
+    27.220441,
+    43.849182,
+    27.227768
+   ],
+   "region_cell": "r423_334",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4592.1,
+    "winding": 2946.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4592 م"
+  },
+  {
+   "id": "w17_81498_55230_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81498,
+    "y0": 55230,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.845062,
+    27.216777
+   ],
+   "bbox": [
+    43.840942,
+    27.213114,
+    43.849182,
+    27.220441
+   ],
+   "region_cell": "r423_334",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5807.5,
+    "winding": 2927.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5807 م"
+  },
+  {
+   "id": "w17_81528_55065_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81528,
+    "y0": 55065,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.92746,
+    27.619056
+   ],
+   "bbox": [
+    43.92334,
+    27.615406,
+    43.93158,
+    27.622707
+   ],
+   "region_cell": "r423_339",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 933.0,
+    "dirt": 466.5
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 933 م"
+  },
+  {
+   "id": "w17_81528_55638_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81528,
+    "y0": 55638,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.92746,
+    26.215823
+   ],
+   "bbox": [
+    43.92334,
+    26.212127,
+    43.93158,
+    26.219519
+   ],
+   "region_cell": "r423_323",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5172.6,
+    "winding": 1404.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5173 م"
+  },
+  {
+   "id": "w17_81534_55068_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81534,
+    "y0": 55068,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.943939,
+    27.611755
+   ],
+   "bbox": [
+    43.939819,
+    27.608105,
+    43.948059,
+    27.615406
+   ],
+   "region_cell": "r423_339",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 864.5,
+    "dirt": 432.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 865 م"
+  },
+  {
+   "id": "w17_81534_58974_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81534,
+    "y0": 58974,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.943939,
+    17.729067
+   ],
+   "bbox": [
+    43.939819,
+    17.725142,
+    43.948059,
+    17.732991
+   ],
+   "region_cell": "r423_222",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1335.1,
+    "mixed": 1335.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1335 م"
+  },
+  {
+   "id": "w17_81537_55071_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81537,
+    "y0": 55071,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.952179,
+    27.604454
+   ],
+   "bbox": [
+    43.948059,
+    27.600803,
+    43.956299,
+    27.608105
+   ],
+   "region_cell": "r424_339",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 874.9,
+    "dirt": 437.4
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 875 م"
+  },
+  {
+   "id": "w17_81540_55071_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81540,
+    "y0": 55071,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.960419,
+    27.604454
+   ],
+   "bbox": [
+    43.956299,
+    27.600803,
+    43.964539,
+    27.608105
+   ],
+   "region_cell": "r424_339",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 873.5,
+    "dirt": 436.7
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 873 م"
+  },
+  {
+   "id": "w17_81546_55074_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81546,
+    "y0": 55074,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    43.976898,
+    27.597152
+   ],
+   "bbox": [
+    43.972778,
+    27.593501,
+    43.981018,
+    27.600803
+   ],
+   "region_cell": "r424_338",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 916.6,
+    "dirt": 458.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 917 م"
+  },
+  {
+   "id": "w17_81555_55077_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81555,
+    "y0": 55077,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.001617,
+    27.589849
+   ],
+   "bbox": [
+    43.997498,
+    27.586198,
+    44.005737,
+    27.593501
+   ],
+   "region_cell": "r424_338",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 858.6,
+    "dirt": 429.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 859 م"
+  },
+  {
+   "id": "w17_81573_55263_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81573,
+    "y0": 55263,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.051056,
+    27.136146
+   ],
+   "bbox": [
+    44.046936,
+    27.13248,
+    44.055176,
+    27.139813
+   ],
+   "region_cell": "r425_333",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5444.5,
+    "winding": 1414.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5444 م"
+  },
+  {
+   "id": "w17_81582_55578_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81582,
+    "y0": 55578,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.075775,
+    26.363572
+   ],
+   "bbox": [
+    44.071655,
+    26.359881,
+    44.079895,
+    26.367264
+   ],
+   "region_cell": "r425_324",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5248.9,
+    "winding": 448.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5249 م"
+  },
+  {
+   "id": "w17_81591_55557_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81591,
+    "y0": 55557,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.100494,
+    26.41524
+   ],
+   "bbox": [
+    44.096375,
+    26.411551,
+    44.104614,
+    26.41893
+   ],
+   "region_cell": "r425_325",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5077.3,
+    "winding": 1240.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5077 م"
+  },
+  {
+   "id": "w17_81642_55527_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81642,
+    "y0": 55527,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.24057,
+    26.489011
+   ],
+   "bbox": [
+    44.23645,
+    26.485324,
+    44.24469,
+    26.492699
+   ],
+   "region_cell": "r426_326",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1002.1,
+    "dirt": 501.0
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 1002 م"
+  },
+  {
+   "id": "w17_81660_55602_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81660,
+    "y0": 55602,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.290009,
+    26.304495
+   ],
+   "bbox": [
+    44.285889,
+    26.300802,
+    44.294128,
+    26.308189
+   ],
+   "region_cell": "r427_324",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 872.8,
+    "dirt": 1300.2
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 873 م، track 864 م"
+  },
+  {
+   "id": "w17_81660_55605_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81660,
+    "y0": 55605,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.290009,
+    26.297109
+   ],
+   "bbox": [
+    44.285889,
+    26.293415,
+    44.294128,
+    26.300802
+   ],
+   "region_cell": "r427_324",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 870.5,
+    "dirt": 435.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 871 م"
+  },
+  {
+   "id": "w17_81699_55272_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81699,
+    "y0": 55272,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.397125,
+    27.114146
+   ],
+   "bbox": [
+    44.393005,
+    27.110479,
+    44.401245,
+    27.117813
+   ],
+   "region_cell": "r428_333",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5908.6,
+    "winding": 2856.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5909 م"
+  },
+  {
+   "id": "w17_81702_55275_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81702,
+    "y0": 55275,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.405365,
+    27.106811
+   ],
+   "bbox": [
+    44.401245,
+    27.103144,
+    44.409485,
+    27.110479
+   ],
+   "region_cell": "r428_333",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5456.3,
+    "winding": 400.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5456 م"
+  },
+  {
+   "id": "w17_81705_55632_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81705,
+    "y0": 55632,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.413605,
+    26.230606
+   ],
+   "bbox": [
+    44.409485,
+    26.226911,
+    44.417725,
+    26.234302
+   ],
+   "region_cell": "r428_323",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 887.6,
+    "dirt": 443.8
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 888 م"
+  },
+  {
+   "id": "w17_81708_55638_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81708,
+    "y0": 55638,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.421844,
+    26.215823
+   ],
+   "bbox": [
+    44.417725,
+    26.212127,
+    44.425964,
+    26.219519
+   ],
+   "region_cell": "r428_323",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 938.3,
+    "dirt": 469.1
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 938 م"
+  },
+  {
+   "id": "w17_81708_55659_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81708,
+    "y0": 55659,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.421844,
+    26.164066
+   ],
+   "bbox": [
+    44.417725,
+    26.160369,
+    44.425964,
+    26.167764
+   ],
+   "region_cell": "r428_322",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1005.5,
+    "dirt": 502.7
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 1005 م"
+  },
+  {
+   "id": "w17_81711_55656_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81711,
+    "y0": 55656,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.430084,
+    26.171461
+   ],
+   "bbox": [
+    44.425964,
+    26.167764,
+    44.434204,
+    26.175159
+   ],
+   "region_cell": "r428_322",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1136.0,
+    "dirt": 568.0
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 1136 م"
+  },
+  {
+   "id": "w17_81714_55716_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81714,
+    "y0": 55716,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.438324,
+    26.023468
+   ],
+   "bbox": [
+    44.434204,
+    26.019766,
+    44.442444,
+    26.02717
+   ],
+   "region_cell": "r428_320",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 877.5,
+    "dirt": 438.8,
+    "winding": 877.5
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 878 م"
+  },
+  {
+   "id": "w17_81741_59010_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81741,
+    "y0": 59010,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.512482,
+    17.634861
+   ],
+   "bbox": [
+    44.508362,
+    17.630935,
+    44.516602,
+    17.638787
+   ],
+   "region_cell": "r429_221",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2950.9,
+    "winding": 301.9
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2951 م"
+  },
+  {
+   "id": "w17_81741_59013_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81741,
+    "y0": 59013,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.512482,
+    17.627008
+   ],
+   "bbox": [
+    44.508362,
+    17.623082,
+    44.516602,
+    17.630935
+   ],
+   "region_cell": "r429_221",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2649.1,
+    "winding": 45.0
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2649 م"
+  },
+  {
+   "id": "w17_81780_55494_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81780,
+    "y0": 55494,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.619598,
+    26.570105
+   ],
+   "bbox": [
+    44.615479,
+    26.56642,
+    44.623718,
+    26.57379
+   ],
+   "region_cell": "r430_327",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 508.9,
+    "rocky": 875.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25
+   },
+   "hint_note": "OSM: track_grade1 875 م، track 71 م"
+  },
+  {
+   "id": "w17_81834_55521_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81834,
+    "y0": 55521,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.767914,
+    26.50376
+   ],
+   "bbox": [
+    44.763794,
+    26.500073,
+    44.772034,
+    26.507447
+   ],
+   "region_cell": "r431_326",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 895.5,
+    "dirt": 447.7
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 895 م"
+  },
+  {
+   "id": "w17_81846_55665_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81846,
+    "y0": 55665,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.800873,
+    26.149274
+   ],
+   "bbox": [
+    44.796753,
+    26.145576,
+    44.804993,
+    26.152973
+   ],
+   "region_cell": "r432_322",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 927.3,
+    "dirt": 463.6,
+    "winding": 927.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 927 م"
+  },
+  {
+   "id": "w17_81849_55662_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81849,
+    "y0": 55662,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.809113,
+    26.156671
+   ],
+   "bbox": [
+    44.804993,
+    26.152973,
+    44.813232,
+    26.160369
+   ],
+   "region_cell": "r432_322",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 889.3,
+    "dirt": 444.6,
+    "winding": 889.3
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 889 م"
+  },
+  {
+   "id": "w17_81894_57933_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81894,
+    "y0": 57933,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    44.932709,
+    20.430874
+   ],
+   "bbox": [
+    44.928589,
+    20.427013,
+    44.936829,
+    20.434734
+   ],
+   "region_cell": "r433_255",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2375.6,
+    "winding": 557.0
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2376 م"
+  },
+  {
+   "id": "w17_81930_57933_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81930,
+    "y0": 57933,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    45.031586,
+    20.430874
+   ],
+   "bbox": [
+    45.027466,
+    20.427013,
+    45.035706,
+    20.434734
+   ],
+   "region_cell": "r434_255",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1478.3,
+    "mixed": 1478.3,
+    "winding": 293.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1478 م"
+  },
+  {
+   "id": "w17_81933_57933_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 81933,
+    "y0": 57933,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    45.039825,
+    20.430874
+   ],
+   "bbox": [
+    45.035706,
+    20.427013,
+    45.043945,
+    20.434734
+   ],
+   "region_cell": "r434_255",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1731.8,
+    "mixed": 1731.8,
+    "faint": 514.7,
+    "winding": 923.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1732 م، path 515 م"
+  },
+  {
+   "id": "w17_82194_56400_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82194,
+    "y0": 56400,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    45.756683,
+    24.323322
+   ],
+   "bbox": [
+    45.752563,
+    24.319568,
+    45.760803,
+    24.327077
+   ],
+   "region_cell": "r441_301",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1683.1,
+    "dirt": 1141.5,
+    "winding": 690.5
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 1683 م، track 300 م"
+  },
+  {
+   "id": "w17_82356_56247_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82356,
+    "y0": 56247,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.20163,
+    24.705668
+   ],
+   "bbox": [
+    46.19751,
+    24.701925,
+    46.20575,
+    24.70941
+   ],
+   "region_cell": "r445_305",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1910.2,
+    "winding": 482.3
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1910 م"
+  },
+  {
+   "id": "w17_82365_56226_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82365,
+    "y0": 56226,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.226349,
+    24.758055
+   ],
+   "bbox": [
+    46.222229,
+    24.754314,
+    46.230469,
+    24.761797
+   ],
+   "region_cell": "r446_306",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1441.0,
+    "faint": 720.5
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade5 1441 م"
+  },
+  {
+   "id": "w17_82368_56226_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82368,
+    "y0": 56226,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.234589,
+    24.758055
+   ],
+   "bbox": [
+    46.230469,
+    24.754314,
+    46.238708,
+    24.761797
+   ],
+   "region_cell": "r446_306",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1630.4,
+    "faint": 815.2
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade5 1630 م"
+  },
+  {
+   "id": "w17_82368_56283_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82368,
+    "y0": 56283,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.234589,
+    24.615809
+   ],
+   "bbox": [
+    46.230469,
+    24.612063,
+    46.238708,
+    24.619554
+   ],
+   "region_cell": "r446_304",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5401.4,
+    "winding": 2213.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5401 م"
+  },
+  {
+   "id": "w17_82398_56286_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82398,
+    "y0": 56286,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.316986,
+    24.608318
+   ],
+   "bbox": [
+    46.312866,
+    24.604572,
+    46.321106,
+    24.612063
+   ],
+   "region_cell": "r446_304",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 4262.3,
+    "winding": 1026.2
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 4262 م"
+  },
+  {
+   "id": "w17_82398_56289_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82398,
+    "y0": 56289,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.316986,
+    24.600826
+   ],
+   "bbox": [
+    46.312866,
+    24.59708,
+    46.321106,
+    24.604572
+   ],
+   "region_cell": "r446_304",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 5071.7,
+    "winding": 3226.9
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 5072 م"
+  },
+  {
+   "id": "w17_82416_56610_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82416,
+    "y0": 56610,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.366425,
+    23.796654
+   ],
+   "bbox": [
+    46.362305,
+    23.792884,
+    46.370544,
+    23.800424
+   ],
+   "region_cell": "r447_295",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2756.6,
+    "winding": 2756.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 2757 م"
+  },
+  {
+   "id": "w17_82437_56205_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82437,
+    "y0": 56205,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.424103,
+    24.810421
+   ],
+   "bbox": [
+    46.419983,
+    24.806681,
+    46.428223,
+    24.814161
+   ],
+   "region_cell": "r447_306",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4845.6,
+    "winding": 1994.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4846 م"
+  },
+  {
+   "id": "w17_82440_56325_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82440,
+    "y0": 56325,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.432343,
+    24.510892
+   ],
+   "bbox": [
+    46.428223,
+    24.507143,
+    46.436462,
+    24.51464
+   ],
+   "region_cell": "r448_303",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1585.0,
+    "winding": 1585.0
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1585 م"
+  },
+  {
+   "id": "w17_82455_56640_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82455,
+    "y0": 56640,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.473541,
+    23.72124
+   ],
+   "bbox": [
+    46.469421,
+    23.717468,
+    46.477661,
+    23.725012
+   ],
+   "region_cell": "r448_294",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4475.6,
+    "winding": 1360.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4476 م"
+  },
+  {
+   "id": "w17_82470_56670_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82470,
+    "y0": 56670,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.51474,
+    23.645782
+   ],
+   "bbox": [
+    46.51062,
+    23.642008,
+    46.51886,
+    23.649556
+   ],
+   "region_cell": "r448_293",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5226.6,
+    "winding": 1553.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5227 م"
+  },
+  {
+   "id": "w17_82490_56036_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82490,
+    "y0": 56036,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.569672,
+    25.231032
+   ],
+   "bbox": [
+    46.565552,
+    25.227305,
+    46.573792,
+    25.234758
+   ],
+   "region_cell": "r449_311",
+   "source": "study_area",
+   "type_hint_m": {
+    "dirt": 600,
+    "faint": 600
+   },
+   "confidence": {
+    "dirt": 0.6,
+    "faint": 0.6
+   },
+   "hint_note": "نقطة الاختبار الأعمى السابقة"
+  },
+  {
+   "id": "w17_82512_56118_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82512,
+    "y0": 56118,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.630096,
+    25.027128
+   ],
+   "bbox": [
+    46.625977,
+    25.023395,
+    46.634216,
+    25.030861
+   ],
+   "region_cell": "r449_309",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 40.2,
+    "faint": 1498.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1499 م، track 40 م"
+  },
+  {
+   "id": "w17_82515_56238_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82515,
+    "y0": 56238,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.638336,
+    24.728122
+   ],
+   "bbox": [
+    46.634216,
+    24.72438,
+    46.642456,
+    24.731864
+   ],
+   "region_cell": "r449_306",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2611.8,
+    "winding": 1041.6
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2612 م"
+  },
+  {
+   "id": "w17_82519_56074_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82519,
+    "y0": 56074,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.649323,
+    25.136582
+   ],
+   "bbox": [
+    46.645203,
+    25.132852,
+    46.653442,
+    25.140312
+   ],
+   "region_cell": "r450_310",
+   "source": "study_area",
+   "type_hint_m": {
+    "sandy": 800,
+    "faint": 500
+   },
+   "confidence": {
+    "sandy": 0.6,
+    "faint": 0.6
+   },
+   "hint_note": "منطقة دراسة سابقة: حقل كثبان"
+  },
+  {
+   "id": "w17_82521_56071_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82521,
+    "y0": 56071,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.654816,
+    25.144041
+   ],
+   "bbox": [
+    46.650696,
+    25.140312,
+    46.658936,
+    25.147771
+   ],
+   "region_cell": "r450_310",
+   "source": "study_area",
+   "type_hint_m": {
+    "faint": 700
+   },
+   "confidence": {
+    "faint": 0.6
+   },
+   "hint_note": "منطقة دراسة سابقة (z17 مخزنة): مخيمات وأسوار على حافة النفود"
+  },
+  {
+   "id": "w17_82522_56066_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82522,
+    "y0": 56066,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.657562,
+    25.156472
+   ],
+   "bbox": [
+    46.653442,
+    25.152743,
+    46.661682,
+    25.160201
+   ],
+   "region_cell": "r450_310",
+   "source": "study_area",
+   "type_hint_m": {
+    "dirt": 900,
+    "faint": 400
+   },
+   "confidence": {
+    "dirt": 0.6,
+    "faint": 0.6
+   },
+   "hint_note": "منطقة دراسة سابقة: درب ترابي يخرج من الزفلت"
+  },
+  {
+   "id": "w17_82551_56310_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82551,
+    "y0": 56310,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.737213,
+    24.548372
+   ],
+   "bbox": [
+    46.733093,
+    24.544625,
+    46.741333,
+    24.55212
+   ],
+   "region_cell": "r450_303",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5689.9,
+    "winding": 1454.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5690 م"
+  },
+  {
+   "id": "w17_82608_56277_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82608,
+    "y0": 56277,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    46.893768,
+    24.63079
+   ],
+   "bbox": [
+    46.889648,
+    24.627045,
+    46.897888,
+    24.634535
+   ],
+   "region_cell": "r452_304",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 869.1,
+    "dirt": 434.6,
+    "sandy": 494.8,
+    "faint": 10.4
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade1 869 م، track_grade4 474 م، track_grade5 21 م"
+  },
+  {
+   "id": "w17_82770_56274_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82770,
+    "y0": 56274,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    47.338715,
+    24.63828
+   ],
+   "bbox": [
+    47.334595,
+    24.634535,
+    47.342834,
+    24.642024
+   ],
+   "region_cell": "r456_304",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1499.6
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 1500 م"
+  },
+  {
+   "id": "w17_82824_56439_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82824,
+    "y0": 56439,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    47.48703,
+    24.225676
+   ],
+   "bbox": [
+    47.48291,
+    24.221919,
+    47.49115,
+    24.229433
+   ],
+   "region_cell": "r458_300",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5204.8
+   },
+   "confidence": {
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track 5205 م"
+  },
+  {
+   "id": "w17_82827_56496_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82827,
+    "y0": 56496,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    47.49527,
+    24.082828
+   ],
+   "bbox": [
+    47.49115,
+    24.079067,
+    47.49939,
+    24.086589
+   ],
+   "region_cell": "r458_298",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 5190.4,
+    "winding": 441.3
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 5190 م"
+  },
+  {
+   "id": "w17_82827_56499_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82827,
+    "y0": 56499,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    47.49527,
+    24.075305
+   ],
+   "bbox": [
+    47.49115,
+    24.071544,
+    47.49939,
+    24.079067
+   ],
+   "region_cell": "r458_298",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 3565.9
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 3566 م"
+  },
+  {
+   "id": "w17_82905_55074_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 82905,
+    "y0": 55074,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    47.709503,
+    27.597152
+   ],
+   "bbox": [
+    47.705383,
+    27.593501,
+    47.713623,
+    27.600803
+   ],
+   "region_cell": "r460_338",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1911.2,
+    "winding": 1562.9
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1911 م"
+  },
+  {
+   "id": "w17_83325_55014_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83325,
+    "y0": 55014,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    48.863068,
+    27.7431
+   ],
+   "bbox": [
+    48.858948,
+    27.739454,
+    48.867188,
+    27.746746
+   ],
+   "region_cell": "r471_340",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2884.7,
+    "mixed": 1253.7,
+    "winding": 826.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 1631 م، track_grade3 1254 م"
+  },
+  {
+   "id": "w17_83328_56625_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83328,
+    "y0": 56625,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    48.871307,
+    23.758952
+   ],
+   "bbox": [
+    48.867188,
+    23.755182,
+    48.875427,
+    23.762723
+   ],
+   "region_cell": "r471_294",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5265.5,
+    "winding": 1462.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5266 م"
+  },
+  {
+   "id": "w17_83331_55884_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83331,
+    "y0": 55884,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    48.879547,
+    25.608094
+   ],
+   "bbox": [
+    48.875427,
+    25.604379,
+    48.883667,
+    25.61181
+   ],
+   "region_cell": "r471_316",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1730.3,
+    "mixed": 1730.3,
+    "faint": 623.5,
+    "winding": 374.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1730 م، path 623 م"
+  },
+  {
+   "id": "w17_83334_55884_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83334,
+    "y0": 55884,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    48.887787,
+    25.608094
+   ],
+   "bbox": [
+    48.883667,
+    25.604379,
+    48.891907,
+    25.61181
+   ],
+   "region_cell": "r471_316",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1492.7,
+    "mixed": 1492.7,
+    "winding": 1284.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1493 م"
+  },
+  {
+   "id": "w17_83364_55155_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83364,
+    "y0": 55155,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    48.970184,
+    27.399813
+   ],
+   "bbox": [
+    48.966064,
+    27.396155,
+    48.974304,
+    27.403471
+   ],
+   "region_cell": "r472_336",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1176.4,
+    "dirt": 634.4,
+    "winding": 1176.4
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 1176 م، track 46 م"
+  },
+  {
+   "id": "w17_83367_55161_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83367,
+    "y0": 55161,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    48.978424,
+    27.385181
+   ],
+   "bbox": [
+    48.974304,
+    27.381523,
+    48.982544,
+    27.38884
+   ],
+   "region_cell": "r472_336",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1159.7,
+    "dirt": 579.9,
+    "winding": 1159.7
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 1160 م"
+  },
+  {
+   "id": "w17_83406_56406_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83406,
+    "y0": 56406,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.085541,
+    24.308305
+   ],
+   "bbox": [
+    49.081421,
+    24.30455,
+    49.089661,
+    24.312059
+   ],
+   "region_cell": "r473_301",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4505.3,
+    "winding": 2825.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4505 م"
+  },
+  {
+   "id": "w17_83406_56409_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83406,
+    "y0": 56409,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.085541,
+    24.300795
+   ],
+   "bbox": [
+    49.081421,
+    24.29704,
+    49.089661,
+    24.30455
+   ],
+   "region_cell": "r473_301",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 3165.9,
+    "winding": 2593.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 3166 م"
+  },
+  {
+   "id": "w17_83418_56472_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83418,
+    "y0": 56472,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.1185,
+    24.142994
+   ],
+   "bbox": [
+    49.11438,
+    24.139235,
+    49.12262,
+    24.146754
+   ],
+   "region_cell": "r473_299",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4929.3,
+    "winding": 1169.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4929 م"
+  },
+  {
+   "id": "w17_83421_56583_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83421,
+    "y0": 56583,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.12674,
+    23.864489
+   ],
+   "bbox": [
+    49.12262,
+    23.860722,
+    49.130859,
+    23.868257
+   ],
+   "region_cell": "r474_295",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4552.6,
+    "winding": 2311.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4553 م"
+  },
+  {
+   "id": "w17_83424_55386_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83424,
+    "y0": 55386,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.134979,
+    26.8351
+   ],
+   "bbox": [
+    49.130859,
+    26.831424,
+    49.139099,
+    26.838776
+   ],
+   "region_cell": "r474_330",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 6052.0
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 6052 م"
+  },
+  {
+   "id": "w17_83424_55401_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83424,
+    "y0": 55401,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.134979,
+    26.798332
+   ],
+   "bbox": [
+    49.130859,
+    26.794654,
+    49.139099,
+    26.802009
+   ],
+   "region_cell": "r474_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1649.7
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1650 م"
+  },
+  {
+   "id": "w17_83427_55392_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83427,
+    "y0": 55392,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.143219,
+    26.820394
+   ],
+   "bbox": [
+    49.139099,
+    26.816717,
+    49.147339,
+    26.824071
+   ],
+   "region_cell": "r474_330",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 8773.0,
+    "winding": 920.5
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 8773 م"
+  },
+  {
+   "id": "w17_83427_56586_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83427,
+    "y0": 56586,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.143219,
+    23.856954
+   ],
+   "bbox": [
+    49.139099,
+    23.853186,
+    49.147339,
+    23.860722
+   ],
+   "region_cell": "r474_295",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 4516.4,
+    "winding": 1726.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4516 م"
+  },
+  {
+   "id": "w17_83430_55410_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83430,
+    "y0": 55410,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.151459,
+    26.776265
+   ],
+   "bbox": [
+    49.147339,
+    26.772587,
+    49.155579,
+    26.779943
+   ],
+   "region_cell": "r474_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1908.9,
+    "winding": 276.4
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 1909 م"
+  },
+  {
+   "id": "w17_83460_56574_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83460,
+    "y0": 56574,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.233856,
+    23.887093
+   ],
+   "bbox": [
+    49.229736,
+    23.883326,
+    49.237976,
+    23.89086
+   ],
+   "region_cell": "r475_296",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1632.3,
+    "faint": 816.2,
+    "winding": 1632.3
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1632 م"
+  },
+  {
+   "id": "w17_83484_56568_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83484,
+    "y0": 56568,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.299774,
+    23.90216
+   ],
+   "bbox": [
+    49.295654,
+    23.898394,
+    49.303894,
+    23.905927
+   ],
+   "region_cell": "r475_296",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1008.8,
+    "dirt": 504.4
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 1009 م"
+  },
+  {
+   "id": "w17_83487_56571_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83487,
+    "y0": 56571,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.308014,
+    23.894627
+   ],
+   "bbox": [
+    49.303894,
+    23.89086,
+    49.312134,
+    23.898394
+   ],
+   "region_cell": "r475_296",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 964.9,
+    "dirt": 482.5
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5
+   },
+   "hint_note": "OSM: track_grade1 965 م"
+  },
+  {
+   "id": "w17_83490_56583_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83490,
+    "y0": 56583,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.316254,
+    23.864489
+   ],
+   "bbox": [
+    49.312134,
+    23.860722,
+    49.320374,
+    23.868257
+   ],
+   "region_cell": "r475_295",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1457.8,
+    "faint": 728.9
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4
+   },
+   "hint_note": "OSM: track_grade5 1458 م"
+  },
+  {
+   "id": "w17_83511_56499_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83511,
+    "y0": 56499,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.373932,
+    24.075305
+   ],
+   "bbox": [
+    49.369812,
+    24.071544,
+    49.378052,
+    24.079067
+   ],
+   "region_cell": "r476_298",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2539.9,
+    "mixed": 1771.3,
+    "winding": 768.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1771 م، track 769 م"
+  },
+  {
+   "id": "w17_83514_56505_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83514,
+    "y0": 56505,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.382172,
+    24.060258
+   ],
+   "bbox": [
+    49.378052,
+    24.056496,
+    49.386292,
+    24.06402
+   ],
+   "region_cell": "r476_298",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2964.3,
+    "mixed": 2663.9,
+    "sandy": 54.7,
+    "faint": 273.0,
+    "winding": 2459.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 2664 م، track 300 م، path 273 م، track_grade4 55 م"
+  },
+  {
+   "id": "w17_83520_56601_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83520,
+    "y0": 56601,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.398651,
+    23.81927
+   ],
+   "bbox": [
+    49.394531,
+    23.815501,
+    49.402771,
+    23.823039
+   ],
+   "region_cell": "r476_295",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 1504.5,
+    "winding": 1125.1
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 1505 م"
+  },
+  {
+   "id": "w17_83613_55959_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83613,
+    "y0": 55959,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.654083,
+    25.422191
+   ],
+   "bbox": [
+    49.649963,
+    25.41847,
+    49.658203,
+    25.425912
+   ],
+   "region_cell": "r479_314",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2652.7,
+    "mixed": 2652.7,
+    "winding": 1045.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 2653 م"
+  },
+  {
+   "id": "w17_83616_55959_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83616,
+    "y0": 55959,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.662323,
+    25.422191
+   ],
+   "bbox": [
+    49.658203,
+    25.41847,
+    49.666443,
+    25.425912
+   ],
+   "region_cell": "r479_314",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2367.4,
+    "mixed": 2367.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 2367 م"
+  },
+  {
+   "id": "w17_83616_55962_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83616,
+    "y0": 55962,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.662323,
+    25.414749
+   ],
+   "bbox": [
+    49.658203,
+    25.411028,
+    49.666443,
+    25.41847
+   ],
+   "region_cell": "r479_313",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5424.5,
+    "rocky": 709.0,
+    "mixed": 782.5,
+    "winding": 838.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 4288 م، track_grade3 783 م، track_grade1 709 م"
+  },
+  {
+   "id": "w17_83616_55965_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83616,
+    "y0": 55965,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.662323,
+    25.407306
+   ],
+   "bbox": [
+    49.658203,
+    25.403585,
+    49.666443,
+    25.411028
+   ],
+   "region_cell": "r479_313",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5268.3,
+    "winding": 1655.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5268 م"
+  },
+  {
+   "id": "w17_83628_55362_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83628,
+    "y0": 55362,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.695282,
+    26.893904
+   ],
+   "bbox": [
+    49.691162,
+    26.89023,
+    49.699402,
+    26.897578
+   ],
+   "region_cell": "r479_330",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 5203.3,
+    "winding": 894.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track 5203 م"
+  },
+  {
+   "id": "w17_83628_56022_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83628,
+    "y0": 56022,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.695282,
+    25.26581
+   ],
+   "bbox": [
+    49.691162,
+    25.262085,
+    49.699402,
+    25.269536
+   ],
+   "region_cell": "r479_312",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1318.5,
+    "mixed": 1318.5,
+    "faint": 372.7,
+    "winding": 651.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1319 م، path 373 م"
+  },
+  {
+   "id": "w17_83631_56022_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83631,
+    "y0": 56022,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.703522,
+    25.26581
+   ],
+   "bbox": [
+    49.699402,
+    25.262085,
+    49.707642,
+    25.269536
+   ],
+   "region_cell": "r479_312",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1213.3,
+    "mixed": 1213.3,
+    "faint": 842.0,
+    "winding": 683.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1213 م، path 842 م"
+  },
+  {
+   "id": "w17_83640_55734_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83640,
+    "y0": 55734,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.728241,
+    25.979033
+   ],
+   "bbox": [
+    49.724121,
+    25.97533,
+    49.732361,
+    25.982737
+   ],
+   "region_cell": "r479_320",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2180.8,
+    "rocky": 1021.8
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25
+   },
+   "hint_note": "OSM: track_grade2 2044 م، track 137 م"
+  },
+  {
+   "id": "w17_83643_55734_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83643,
+    "y0": 55734,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    49.736481,
+    25.979033
+   ],
+   "bbox": [
+    49.732361,
+    25.97533,
+    49.740601,
+    25.982737
+   ],
+   "region_cell": "r479_320",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 2085.9,
+    "rocky": 1042.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "rocky": 0.25
+   },
+   "hint_note": "OSM: track_grade2 2086 م"
+  },
+  {
+   "id": "w17_83757_55419_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83757,
+    "y0": 55419,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.049591,
+    26.754195
+   ],
+   "bbox": [
+    50.045471,
+    26.750516,
+    50.053711,
+    26.757873
+   ],
+   "region_cell": "r482_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 3288.9,
+    "winding": 1907.2
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 3289 م"
+  },
+  {
+   "id": "w17_83760_55422_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83760,
+    "y0": 55422,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.057831,
+    26.746837
+   ],
+   "bbox": [
+    50.053711,
+    26.743158,
+    50.061951,
+    26.750516
+   ],
+   "region_cell": "r482_329",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2228.2,
+    "winding": 69.5
+   },
+   "confidence": {
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: path 2228 م"
+  },
+  {
+   "id": "w17_83781_55632_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83781,
+    "y0": 55632,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.115509,
+    26.230606
+   ],
+   "bbox": [
+    50.111389,
+    26.226911,
+    50.119629,
+    26.234302
+   ],
+   "region_cell": "r483_323",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "faint": 2335.9
+   },
+   "confidence": {
+    "faint": 0.4
+   },
+   "hint_note": "OSM: path 2336 م"
+  },
+  {
+   "id": "w17_83838_55905_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83838,
+    "y0": 55905,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.272064,
+    25.55607
+   ],
+   "bbox": [
+    50.267944,
+    25.552354,
+    50.276184,
+    25.559787
+   ],
+   "region_cell": "r485_315",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1089.0,
+    "mixed": 1089.0
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1089 م"
+  },
+  {
+   "id": "w17_83862_55932_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83862,
+    "y0": 55932,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.337982,
+    25.489149
+   ],
+   "bbox": [
+    50.333862,
+    25.485431,
+    50.342102,
+    25.492868
+   ],
+   "region_cell": "r485_314",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1069.1,
+    "mixed": 1069.1
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1069 م"
+  },
+  {
+   "id": "w17_83916_56013_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83916,
+    "y0": 56013,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.486298,
+    25.288163
+   ],
+   "bbox": [
+    50.482178,
+    25.284438,
+    50.490417,
+    25.291888
+   ],
+   "region_cell": "r487_312",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1521.5,
+    "mixed": 1521.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1521 م"
+  },
+  {
+   "id": "w17_83919_56016_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83919,
+    "y0": 56016,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.494537,
+    25.280712
+   ],
+   "bbox": [
+    50.490417,
+    25.276987,
+    50.498657,
+    25.284438
+   ],
+   "region_cell": "r487_312",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1405.3,
+    "mixed": 1405.3
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1405 م"
+  },
+  {
+   "id": "w17_83970_56193_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 83970,
+    "y0": 56193,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.634613,
+    24.840334
+   ],
+   "bbox": [
+    50.630493,
+    24.836596,
+    50.638733,
+    24.844073
+   ],
+   "region_cell": "r488_307",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1284.7,
+    "mixed": 1284.7
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1285 م"
+  },
+  {
+   "id": "w17_84000_56262_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 84000,
+    "y0": 56262,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.71701,
+    24.668234
+   ],
+   "bbox": [
+    50.712891,
+    24.66449,
+    50.72113,
+    24.671978
+   ],
+   "region_cell": "r489_305",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 969.8,
+    "dirt": 1181.8,
+    "mixed": 190.3,
+    "winding": 1160.2
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "mixed": 0.6,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 970 م، track 507 م، track_grade3 190 م"
+  },
+  {
+   "id": "w17_84006_56256_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 84006,
+    "y0": 56256,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.73349,
+    24.683209
+   ],
+   "bbox": [
+    50.72937,
+    24.679466,
+    50.73761,
+    24.686952
+   ],
+   "region_cell": "r489_305",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 15.3,
+    "dirt": 184.3,
+    "sandy": 1593.0,
+    "winding": 60.5
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "sandy": 0.7,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade4 1593 م، track 177 م، track_grade1 15 م"
+  },
+  {
+   "id": "w17_84009_56268_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 84009,
+    "y0": 56268,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    50.74173,
+    24.653258
+   ],
+   "bbox": [
+    50.73761,
+    24.649513,
+    50.74585,
+    24.657002
+   ],
+   "region_cell": "r489_305",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 1197.6,
+    "dirt": 598.8,
+    "winding": 1197.6
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade1 1198 م"
+  },
+  {
+   "id": "w17_84963_58308_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 84963,
+    "y0": 58308,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    53.361969,
+    19.462708
+   ],
+   "bbox": [
+    53.357849,
+    19.458823,
+    53.366089,
+    19.466592
+   ],
+   "region_cell": "r514_243",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1994.8,
+    "faint": 997.4,
+    "winding": 862.6
+   },
+   "confidence": {
+    "sandy": 0.7,
+    "faint": 0.4,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade5 1995 م"
+  },
+  {
+   "id": "w17_85209_58023_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 85209,
+    "y0": 58023,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    54.037628,
+    20.199057
+   ],
+   "bbox": [
+    54.033508,
+    20.195191,
+    54.041748,
+    20.202924
+   ],
+   "region_cell": "r521_252",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1085.4,
+    "mixed": 1085.4
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1085 م"
+  },
+  {
+   "id": "w17_85218_58011_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 85218,
+    "y0": 58011,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    54.062347,
+    20.229986
+   ],
+   "bbox": [
+    54.058228,
+    20.22612,
+    54.066467,
+    20.233852
+   ],
+   "region_cell": "r521_252",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1132.5,
+    "mixed": 1132.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1132 م"
+  },
+  {
+   "id": "w17_85386_57837_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 85386,
+    "y0": 57837,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    54.523773,
+    20.67776
+   ],
+   "bbox": [
+    54.519653,
+    20.673905,
+    54.527893,
+    20.681614
+   ],
+   "region_cell": "r526_258",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1075.6,
+    "mixed": 1075.6
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1076 م"
+  },
+  {
+   "id": "w17_85560_58092_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 85560,
+    "y0": 58092,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    55.001678,
+    20.021097
+   ],
+   "bbox": [
+    54.997559,
+    20.017226,
+    55.005798,
+    20.024968
+   ],
+   "region_cell": "r530_250",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "sandy": 1528.6
+   },
+   "confidence": {
+    "sandy": 0.7
+   },
+   "hint_note": "OSM: track_grade4 1529 م"
+  },
+  {
+   "id": "w17_85647_57132_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 85647,
+    "y0": 57132,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    55.240631,
+    22.478299
+   ],
+   "bbox": [
+    55.236511,
+    22.474493,
+    55.244751,
+    22.482106
+   ],
+   "region_cell": "r532_279",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "rocky": 929.0,
+    "dirt": 985.0,
+    "winding": 582.0
+   },
+   "confidence": {
+    "rocky": 0.25,
+    "dirt": 0.5,
+    "winding": 0.6
+   },
+   "hint_note": "OSM: track_grade2 694 م، track_grade1 582 م"
+  },
+  {
+   "id": "w17_85653_57645_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 85653,
+    "y0": 57645,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    55.257111,
+    21.170326
+   ],
+   "bbox": [
+    55.252991,
+    21.166484,
+    55.26123,
+    21.174168
+   ],
+   "region_cell": "r533_264",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1323.1,
+    "mixed": 1142.9
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1143 م، track 180 م"
+  },
+  {
+   "id": "w17_85659_57633_3x3",
+   "tiles": {
+    "z": 17,
+    "x0": 85659,
+    "y0": 57633,
+    "nx": 3,
+    "ny": 3
+   },
+   "centre": [
+    55.27359,
+    21.201057
+   ],
+   "bbox": [
+    55.26947,
+    21.197216,
+    55.27771,
+    21.204898
+   ],
+   "region_cell": "r533_264",
+   "source": "osm_weak",
+   "type_hint_m": {
+    "dirt": 1180.5,
+    "mixed": 1180.5
+   },
+   "confidence": {
+    "dirt": 0.5,
+    "mixed": 0.6
+   },
+   "hint_note": "OSM: track_grade3 1181 م"
+  }
+ ]
+}
