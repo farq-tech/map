@@ -23,6 +23,12 @@ const { parseSubscription } = require('../lib/outings/push');
 const { createRoutingRouter } = require('../lib/outings/routing');
 const { catalog: groupAudioCatalog } = require('../lib/outings/group-audio-catalog');
 
+/* Tunable without a deploy of code: OUTING_LIMIT_* in the environment. */
+function envLimit(name, fallback) {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 function clientKey(req) {
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   return fwd || req.socket.remoteAddress || 'unknown';
@@ -49,8 +55,8 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
     return router;
   }
 
-  const identityLimit = createRateLimiter({ limit: limits.identityPerHour ?? 10, windowMs: 60 * 60_000 });
-  const inviteLimit = createRateLimiter({ limit: limits.invitePer10Min ?? 30, windowMs: 10 * 60_000 });
+  const identityLimit = createRateLimiter({ limit: limits.identityPerHour ?? envLimit('OUTING_LIMIT_IDENTITY_PER_HOUR', 60), windowMs: 60 * 60_000 });
+  const inviteLimit = createRateLimiter({ limit: limits.invitePer10Min ?? envLimit('OUTING_LIMIT_INVITE_PER_10MIN', 120), windowMs: 10 * 60_000 });
   const writeLimit = createRateLimiter({ limit: 120, windowMs: 60_000 });
   const diagLimit = createRateLimiter({ limit: limits.diagnosticsPerHour ?? 6, windowMs: 60 * 60_000 });
   /* Recovery codes carry 100 bits, so guessing is hopeless anyway; this keeps it that way cheaply. */
