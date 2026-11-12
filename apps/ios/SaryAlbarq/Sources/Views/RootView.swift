@@ -70,7 +70,7 @@ struct RootView: View {
         .sheet(item: Binding(get: { IdleMapRules.rootShowsInvite(hasSession: model.session != nil, idleMapShown: model.idleMapShown) ? model.pendingInvite.map(InviteToken.init) : nil }, set: { model.pendingInvite = $0?.id })) { inv in
             InviteJoinSheet(token: inv.id).saryPresented(appearance)
         }
-        .sheet(isPresented: Binding(get: { model.offerNotifications && model.session == nil && model.pendingInvite == nil },
+        .sheet(isPresented: Binding(get: { IdleMapRules.rootShowsNotifyExplainer(hasSession: model.session != nil, idleMapShown: model.idleMapShown, offer: model.offerNotifications, pendingInvite: model.pendingInvite != nil) },
                                     set: { if !$0 { model.offerNotifications = false } })) {
             NotifyExplainerSheet(done: { model.offerNotifications = false }).saryPresented(appearance)
         }
