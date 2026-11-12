@@ -55,8 +55,26 @@ final class ScreensUITests: XCTestCase {
                       "the dedicated handle still collapses the sheet")
     }
 
+    /// Home V2: the Qibla direction switch moved off the map into the layers sheet (`explore-qibla`, the same stored choice).
     func testHomeQiblaDirectionCanBeHiddenAndRestored() {
         let app = launch(["-demo", "-SaryScreen", "home"])
+        let layers = app.buttons["map.layers"]
+        XCTAssertTrue(layers.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["home.qibla.toggle"].exists, "no third button on the V2 map")
+        layers.tap()
+        let sw = app.switches["explore-qibla"].firstMatch
+        XCTAssertTrue(sw.waitForExistence(timeout: 8))
+        sw.scrollIntoView(in: app, margin: 120)
+        let before = sw.value as? String ?? ""
+        sw.tap()
+        XCTAssertNotEqual(sw.value as? String ?? "", before, "hidden")
+        sw.tap()
+        XCTAssertEqual(sw.value as? String ?? "", before, "restored")
+    }
+
+    /// `-SaryHomeV1` keeps the old Qibla button on the map.
+    func testHomeV1QiblaDirectionCanBeHiddenAndRestored() {
+        let app = launch(["-demo", "-SaryScreen", "home", "-SaryHomeV1"])
         let toggle = app.buttons["home.qibla.toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         XCTAssertEqual(toggle.label, "إخفاء اتجاه القبلة من الخريطة")
@@ -194,7 +212,7 @@ final class CategoryPinsUITests: XCTestCase {
         let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
         XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
         sleep(2)
-        any("home.category.restaurants").tap()
+        app.tapHomeCategory("restaurants")
         XCTAssertTrue(any("home.result").waitForExistence(timeout: 20), "the list has places")
         sleep(2)
         /* Lower the sheet: the map with its markers. */
