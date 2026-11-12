@@ -313,6 +313,86 @@ final class DeclutterTests: XCTestCase {
         XCTAssertEqual(SandGrade.apply("not json"), "not json")
     }
 
+    /// Owner, Build 44 («ليه الألوان سيئة»): the default grade was neon. «طبيعي» sits between the photo and «دافئ».
+    func testNaturalWarmIsBetweenThePhotoAndMild() {
+        let n = SandGrade.naturalWarm
+        for s in n.saturation {
+            XCTAssertLessThanOrEqual(s.desert, 0.10, "no neon dunes or green patches")
+            XCTAssertGreaterThan(s.desert, 0, "still a touch warmer than the photo")
+            XCTAssertLessThanOrEqual(s.city, 0.04)
+        }
+        XCTAssertEqual(n.saturation.map(\.desert), [0.04, 0.07, 0.1])
+        XCTAssertEqual(n.contrast.last?.desert ?? 0, 0.08, accuracy: 1e-9)
+        XCTAssertGreaterThanOrEqual(n.hueRotate[0].desert, -3)
+        XCTAssertLessThanOrEqual(n.hueRotate[0].desert, 0)
+        for (a, b) in zip(n.saturation, SandGrade.mild.saturation) { XCTAssertLessThan(a.desert, b.desert) }
+        for (a, b) in zip(SandGrade.mild.saturation, SandGrade.strong.saturation) { XCTAssertLessThan(a.desert, b.desert) }
+        XCTAssertEqual(SandGrade.strong.saturation.last?.desert, 0.29, "«قوي» is exactly the old look")
+        XCTAssertEqual(SandGrade.strong.contrast.last?.desert, 0.17)
+        XCTAssertEqual(SandGrade.strong.hueRotate[0].desert, -7)
+        XCTAssertEqual(Set(SandGrade.looks.map(\.emissive)), [0.3], "the scene light treats every grade the same")
+    }
+
+    /// The setting: three choices, «طبيعي» by default, stored under its own key; the look in force follows it.
+    func testGradeChoiceDefaultsToNaturalAndFollowsTheStoredValue() throws {
+        let d = try XCTUnwrap(UserDefaults(suiteName: "sandgrade-\(UUID().uuidString)"))
+        XCTAssertEqual(SandGrade.choice(d), .natural)
+        XCTAssertEqual(SandGrade.defaultChoice.look, SandGrade.naturalWarm)
+        for (raw, look) in [("natural", SandGrade.naturalWarm), ("warm", SandGrade.mild), ("strong", SandGrade.strong)] {
+            d.set(raw, forKey: SandGrade.choiceKey)
+            XCTAssertEqual(SandGrade.choice(d).look, look, raw)
+        }
+        d.set("garbage", forKey: SandGrade.choiceKey)
+        XCTAssertEqual(SandGrade.choice(d), .natural, "unknown value falls back to the default")
+        XCTAssertEqual(SandGrade.Choice.allCases.map(\.label), ["طبيعي", "دافئ", "قوي"])
+    }
+
+    /// The registry carries the setting (one group of three, one default, the key `SandGrade` reads).
+    func testGradeIsRegisteredAsOneChoiceGroup() throws {
+        XCTAssertEqual(MapLayerCatalogCheck.issues(MapLayerCatalog.all), [])
+        let d = try XCTUnwrap(UserDefaults(suiteName: "sandgrade-reg-\(UUID().uuidString)"))
+        let reg = MapLayerRegistry(defaults: d)
+        let ids = SandGrade.Choice.allCases.map(MapLayerCatalog.gradeID)
+        XCTAssertEqual(ids.filter(reg.isActive), [MapLayerCatalog.gradeID(.natural)])
+        reg.setActive(MapLayerCatalog.gradeID(.strong))
+        XCTAssertEqual(d.string(forKey: SandGrade.choiceKey), "strong")
+        XCTAssertEqual(ids.filter(reg.isActive), [MapLayerCatalog.gradeID(.strong)], "exactly one chosen")
+        XCTAssertEqual(SandGrade.choice(d), .strong)
+        let section = try XCTUnwrap(MapLayersSheetModel.sections(registry: reg, mode: .explore).first { $0.id == "group.\(MapLayerCatalog.imageryGradeGroup)" })
+        XCTAssertEqual(section.rows.map(\.title), ["طبيعي", "دافئ", "قوي"])
+        XCTAssertNil(section.off, "an image grade is always one of the three")
+    }
+
+    /// The style carries every look and picks one with `saryGrade` (0 = «طبيعي»): a change of the setting is a config write.
+    func testPaintHoldsEveryLookChosenByTheGradeOption() throws {
+        let looks = SandGrade.looks
+        XCTAssertGreaterThanOrEqual(looks.count, 3)
+        XCTAssertEqual(Array(looks.prefix(3)), [SandGrade.naturalWarm, SandGrade.mild, SandGrade.strong], "index 0, 1, 2")
+        let paint = SandGrade.paint(Array(looks.prefix(3)))
+        let sat = try XCTUnwrap(paint["raster-saturation"] as? [Any])
+        XCTAssertEqual(sat[0] as? String, "interpolate")
+        XCTAssertEqual(sat[3] as? Double, 8)
+        let step = try XCTUnwrap(sat[4] as? [Any])
+        XCTAssertEqual(step[0] as? String, "step")
+        XCTAssertEqual((step[1] as? [Any])?[1] as? String, SandGrade.gradeKey)
+        XCTAssertEqual(step[3] as? Double, 1)
+        XCTAssertEqual(step[5] as? Double, 2)
+        let data = try JSONSerialization.data(withJSONObject: paint, options: [.sortedKeys])
+        XCTAssertFalse(data.isEmpty, "the paint is valid JSON")
+        /* Fixed to one look and one sand value (the high-res layer): the same numbers as the table. */
+        for c in SandGrade.Choice.allCases {
+            let fixed = SandGrade.paint(c.look, sand: 1)
+            let e = try XCTUnwrap(fixed["raster-saturation"] as? [Any])
+            XCTAssertEqual(e.last as? Double ?? 9, c.look.saturation.last!.desert, accuracy: 1e-9)
+            let city = SandGrade.paint(c.look, sand: 0)
+            XCTAssertEqual((city["raster-saturation"] as? [Any])?.last as? Double ?? 9, c.look.saturation.last!.city, accuracy: 1e-9)
+        }
+        let styled = SandGrade.apply(#"{"version":8,"sources":{},"layers":[{"id":"s","type":"raster","source":"mapbox://mapbox.satellite"}]}"#)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(styled.utf8)) as? [String: Any])
+        let schema = try XCTUnwrap(root["schema"] as? [String: Any])
+        XCTAssertEqual((schema[SandGrade.gradeKey] as? [String: Any])?["default"] as? Double, 0, "unset means «طبيعي»")
+    }
+
     func testRouterNarrationIsSpokenOnlyInArabic() {
         XCTAssertFalse(NavText.isArabic("Turn left onto طريق الملك فهد."), "Valhalla's English narration")
         XCTAssertTrue(NavText.isArabic("انعطف يسارًا إلى طريق الملك فهد"))
