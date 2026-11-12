@@ -46,6 +46,31 @@ enum IdleMapRules {
     }
 }
 
+/// EM3: the idle map's side column. The layers button is always first (`SaryMapControlItem.layers`), then «موقعي» and
+/// the compass (the Qibla shortcut), then what fits. Everything else sits behind ONE «المزيد» handle, so the column
+/// never grows past the safe height on a short phone (iPhone SE).
+enum IdleSideItem: String, Equatable { case locate, qibla, places, more }
+enum IdleMoreAction: String, Equatable, CaseIterable { case places, drone, realistic }
+
+enum IdleSideRules {
+    /// Below this screen height (points) the column keeps only the essentials. iPhone SE is 667, an iPhone 8 Plus 736.
+    static let compactHeight: Double = 760
+
+    static func isCompact(screenHeight: Double) -> Bool { screenHeight < compactHeight }
+
+    static func items(compact: Bool) -> [IdleSideItem] {
+        compact ? [.locate, .qibla, .more] : [.locate, .qibla, .places, .more]
+    }
+
+    /// What «المزيد» holds: «أماكني» too when the column had no room for it.
+    static func moreActions(compact: Bool) -> [IdleMoreAction] {
+        compact ? [.places, .drone, .realistic] : [.drone, .realistic]
+    }
+
+    /// Buttons in the column including the layers button: the bound the overlap tests assert.
+    static func columnCount(compact: Bool) -> Int { 1 + items(compact: compact).count }
+}
+
 extension OutingSession {
     /// A solo session that only carries the map: on this phone, in a private in-memory preference
     /// store, with no trail file, no road matching and no trail recording (nothing about the idle
@@ -65,6 +90,11 @@ extension OutingSession {
 }
 
 extension LiveOutingController {
+    /// «درون» from «المزيد»: the exploratory flight around the crosshair.
+    func idleDrone() {
+        if let c = exploreReading.reading?.center { MapVisualsHub.shared.fly(to: c) } else { toast("حرّك الخريطة قليلًا أولًا") }
+    }
+
     /// On the idle map «اتجه» does not plan on the carrier session: it hands the destination to the app, which opens the solo outing.
     func handOffToSolo(_ t: NavTarget) -> Bool {
         guard idleHome, let go = idleNavigate else { return false }
