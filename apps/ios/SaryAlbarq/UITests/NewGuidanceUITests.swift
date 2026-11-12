@@ -62,7 +62,7 @@ final class NewGuidanceUITests: XCTestCase {
         let sos = el(app, "outing-sos")
         XCTAssertTrue(sos.exists)
         XCTAssertGreaterThanOrEqual(sos.frame.width, 44)
-        XCTAssertLessThan(sos.frame.width, 60, "compact under the card")
+        XCTAssertLessThan(sos.frame.width, 72, "compact (48 pt disc + padding) under the card, not the 60 pt one")
         XCTAssertGreaterThan(sos.frame.minY, el(app, "nav.banner").frame.minY)
         XCTAssertTrue(el(app, "map.layers").exists || app.buttons["map.layers"].exists, "the shared layers button")
         sleep(2)

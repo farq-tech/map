@@ -21,31 +21,7 @@ struct LiveSheet: View {
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
             if controller.nav.isActive {
-                /* Navigating: the peek is the guidance bar (arrival time, what is left, «المزيد»,
-                 * «غيّر الوجهة», «أوقف التوجيه»). */
-                /* v2 (`NavDriveLayout`): one bar — the time left big, the trip line and the destination,
-                 * the surfaces or a progress bar, then «٣ معك», the walkie-talkie, «المزيد», «أوقف التوجيه».
-                 * «غيّر الوجهة» moves to the raised sheet (`NavTripOptions`). */
-                let v2 = controller.navBarV2
-                NavBottomBar(nav: controller.nav, end: controller.openEndChoice,
-                             more: { controller.modal = .actions },
-                             changeDestination: v2 ? nil : controller.navChangeDestination,
-                             peek: ui.sheetDetent == .peek,
-                             surfaces: controller.sheetShape(drive: theme.drive).surfaces,
-                             v2: v2,
-                             friends: v2 ? guideFriends : nil,
-                             talk: v2 ? guideTalk : nil)
-                if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
-                    /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة» (and «غيّر الوجهة»
-                     * when the compact bar has no room for it). */
-                    NavTripOptions(nav: controller.nav, routes: controller.navCanShowRoutes ? { controller.navShowRoutes() } : nil,
-                                   steps: { controller.modal = .navSteps },
-                                   overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
-                                   cameraMode: controller.mapFollowMode.rawValue,
-                                   changeDestination: controller.navChangeDestination,
-                                   changeInSheet: controller.navBarV2)
-                        .padding(.top, theme.space(.s))
-                }
+                guidanceBar
             } else if controller.idleHome {
                 IdleSheetContent(controller: controller, detent: ui.sheetDetent)
             } else {
@@ -282,6 +258,41 @@ struct LiveSheet: View {
             LivePanelView(controller: controller, panel: p, close: { controller.modal = nil })
                 .presentationDetents(p == .rally || p == .phone ? [.medium, .large] : [.large])
                 .presentationDragIndicator(.visible)
+        }
+    }
+
+    /// The guidance bar and, pulled up, its trip options (own property: keeps `body` type-checkable).
+    @ViewBuilder
+    private var guidanceBar: some View {
+        /* Navigating: the peek is the guidance bar (arrival time, what is left, «المزيد»,
+         * «غيّر الوجهة», «أوقف التوجيه»). */
+        /* v2 (`NavDriveLayout`): one bar — the time left big, the trip line and the destination,
+         * the surfaces or a progress bar, then «٣ معك», the walkie-talkie, «المزيد», «أوقف التوجيه».
+         * «غيّر الوجهة» moves to the raised sheet (`NavTripOptions`). */
+        let v2: Bool = controller.navBarV2
+        let change: (() -> Void)? = v2 ? nil : { controller.navChangeDestination() }
+        let friends: AnyView? = v2 ? guideFriends : nil
+        let talk: AnyView? = v2 ? guideTalk : nil
+        let hasSurfaces: Bool = controller.sheetShape(drive: theme.drive).surfaces
+        NavBottomBar(nav: controller.nav, end: controller.openEndChoice,
+                     more: { controller.modal = .actions },
+                     changeDestination: change,
+                     peek: ui.sheetDetent == .peek,
+                     surfaces: hasSurfaces,
+                     v2: v2,
+                     friends: friends,
+                     talk: talk)
+        if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
+            /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة» (and «غيّر الوجهة»
+             * when the compact bar has no room for it). */
+            let routes: (() -> Void)? = controller.navCanShowRoutes ? { controller.navShowRoutes() } : nil
+            NavTripOptions(nav: controller.nav, routes: routes,
+                           steps: { controller.modal = .navSteps },
+                           overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
+                           cameraMode: controller.mapFollowMode.rawValue,
+                           changeDestination: controller.navChangeDestination,
+                           changeInSheet: controller.navBarV2)
+                .padding(.top, theme.space(.s))
         }
     }
 
