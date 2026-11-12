@@ -41,7 +41,7 @@ struct LiveOutingScreen: View {
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
     @State private var realistic: RealisticScene?
-    @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
+    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
 
