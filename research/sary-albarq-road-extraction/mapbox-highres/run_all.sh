@@ -10,3 +10,4 @@ python3 detect_more.py; python3 eval_cov.py meijering             # Meijering (+
 python3 sam_road_baseline.py; python3 eval_sam_and_figs.py        # SAM-Road + figure
 python3 continuity.py ridge meijering; python3 zones.py
 python3 gate2.py; python3 gate_segments.py                        # OSM-proxy first pass
+./run_exp2.sh; python3 exp2_summary.py; python3 exp2_independent.py   # experiment 2 (spatial-holdout fine-tune)
