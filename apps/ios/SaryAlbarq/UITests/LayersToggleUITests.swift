@@ -42,6 +42,36 @@ final class LayersToggleUITests: XCTestCase {
         XCTAssertFalse(sevenDays.exists, "the rain-period picker closes when rainfall is not active")
     }
 
+    /// S1 (docs/ONE-MAP-UNIFICATION.md): the base-layer switch behaves exactly as before and the choice
+    /// survives a relaunch through the same stored key (`sary.map.layer.v1`).
+    func testBaseLayerSwitchStillWorksAndPersists() {
+        let app = XCUIApplication()
+        let args = ["-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "dark", "-SaryDrive", "0",
+                    "-SaryContext", "stopped", "-SaryExplore", "-SaryLiveModal", "layers"]
+        app.launchArguments = ["-resetState"] + args
+        app.launch()
+        app.allowLocationIfAsked()
+        let sheet = app.descendants(matching: .any)["explore.layers.sheet"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 20))
+        let satellite = app.descendants(matching: .any)["layer.satellite"]
+        let topo = app.descendants(matching: .any)["layer.topo"]
+        let standard = app.descendants(matching: .any)["layer.standard"]
+        XCTAssertTrue(topo.waitForExistence(timeout: 5))
+        XCTAssertTrue(satellite.isSelected, "satellite is the default")
+        standard.tap()
+        XCTAssertTrue(standard.isSelected && !satellite.isSelected, "one base layer at a time")
+        topo.tap()
+        XCTAssertTrue(topo.isSelected && !standard.isSelected)
+        app.terminate()
+
+        app.launchArguments = args // no -resetState: the stored choice is read back
+        app.launch()
+        app.allowLocationIfAsked()
+        XCTAssertTrue(app.descendants(matching: .any)["explore.layers.sheet"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.descendants(matching: .any)["layer.topo"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["layer.topo"].isSelected, "the choice persisted")
+    }
+
     func testLayersSheetSwitchesFlip() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "dark", "-SaryDrive", "0",
