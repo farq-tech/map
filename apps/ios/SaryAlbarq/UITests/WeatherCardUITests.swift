@@ -1,7 +1,8 @@
 import XCTest
 
-/// W-1: the map has ONE weather chip; the layer controls (play, scrubber, direction, rain period, off) are
-/// in the weather page it opens. The old floating card is still covered behind `-SaryLegacyWeatherCard`.
+/// The old floating card is the default (flag off: unchanged). With the unified weather on (`-SaryUnifiedWeather`, or
+/// «الواجهة الجديدة»), the map has ONE weather chip and the layer controls (play, scrubber, direction, rain period, off)
+/// are in the weather page it opens.
 final class WeatherCardUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -47,8 +48,8 @@ final class WeatherCardUITests: XCTestCase {
         }
     }
 
-    func testLegacyStripByDefaultThenExpandHideAndRestore() {
-        let app = launch(["-SaryLegacyWeatherCard"])
+    func testStripByDefaultThenExpandHideAndRestore() {
+        let app = launch()
         let strip = any(app, "weather.legend.strip")
         XCTAssertTrue(strip.waitForExistence(timeout: 15), "the default is the thin strip")
         XCTAssertTrue(any(app, "weather.clouds.playpause").exists, "play/pause lives on the strip")
@@ -74,8 +75,8 @@ final class WeatherCardUITests: XCTestCase {
         XCTAssertTrue(any(app, "weather.clouds.playpause").exists, "and the layer is still the clouds")
     }
 
-    func testLegacyTurningTheLayerOffIsSeparateFromHidingTheCard() {
-        let app = launch(["-SaryLegacyWeatherCard", "-SaryWeatherCard", "expanded"])
+    func testTurningTheLayerOffIsSeparateFromHidingTheCard() {
+        let app = launch(["-SaryWeatherCard", "expanded"])
         XCTAssertTrue(any(app, "weather.legend.off").waitForExistence(timeout: 15))
         any(app, "weather.legend.off").tap()
         XCTAssertFalse(any(app, "weather.legend.restore").waitForExistence(timeout: 3), "layer off: no card, no restore button")
@@ -83,7 +84,7 @@ final class WeatherCardUITests: XCTestCase {
     }
 
     func testOneChipOnTheMapAndNoFloatingCard() {
-        let app = launch()
+        let app = launch(["-SaryUnifiedWeather"])
         let chip = any(app, "weather.status.chip")
         XCTAssertTrue(chip.waitForExistence(timeout: 15), "the one weather chip")
         XCTAssertLessThan(chip.frame.height, 80)
@@ -94,7 +95,7 @@ final class WeatherCardUITests: XCTestCase {
     }
 
     func testChipOpensThePageWithEverythingWeather() {
-        let app = launch()
+        let app = launch(["-SaryUnifiedWeather"])
         any(app, "weather.status.chip").tap()
         XCTAssertTrue(any(app, "weather.sheet").waitForExistence(timeout: 10), "the chip opens the weather page")
         shot(app, "page-open-top")
@@ -107,7 +108,7 @@ final class WeatherCardUITests: XCTestCase {
     }
 
     func testRainPeriodAndLayerOffFromThePage() {
-        let app = launch()
+        let app = launch(["-SaryUnifiedWeather"])
         any(app, "weather.status.chip").tap()
         let rain = reveal(app, "weather.layer.rain")
         XCTAssertTrue(rain.isHittable, "rain is reachable in the page")

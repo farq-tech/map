@@ -237,6 +237,7 @@
 		60D51BC35F094628A8C9668A /* VisualsDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F7E9777207753A1040C308 /* VisualsDemo.swift */; };
 		614CE91C1C2E3E95B64D4EFD /* HomeShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6DDA799F2597AF9E6C669 /* HomeShortcuts.swift */; };
 		615D28EBDFD87B0D4DD11638 /* EntryContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */; };
+		61B403EBE47D69F088FAF312 /* UnifiedWeatherUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 360F5F7D5CDB145595790BBE /* UnifiedWeatherUITests.swift */; };
 		61BB44C28CF9267AA7A132DD /* GroupAudioStations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2DE2F3115F3550B408EB7BF /* GroupAudioStations.swift */; };
 		61BF79C26E735E13DDA6551C /* MediaShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F17910DB4903F123F2A30A /* MediaShareInbox.swift */; };
 		61CFE446CEBF0D9276DD62FF /* SaryCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46BC26B3EA93ED2F2925DFC /* SaryCards.swift */; };
@@ -777,6 +778,7 @@
 		359CEAF67C56A12CA9208807 /* RoundaboutExitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundaboutExitTests.swift; sourceTree = "<group>"; };
 		35CF24611C2342C90DFCFEAA /* GpsQualityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GpsQualityTests.swift; sourceTree = "<group>"; };
 		35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadSnap.swift; sourceTree = "<group>"; };
+		360F5F7D5CDB145595790BBE /* UnifiedWeatherUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedWeatherUITests.swift; sourceTree = "<group>"; };
 		361B62E3385F5D08DA22C135 /* openmeteo-forecast-desert-brief.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "openmeteo-forecast-desert-brief.json"; sourceTree = "<group>"; };
 		369B5E58B40EA041282A0DC4 /* LiveOutingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingScreen.swift; sourceTree = "<group>"; };
 		370DCDB03D1CCC30ACA124BC /* StoryGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryGeometry.swift; sourceTree = "<group>"; };
@@ -2069,6 +2071,7 @@
 				A6B3DBC08695A8D21743AB97 /* TripAutoNavUITests.swift */,
 				D6F594D397D26518C5CE8821 /* TripUITests.swift */,
 				8A38AC62F2DABDC03BCBC69B /* UITestSupport.swift */,
+				360F5F7D5CDB145595790BBE /* UnifiedWeatherUITests.swift */,
 				A59F37C5AA9DBD75A848FA27 /* UXSimplifyShotsUITests.swift */,
 				E3F492FD277E01CE0861B17D /* VisualsUITests.swift */,
 				471FE3D33FBD794FC1A7E01C /* VoiceNotesUITests.swift */,
@@ -2677,6 +2680,7 @@
 				F485262B8070E55703B90807 /* TripUITests.swift in Sources */,
 				78B21B297FDB0CF8AD714928 /* UITestSupport.swift in Sources */,
 				C1BAC6679389C4CEEEA2BB59 /* UXSimplifyShotsUITests.swift in Sources */,
+				61B403EBE47D69F088FAF312 /* UnifiedWeatherUITests.swift in Sources */,
 				E1C436FD5C40B6EDEBB8A836 /* VisualsUITests.swift in Sources */,
 				C9EB5180EB4884BAFA4FBDFA /* VoiceNotesUITests.swift in Sources */,
 				345181EBCDCEB5C75BD540D9 /* WalkieTalkieLabUITests.swift in Sources */,

@@ -361,6 +361,8 @@ final class WeatherOverlay {
         legend.outlookLoadingText = kind == .wind ? "نجيب الرياح…" : kind == .rain ? "نقدّر اتجاه المطر…" : "نقدّر اتجاه السحاب…"
         outlookTask = Task { [weak self] in
             var failed = false
+            /* Set when the server says «جارٍ التسخين» (202): wait that long, and say so meanwhile. */
+            var warmingS: Int?
             let display: CloudOutlookPresenter.Display?
             switch kind {
             case .wind:
@@ -372,19 +374,31 @@ final class WeatherOverlay {
                 failed = r == nil
                 display = r.flatMap { WindRainPresenter.rain($0, subject: subject) }
             default:
-                let o = try? await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
-                failed = o == nil
-                display = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
+                do {
+                    let o = try await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
+                    display = CloudOutlookPresenter.display(o, subject: subject)
+                } catch CloudOutlookError.warming(let s) {
+                    warmingS = s
+                    failed = true
+                    display = nil
+                } catch {
+                    failed = true
+                    display = nil
+                }
             }
             guard let self, !Task.isCancelled else { return }
             self.legend.outlookLoading = false
             self.legend.outlook = display
             if failed {
                 self.outlookFor = nil
-                /* One quiet retry a minute later (the server may have finished reading by then). */
+                if warmingS != nil {
+                    self.legend.outlookLoading = true
+                    self.legend.outlookLoadingText = "السحاب يتجه: جارٍ التسخين، نحاول بعد قليل"
+                }
+                /* One quiet retry (the server may have finished reading by then): a minute later, or as the server asked. */
                 if !self.outlookRetried {
                     self.outlookRetried = true
-                    try? await Task.sleep(nanoseconds: 60_000_000_000)
+                    try? await Task.sleep(nanoseconds: UInt64(warmingS ?? 60) * 1_000_000_000)
                     if !Task.isCancelled { self.refreshOutlook(isRetry: true) }
                 }
             } else {

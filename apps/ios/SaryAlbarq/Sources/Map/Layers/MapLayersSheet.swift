@@ -107,6 +107,29 @@ struct MapLayersSheet: View {
     // MARK: Generated sections
 
     @ViewBuilder private func sectionView(_ section: MapLayerSection) -> some View {
+        if let controller, WeatherPageFlag.isOn, section.id == "group.الطقس" {
+            weatherPageRow(controller)
+        } else {
+            plainSectionView(section)
+        }
+    }
+
+    /// W-3 (docs/UNIFIED-SURFACES.md): with the unified weather on, the layers sheet's weather group is ONE row that
+    /// opens the weather page (where the same rows, with the same identifiers, the rain period, play and the
+    /// scrubber live). The three quick chips above the base maps stay: one tap still turns a layer on or off, also from guidance.
+    private func weatherPageRow(_ controller: LiveOutingController) -> some View {
+        SarySection(title: "الطقس") {
+            SaryNavRow(title: "صفحة الطقس",
+                       detail: weather.kind == .none ? "اختر الطبقة وشوف الجو، كله في صفحة وحدة"
+                                                     : "\(weather.kind.label) · افتح الصفحة للتحكم والتفاصيل",
+                       systemImage: "cloud.sun.fill", id: "weather.layers.openPage") {
+                controller.modal = .weather
+            }
+            .padding(.horizontal, theme.space(.m))
+        }
+    }
+
+    @ViewBuilder private func plainSectionView(_ section: MapLayerSection) -> some View {
         SarySection(title: section.title, footer: footer(for: section)) {
             switch section.style {
             case .singleSelect: singleSelect(section)

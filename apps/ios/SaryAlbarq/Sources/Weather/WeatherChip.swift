@@ -146,19 +146,6 @@ struct WeatherChipView: View {
     }
 }
 
-/// The live screen's chip: observes the outing's weather (refreshes every minute for the age text).
-struct LiveWeatherChip: View {
-    let controller: LiveOutingController
-    @ObservedObject var weather: OutingWeather
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { ctx in
-            WeatherChipView(ui: weather.chip(now: ctx.date)) { controller.modal = .weather }
-        }
-        .task { controller.feedWeather(force: true) }
-    }
-}
-
 /// «طلعاتي»: a small icon + temperature for an outing's destination.
 struct DestinationWeatherBadge: View {
     let destination: OutingDestination

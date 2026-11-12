@@ -6,14 +6,23 @@ import SwiftUI
 /// the wadi estimate and the official warnings. The old floating card stays behind a DEBUG flag
 /// (`-SaryLegacyWeatherCard`) until the parity screenshots are accepted.
 enum WeatherPageFlag {
-    /// The pre-W-1 floating strip / card on the map (DEBUG launch argument only; Release is always the page).
-    static var legacyCard: Bool {
+    /// Build 49: the unified weather (one chip on the map + one page + one layers row) is part of the new UI,
+    /// so it follows «الواجهة الجديدة (تجريبي)» (off by default). The old floating strip / card stays the
+    /// default until the owner approves the parity screenshots. DEBUG launch arguments win:
+    /// `-SaryUnifiedWeather` forces the page, `-SaryLegacyWeatherCard` forces the old card.
+    static func unified(arguments: [String] = ProcessInfo.processInfo.arguments, newUIOn: Bool = NewUI.isOn()) -> Bool {
         #if DEBUG
-        return ProcessInfo.processInfo.arguments.contains("-SaryLegacyWeatherCard")
-        #else
-        return false
+        if arguments.contains("-SaryLegacyWeatherCard") { return false }
+        if arguments.contains("-SaryUnifiedWeather") { return true }
         #endif
+        return newUIOn
     }
+
+    /// The unified weather is on (the chip, the page, the layers row).
+    static var isOn: Bool { unified() }
+
+    /// The pre-W-1 floating strip / card on the map.
+    static var legacyCard: Bool { !isOn }
 }
 
 /// How the map (a UIKit overlay) asks the live screen to open the page. The live screen sets it on appear.
