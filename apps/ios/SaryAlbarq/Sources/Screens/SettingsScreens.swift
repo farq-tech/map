@@ -565,7 +565,8 @@ struct AdvancedSettingsView: View {
                 SaryToggleRow(title: NewUI.settingsTitle, subtitle: NewUI.settingsDetail, systemImage: "sparkles",
                               isOn: $newUI, id: "dev.newUI")
             }
-            if newUI {
+            /* `NewUI.enabled` also honours the DEBUG launch argument (`-SaryNewUI`), which the AppStorage flag does not see. */
+            if newUI || NewUI.enabled {
                 SarySection(title: "مظهر الواجهة الجديدة", footer: appearance.themeChoice.detail) {
                     SarySegmented(options: SaryThemeChoice.allCases, selection: $appearance.themeChoice,
                                   label: { $0.label }, id: "dev.newUI.theme", optionID: { "dev.newUI.theme.\($0.rawValue)" })

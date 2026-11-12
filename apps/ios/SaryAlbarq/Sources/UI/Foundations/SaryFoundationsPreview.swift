@@ -63,7 +63,9 @@ struct SaryThemesGallery: View {
         ScrollView {
             VStack(spacing: 0) {
                 ForEach([SaryThemeChoice.dark, .light, .dim]) { choice in
-                    panel(choice).accessibilityIdentifier("themes-panel-\(choice.rawValue)")
+                    panel(choice)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("themes-panel-\(choice.rawValue)")
                 }
             }
         }

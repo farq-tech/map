@@ -26,7 +26,7 @@ final class ThemesUITests: XCTestCase {
         XCTAssertTrue(el(app, "themes-gallery-root").waitForExistence(timeout: 20))
         for t in themes {
             XCTAssertTrue(el(app, "themes-panel-\(t)").exists, t)
-            let primary = app.buttons["themes-primary-\(t)"]
+            let primary = el(app, "themes-primary-\(t)")
             if !primary.isHittable { app.swipeUp() }
             XCTAssertTrue(primary.exists, t)
             XCTAssertGreaterThanOrEqual(primary.frame.height, 57.9, "\(t) primary stays 58 pt")

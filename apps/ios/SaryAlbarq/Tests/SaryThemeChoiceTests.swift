@@ -63,7 +63,7 @@ final class SaryThemeChoiceTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(SaryContrast.ratio(r.onAccent, r.accentFill), 4.5, "\(name) ink on the primary button")
             /* Big bold maneuver text on navBlue: WCAG large-text 3:1. */
             XCTAssertGreaterThanOrEqual(SaryContrast.ratio(r.onNavBlue, r.navBlue), 3, "\(name) ink on navBlue")
-            /* Glass over the brightest and the darkest map pixel (blur only softens that). KNOWN FAILURE (2026-11-13): dark theme secondary on glass over white is 3.96:1; the fix is a more opaque glass fill, not a lower threshold. */
+            /* Glass over the brightest and the darkest map pixel (blur only softens that). Glass opacity is 0.88 in every theme (0.78 gave 3.96:1 for dark secondary over white). */
             for backdrop in [UInt32(0xFFFFFF), 0x000000] {
                 let glass = mix(r.glassFill, r.glassAlpha, over: backdrop)
                 XCTAssertGreaterThanOrEqual(SaryContrast.ratio(r.textPrimary, glass), 7, "\(name) primary on glass over \(String(backdrop, radix: 16))")
@@ -74,7 +74,7 @@ final class SaryThemeChoiceTests: XCTestCase {
 
     func testGlassHasItsOwnTintPerTheme() {
         XCTAssertEqual(SaryPalette.dark().raw.glassFill, 0x1C1814)
-        XCTAssertEqual(SaryPalette.dark().raw.glassAlpha, 0.78)
+        XCTAssertEqual(SaryPalette.dark().raw.glassAlpha, 0.88)
         XCTAssertNotEqual(SaryPalette.light().raw.glassFill, SaryPalette.dark().raw.glassFill)
         XCTAssertNotEqual(SaryPalette.night().raw.glassFill, SaryPalette.dark().raw.glassFill)
     }
