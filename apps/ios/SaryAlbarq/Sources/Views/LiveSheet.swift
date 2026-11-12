@@ -1172,19 +1172,12 @@ struct GuideFriendsButton: View {
     static let shown = 3
 
     var body: some View {
-        let p = theme.palette
         Button(action: open) {
-            HStack(spacing: theme.space(.s)) {
-                HStack(spacing: -12) {
-                    ForEach(Array(friends.prefix(Self.shown))) { f in
-                        SaryAvatar(name: f.name, color: f.color, photo: f.photo, presence: f.presence, size: 30)
-                    }
-                }
-                Text(NavDriveLayout.friendsLabel(friends.count))
-                    .saryText(.headline, weight: .heavy)
-                    .foregroundStyle(p.textPrimary)
-                    .lineLimit(1)
-                    .fixedSize()
+            /* A narrow phone in drive mode: fewer avatars, then the count alone (the row never overflows). */
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: theme.space(.s)) { avatars(Self.shown); label }
+                HStack(spacing: theme.space(.s)) { avatars(1); label }
+                label
             }
             .frame(minHeight: NavDriveLayout.footerControl(drive: theme.drive))
             .contentShape(Rectangle())
@@ -1194,5 +1187,21 @@ struct GuideFriendsButton: View {
         .accessibilityLabel(Text("\(NavDriveLayout.friendsLabel(friends.count)): \(friends.prefix(Self.shown).map(\.name).joined(separator: "، "))"))
         .accessibilityHint(Text("يعرض الأصدقاء"))
         .accessibilityIdentifier("nav.friends")
+    }
+
+    private func avatars(_ n: Int) -> some View {
+        HStack(spacing: -12) {
+            ForEach(Array(friends.prefix(n))) { f in
+                SaryAvatar(name: f.name, color: f.color, photo: f.photo, presence: f.presence, size: 28)
+            }
+        }
+    }
+
+    private var label: some View {
+        Text(NavDriveLayout.friendsLabel(friends.count))
+            .saryText(.headline, weight: .heavy)
+            .foregroundStyle(theme.palette.textPrimary)
+            .lineLimit(1)
+            .fixedSize()
     }
 }

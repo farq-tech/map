@@ -930,7 +930,7 @@ struct NavBottomBar: View {
                 .saryText(.headline, weight: .heavy)
                 .foregroundStyle(p.textPrimary)
                 .lineLimit(1)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
                 .frame(minHeight: NavDriveLayout.footerControl(drive: theme.drive))
                 .background(Capsule().fill(p.sunken))
                 .contentShape(Capsule())
