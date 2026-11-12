@@ -23,10 +23,18 @@ struct LiveSheet: View {
             if controller.nav.isActive {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, «المزيد»,
                  * «غيّر الوجهة», «أوقف التوجيه»). */
+                /* v2 (`NavDriveLayout`): one bar — the time left big, the trip line and the destination,
+                 * the surfaces or a progress bar, then «٣ معك», the walkie-talkie, «المزيد», «أوقف التوجيه».
+                 * «غيّر الوجهة» moves to the raised sheet (`NavTripOptions`). */
+                let v2 = controller.navBarV2
                 NavBottomBar(nav: controller.nav, end: controller.openEndChoice,
                              more: { controller.modal = .actions },
-                             changeDestination: controller.navChangeDestination,
-                             peek: ui.sheetDetent == .peek)
+                             changeDestination: v2 ? nil : controller.navChangeDestination,
+                             peek: ui.sheetDetent == .peek,
+                             surfaces: controller.sheetShape(drive: theme.drive).surfaces,
+                             v2: v2,
+                             friends: v2 ? guideFriends : nil,
+                             talk: v2 ? guideTalk : nil)
                 if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
                     /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة» (and «غيّر الوجهة»
                      * when the compact bar has no room for it). */
@@ -34,7 +42,8 @@ struct LiveSheet: View {
                                    steps: { controller.modal = .navSteps },
                                    overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
                                    cameraMode: controller.mapFollowMode.rawValue,
-                                   changeDestination: controller.navChangeDestination)
+                                   changeDestination: controller.navChangeDestination,
+                                   changeInSheet: controller.navBarV2)
                         .padding(.top, theme.space(.s))
                 }
             } else if controller.idleHome {
@@ -274,6 +283,27 @@ struct LiveSheet: View {
                 .presentationDetents(p == .rally || p == .phone ? [.medium, .large] : [.large])
                 .presentationDragIndicator(.visible)
         }
+    }
+
+    /// The v2 guidance bar's «٣ معك» (`NavDriveLayout`): the friends' avatars, overlapping, and how many
+    /// are with me; a tap opens the people in the raised sheet. Nil in a solo outing or with nobody else.
+    private var guideFriends: AnyView? {
+        let friends = ui.participantsTab.participants.filter { !$0.isMe }
+        let items = NavDriveLayout.footer(friends: controller.groupUI.friends, friendCount: friends.count,
+                                          talk: false, arrived: false)
+        guard items.contains(.friends) else { return nil }
+        return AnyView(GuideFriendsButton(friends: friends) {
+            controller.selectedTab = .group
+            controller.actions.setSheetDetent(.half)
+        })
+    }
+
+    /// The v2 guidance bar's walkie-talkie: the round disc at the footer's size (no caption; the
+    /// channels are in «المزيد» → «الترددات»). Nil where the outing has none (a solo outing).
+    private var guideTalk: AnyView? {
+        guard controller.groupUI.walkieTalkie, !controller.tripEnded else { return nil }
+        return AnyView(SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: false, level: controller.pttLevel,
+                                     discSize: NavDriveLayout.footerControl(drive: theme.drive)))
     }
 
     /// «المزيد» → «الطلعة»: pause / end for the leader, leave for everyone, the settings.
@@ -1131,5 +1161,52 @@ struct SettingsPushHost<Page: View>: View {
             t.disablesAnimations = true
             withTransaction(t) { dismiss() }
         }
+    }
+}
+
+// MARK: - The guidance bar's friends
+
+/// «٣ معك» in the v2 guidance bar (`NavDriveLayout`): up to three friends' avatars (their car colour
+/// and presence, `SaryAvatar`), overlapping, and the count. One 44 pt+ target: the people in the sheet.
+struct GuideFriendsButton: View {
+    var friends: [ParticipantUI]
+    var open: () -> Void
+    @Environment(\.sary) private var theme
+
+    /// Avatars drawn before «…معك» says the rest.
+    static let shown = 3
+
+    var body: some View {
+        Button(action: open) {
+            /* A narrow phone in drive mode: fewer avatars, then the count alone (the row never overflows). */
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: theme.space(.s)) { avatars(Self.shown); label }
+                HStack(spacing: theme.space(.s)) { avatars(1); label }
+                label
+            }
+            .frame(minHeight: NavDriveLayout.footerControl(drive: theme.drive))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(NavDriveLayout.friendsLabel(friends.count)): \(friends.prefix(Self.shown).map(\.name).joined(separator: "، "))"))
+        .accessibilityHint(Text("يعرض الأصدقاء"))
+        .accessibilityIdentifier("nav.friends")
+    }
+
+    private func avatars(_ n: Int) -> some View {
+        HStack(spacing: -12) {
+            ForEach(Array(friends.prefix(n))) { f in
+                SaryAvatar(name: f.name, color: f.color, photo: f.photo, presence: f.presence, size: 28)
+            }
+        }
+    }
+
+    private var label: some View {
+        Text(NavDriveLayout.friendsLabel(friends.count))
+            .saryText(.headline, weight: .heavy)
+            .foregroundStyle(theme.palette.textPrimary)
+            .lineLimit(1)
+            .fixedSize()
     }
 }

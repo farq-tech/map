@@ -1182,3 +1182,76 @@ final class NavRouteRevealTests: XCTestCase {
         XCTAssertGreaterThan(NavRouteReveal.rerouteHaloOpacity, NavMapDrawer.haloOpacity, "the reroute darkens the halo")
     }
 }
+
+/// The live screen while guiding (`NavDriveLayout`, owner-approved redesign): the bar's footer in a group
+/// and a solo outing, the compact «طوارئ», the peek, and the bar's numbers.
+final class NavDriveLayoutTests: XCTestCase {
+    func testFooterInAGroupOuting() {
+        let g = LiveScreenRules.group
+        XCTAssertEqual(NavDriveLayout.footer(friends: g.friends, friendCount: 3, talk: g.walkieTalkie, arrived: false),
+                       [.friends, .talk, .more, .stop])
+        XCTAssertEqual(NavDriveLayout.footer(friends: g.friends, friendCount: 0, talk: g.walkieTalkie, arrived: false),
+                       [.talk, .more, .stop], "nobody else joined yet: no «٠ معك»")
+        XCTAssertEqual(NavDriveLayout.footer(friends: g.friends, friendCount: 3, talk: g.walkieTalkie, arrived: true),
+                       [.friends, .talk, .more], "arrived: the arrival card has its own button")
+    }
+
+    func testSoloOutingHidesFriendsAndTalk() {
+        let s = LiveScreenRules.solo
+        XCTAssertEqual(NavDriveLayout.footer(friends: s.friends, friendCount: 4, talk: s.walkieTalkie, arrived: false), [.more, .stop])
+    }
+
+    func testCompactSOSStaysAboveTheMinimumTarget() {
+        XCTAssertEqual(NavDriveLayout.sosSize(card: true, driving: true), 48)
+        XCTAssertEqual(NavDriveLayout.sosSize(card: true, driving: false), 48)
+        XCTAssertEqual(NavDriveLayout.sosSize(card: false, driving: true), 60, "the previous sizes without the card")
+        XCTAssertEqual(NavDriveLayout.sosSize(card: false, driving: false), 52)
+        XCTAssertGreaterThanOrEqual(NavDriveLayout.sosSize(card: true, driving: true), 44)
+        for drive in [true, false] {
+            XCTAssertGreaterThanOrEqual(NavDriveLayout.footerControl(drive: drive), 44)
+        }
+    }
+
+    func testPeekFitsTheFooterAndTheSurfaces() {
+        for drive in [true, false] {
+            let plain = NavDriveLayout.peekHeight(drive: drive, surfaces: false)
+            let surfaces = NavDriveLayout.peekHeight(drive: drive, surfaces: true)
+            XCTAssertGreaterThan(surfaces, plain, "the surfaces' line is taller than the progress bar")
+            XCTAssertGreaterThan(plain, SheetDetentUI.peekHeight(drive: drive, surfaces: false), "room for the footer row")
+            XCTAssertEqual(SheetDetentUI.peekHeight(drive: drive, surfaces: true, guide: true), surfaces)
+            XCTAssertEqual(LiveSheetShape(drive: drive, trip: false, surfaces: false, guide: true).peekHeight, plain)
+            /* The stopped quick row keeps its own peek. */
+            XCTAssertEqual(SheetDetentUI.peekHeight(drive: drive, trip: true, guide: true), SheetDetentUI.peekHeight(drive: drive, trip: true))
+        }
+        XCTAssertGreaterThan(NavDriveLayout.peekHeight(drive: true, surfaces: false), NavDriveLayout.peekHeight(drive: false, surfaces: false))
+    }
+
+    func testProgressIsClamped() {
+        XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 2_500) ?? -1, 0.75, accuracy: 0.0001)
+        XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 12_000), 0, "a reroute longer than the route")
+        XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 0), 1)
+        XCTAssertNil(NavDriveLayout.progress(totalM: 0, remainingM: 0))
+        XCTAssertNil(NavDriveLayout.progress(totalM: nil, remainingM: 100))
+        XCTAssertNil(NavDriveLayout.progress(totalM: 100, remainingM: nil))
+    }
+
+    func testTripLineAndTimeParts() {
+        let line = NavDriveLayout.tripLine(meters: 18_000, eta: Date())
+        XCTAssertTrue(line.contains("كم"), line)
+        XCTAssertTrue(line.contains("وصول "), line)
+        XCTAssertTrue(line.contains(" · "), line)
+        XCTAssertEqual(NavDriveLayout.tripLine(meters: nil, eta: nil), "")
+        let t = NavDriveLayout.timeParts(seconds: 25 * 60)
+        XCTAssertEqual(t.unit, "د")
+        XCTAssertEqual(t.value + " " + t.unit, NavText.remaining(seconds: 25 * 60))
+        let short = NavDriveLayout.timeParts(seconds: 30)
+        XCTAssertEqual(short.value, NavText.remaining(seconds: 30), "under a minute: the words whole")
+        XCTAssertEqual(short.unit, "")
+        XCTAssertEqual(NavDriveLayout.friendsLabel(3), "٣ معك")
+    }
+
+    func testTheRedesignIsOnByDefault() {
+        /* `-SaryDriveV1` (DEBUG) brings the previous layout back; the unit tests run without it. */
+        XCTAssertEqual(NavDriveLayout.v2, !ProcessInfo.processInfo.arguments.contains("-SaryDriveV1"))
+    }
+}

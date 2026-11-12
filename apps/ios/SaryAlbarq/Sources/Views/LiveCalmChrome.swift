@@ -198,13 +198,17 @@ struct LovableSOS: View {
     var trigger: () -> Void
     /// False in a solo outing: no «نرسل طوارئ…» countdown (`SarySOSButton.countdown`).
     var countdown = true
+    /// «اضغط مطوّل» under the disc; off for the compact «طوارئ» under the maneuver card (`NavDriveLayout`).
+    var caption = true
 
     var body: some View {
         VStack(spacing: 4) {
             SarySOSButton(state: state, trigger: trigger, size: size, compactLabel: true, countdown: countdown)
                 .padding(4)
                 .chromeFrame("sos")
-            LovableCaption(text: "اضغط مطوّل")
+            if caption {
+                LovableCaption(text: "اضغط مطوّل")
+            }
         }
     }
 }
