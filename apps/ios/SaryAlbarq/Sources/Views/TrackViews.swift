@@ -122,7 +122,7 @@ struct TrackDetailView: View {
                 HStack(spacing: theme.space(.s)) {
                     SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "track.close", visual: 44, surface: .glass, action: close)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(subject.name).saryText(.headline, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(1)
+                        Text(subject.name).saryText(.headline, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         Text(subject.origin).saryText(.caption).foregroundStyle(theme.palette.textSecondary)
                     }
                     .padding(.horizontal, theme.space(.m))
