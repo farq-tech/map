@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+from shapely.geometry import LineString, box
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from annotator.geo import lonlat_to_tile, region_cell, tile_to_lonlat  # noqa: E402
@@ -59,6 +60,7 @@ def main() -> None:
 
     fc = json.load(open(a.osm))
     win_cls: dict = defaultdict(lambda: defaultdict(float))
+    win_lines: dict = defaultdict(list)  # window -> [(fclass, coords)] raw OSM geometry (clipped later)
     win_wind: dict = defaultdict(float)
     for f in fc["features"]:
         cls = f["properties"].get("fclass")
@@ -76,6 +78,8 @@ def main() -> None:
             chord = float(np.hypot(*(pts[-1] - pts[0])) * m_per_tile)
             wind = total >= 300 and chord > 0 and total / chord >= 1.25
             # sample points along the way every ~15 m, attribute their length share to windows
+            for wk in {window_of(q[0], q[1]) for q in pts}:
+                win_lines[wk].append((cls, [(x, y) for x, y, *_ in coords]))
             for p0, p1, sl in zip(pts[:-1], pts[1:], seg):
                 k = max(1, int(sl // 15))
                 for t in (np.arange(k) + 0.5) / k:
@@ -101,7 +105,16 @@ def main() -> None:
         w, n = tile_to_lonlat(x0, y0, Z)[0], tile_to_lonlat(x0, y0, Z)[1]
         e, s = tile_to_lonlat(x0 + N, y0 + N, Z)
         cx, cy = (w + e) / 2, (n + s) / 2
+        wb = box(w, s, e, n)
+        osm_lines = []
+        for cls_, cs in win_lines.get((x0, y0), []):
+            clipped = LineString(cs).intersection(wb)
+            for part in ([clipped] if clipped.geom_type == "LineString" else list(getattr(clipped, "geoms", []))):
+                if part.geom_type == "LineString" and not part.is_empty:
+                    part = part.simplify(3e-5)  # ~3 m
+                    osm_lines.append({"c": cls_, "xy": [[round(x, 6), round(y, 6)] for x, y in part.coords]})
         cands[(x0, y0)] = {
+            "osm_lines": osm_lines,
             "id": f"w{Z}_{x0}_{y0}_{N}x{N}", "tiles": {"z": Z, "x0": x0, "y0": y0, "nx": N, "ny": N},
             "centre": [round(cx, 6), round(cy, 6)], "bbox": [round(w, 6), round(s, 6), round(e, 6), round(n, 6)],
             "region_cell": region_cell(cx, cy), "source": "osm_weak",
@@ -136,7 +149,7 @@ def main() -> None:
         chosen[cid] = {
             "id": cid, "tiles": {"z": Z, "x0": x0, "y0": y0, "nx": N, "ny": N},
             "centre": [round(cx, 6), round(cy, 6)], "bbox": [round(w, 6), round(s, 6), round(e, 6), round(n, 6)],
-            "region_cell": region_cell(cx, cy), "source": "study_area",
+            "region_cell": region_cell(cx, cy), "source": "study_area", "osm_lines": [],
             "type_hint_m": hint, "confidence": {t: 0.6 for t in hint}, "hint_note": note,
         }
 
@@ -148,7 +161,7 @@ def main() -> None:
         "window_spec": {"zoom": Z, "nx": N, "ny": N, "scale": 2},
         "windows": sorted(chosen.values(), key=lambda c: c["id"]),
     }
-    Path(a.out).write_text(json.dumps(out, ensure_ascii=False, indent=1))
+    Path(a.out).write_text(json.dumps(out, ensure_ascii=False, separators=(',', ':')))
     print(f"wrote {a.out}: {len(chosen)} windows, {len({c['region_cell'] for c in chosen.values()})} regions", file=sys.stderr)
 
 

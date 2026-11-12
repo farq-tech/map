@@ -269,8 +269,8 @@ def validate_geojson(fc: dict) -> dict:
             raise SampleError("إحداثيات خارج النطاق (يجب WGS84 lon/lat)")
         p = dict(f.get("properties") or {})
         kind = p.get("kind", "centerline")
-        if kind not in ("centerline", "edge"):
-            raise SampleError("kind يجب أن يكون centerline أو edge")
+        if kind not in ("centerline", "edge", "negative"):
+            raise SampleError("kind يجب أن يكون centerline أو edge أو negative")
         fid = str(p.get("id") or uuid.uuid4().hex[:10])
         if fid in ids:
             raise SampleError("معرّف ميزة مكرر")
@@ -284,6 +284,28 @@ def validate_geojson(fc: dict) -> dict:
             if cl not in config.CLARITY:
                 raise SampleError("درجة وضوح غير صالحة (1-4)")
             props.update(track_type=tt, clarity=cl, track_id=fid)
+            src = p.get("source", "human")
+            if src not in ("human", "model_suggested", "human_verified"):
+                raise SampleError("source غير صالح")
+            props["source"] = src
+            if src == "human_verified":
+                for k in ("proposal_id", "proposal_source", "type_source"):
+                    if p.get(k):
+                        props[k] = str(p[k])
+                props["edited"] = bool(p.get("edited"))
+            if src == "model_suggested":
+                if not p.get("suggestion_id"):
+                    raise SampleError("مسار مقترح بلا suggestion_id")
+                props["suggestion_id"] = str(p["suggestion_id"])
+                props["edit_state"] = "corrected" if p.get("edit_state") == "corrected" else "accepted"
+        elif kind == "negative":
+            cat = p.get("category", "other")
+            if cat not in config.NEGATIVE_CATEGORIES:
+                raise SampleError(f"فئة «ليس درب» غير معروفة: {cat}")
+            props["category"] = cat
+            for k in ("proposal_id", "proposal_source", "reason"):
+                if p.get(k):
+                    props[k] = str(p[k])
         else:
             props.update(track_id=str(p.get("track_id") or ""), side=p.get("side"))
         if p.get("note"):
@@ -322,12 +344,21 @@ def stats_of(fc: dict) -> dict:
         s["length_m"] += line_length_m(f["geometry"]["coordinates"])
     for s in by_type.values():
         s["length_m"] = round(s["length_m"], 2)
+    neg: dict[str, dict] = {}
+    for f in rasterize.negative_features(fc):
+        c = neg.setdefault(f["properties"]["category"], {"n": 0, "length_m": 0.0})
+        c["n"] += 1
+        c["length_m"] += line_length_m(f["geometry"]["coordinates"])
+    for c in neg.values():
+        c["length_m"] = round(c["length_m"], 2)
     clar = {}
     for f in rasterize.centerline_features(fc):
         clar[str(f["properties"]["clarity"])] = clar.get(str(f["properties"]["clarity"]), 0) + 1
     return {
         "n_tracks": len(rasterize.centerline_features(fc)),
         "n_edges": len(rasterize.edge_features(fc)),
+        "n_negatives": len(rasterize.negative_features(fc)),
+        "negatives_by_category": neg,
         "by_type": by_type,
         "clarity_counts": clar,
     }
@@ -343,7 +374,9 @@ def save_annotations(sample_id: str, fc_in: dict, updates: dict | None = None,
     fc["sample_id"] = sample_id
     fc["crs_note"] = "WGS84 lon/lat (RFC 7946). Pixel grid + CRS of the image: see metadata.json georef"
     masks = rasterize.make_masks(grid, fc, width_m)
+    masks["neg"] = rasterize.make_negative_mask(grid, fc)
     # outputs
+    Image.fromarray(masks["neg"]).save(sdir / "mask_negatives.png")
     Image.fromarray(masks["mask"]).save(sdir / "mask.png")
     Image.fromarray(masks["types"]).save(sdir / "mask_types.png")
     Image.fromarray(masks["edges"]).save(sdir / "mask_edges.png")
@@ -365,7 +398,11 @@ def save_annotations(sample_id: str, fc_in: dict, updates: dict | None = None,
         meta["clarity"] = None if u["clarity"] is None else int(u["clarity"])
     if "notes" in u:
         meta["notes"] = str(u["notes"])[:2000]
+    if "complete" in u:
+        meta["complete"] = bool(u["complete"])
+    meta.setdefault("complete", False)
     st = stats_of(fc)
+    sug = suggestion_stats(sample_id, fc, meta, u.get("rejected_suggestions"))
     meta["annotation"] = {
         **st,
         "mask_width_m": width_m,
@@ -373,11 +410,59 @@ def save_annotations(sample_id: str, fc_in: dict, updates: dict | None = None,
         "mask_coverage": round(float((masks["mask"] > 0).mean()), 6),
         "tracks_sha256": hashlib.sha256(json.dumps(fc, sort_keys=True).encode()).hexdigest(),
         "annotated_utc": _now(),
+        "suggestions": sug,
     }
-    meta["status"] = "annotated" if st["n_tracks"] else "new"
+    meta["status"] = "annotated" if (st["n_tracks"] or meta["complete"] or st["n_negatives"]) else "new"
     meta["updated_utc"] = _now()
     _write_json(sdir / "metadata.json", meta)
     return meta
+
+
+def read_suggestions(sample_id: str) -> dict | None:
+    p = sample_dir(sample_id) / "suggestions.geojson"
+    return json.loads(p.read_text()) if p.is_file() else None
+
+
+def suggestion_stats(sample_id: str, fc: dict, meta: dict, rejected_now: list | None) -> dict | None:
+    """Provenance log: how many model suggestions were accepted / corrected / rejected / added-by-hand.
+
+    The correction rate is the model-quality signal: the lower the share of suggestions that needed
+    a fix or a delete, the better the model. The ORIGINAL model lines stay in suggestions.geojson.
+    """
+    sg = read_suggestions(sample_id)
+    if not sg:
+        return None
+    st = meta.setdefault("suggestion_state", {"rejected_ids": []})
+    rej = set(st["rejected_ids"]) | {str(x) for x in (rejected_now or [])}
+    st["rejected_ids"] = sorted(rej)
+    ids = {f["properties"]["id"] for f in sg["features"]}
+    len_of = {f["properties"]["id"]: line_length_m(f["geometry"]["coordinates"]) for f in sg["features"]}
+    acc = {"accepted": [], "corrected": []}
+    human = 0
+    human_m = 0.0
+    for f in rasterize.centerline_features(fc):
+        p = f["properties"]
+        if p.get("source") == "model_suggested" and p.get("suggestion_id") in ids:
+            acc["corrected" if p["edit_state"] == "corrected" else "accepted"].append(p["suggestion_id"])
+        else:
+            human += 1
+            human_m += line_length_m(f["geometry"]["coordinates"])
+    accepted_ids = set(acc["accepted"]) | set(acc["corrected"])
+    rejected = rej - accepted_ids
+    pending = ids - accepted_ids - rejected
+    n = len(ids)
+    kept_m = sum(len_of[i] for i in accepted_ids)
+    out = {
+        "backend": sg.get("backend"), "n_suggested": n, "accepted_unchanged": len(acc["accepted"]),
+        "accepted_corrected": len(acc["corrected"]), "rejected": len(rejected), "pending": len(pending),
+        "added_by_hand": human, "model_length_m": round(sum(len_of.values()), 1),
+        "kept_length_m": round(kept_m, 1), "human_only_length_m": round(human_m, 1),
+        # precision proxy: share of model lines the owner kept; recall proxy: share of the owner's final length the model found
+        "precision_proxy": round(len(accepted_ids) / n, 3) if n else None,
+        "recall_proxy": round(kept_m / (kept_m + human_m), 3) if (kept_m + human_m) else None,
+        "correction_rate": round((len(acc["corrected"]) + len(rejected) + human) / max(n + human, 1), 3) if (n - len(pending) + human) else None,
+    }
+    return out
 
 
 def read_tracks(sample_id: str) -> dict:

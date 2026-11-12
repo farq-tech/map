@@ -20,7 +20,7 @@ from annotator import config  # noqa: E402
 @pytest.fixture(autouse=True)
 def clean_dirs():
     import shutil
-    for d in (config.SAMPLES_DIR, config.BATCH_DIR, config.EXPORT_DIR, config.DATA_DIR / "cache"):
+    for d in (config.SAMPLES_DIR, config.BATCH_DIR, config.EXPORT_DIR, config.DATA_DIR / "cache", config.DATA_DIR / "review"):
         shutil.rmtree(d, ignore_errors=True)
     config.ensure_dirs()
     yield
