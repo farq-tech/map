@@ -795,7 +795,7 @@ private struct LiveTopStack: View {
         let nav = controller.nav
         switch nav.phase {
         case .guiding:
-            NavManeuverBanner(nav: nav)
+            NavManeuverBanner(nav: nav, showsSurfaceStrip: nav.surfaceAhead == nil)
                 .transition(SaryTransition.banner(theme))
             if let moved = controller.navMemberMovedMeters, let t = nav.target {
                 Button { controller.navigateToMember(t.memberId ?? "") } label: {

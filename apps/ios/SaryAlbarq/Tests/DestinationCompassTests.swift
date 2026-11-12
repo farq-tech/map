@@ -230,3 +230,69 @@ final class DestinationCompassTests: XCTestCase {
         XCTAssertEqual(pick.map(CompassSpring.line), "روضة خريم · ربيع واضح · ٦ كم²")
     }
 }
+
+/// «زفلت ١٢ كم ← ترابي ٢ كم ← بر مفتوح ٤ كم»: the route's surfaces in driving order (`NavSurfaceAhead`).
+final class NavSurfaceAheadTests: XCTestCase {
+    private typealias P = NavSurfaceAhead.Piece
+
+    func testMergesAdjacentAndKeepsOrder() {
+        let s = NavSurfaceAhead.spans([P(kind: .paved, meters: 8_000), P(kind: .paved, meters: 4_000), P(kind: .unpaved, meters: 2_000),
+                                       P(kind: .terrain, meters: 4_000)])
+        XCTAssertEqual(s.map(\.kind), [.paved, .unpaved, .terrain])
+        XCTAssertEqual(s.map(\.meters), [12_000, 2_000, 4_000])
+        XCTAssertEqual(s.map(\.startM), [0, 12_000, 14_000])
+        XCTAssertEqual(NavSurfaceAhead.line(s), "زفلت ١٢ كم ← ترابي ٢ كم ← بر مفتوح ٤ كم")
+    }
+
+    func testShortRunsFoldIntoANeighbour() {
+        /* A 60 m dirt driveway between two asphalt stretches disappears and the asphalt joins up. */
+        let s = NavSurfaceAhead.spans([P(kind: .paved, meters: 5_000), P(kind: .unpaved, meters: 60), P(kind: .paved, meters: 3_000),
+                                       P(kind: .gridSnap, meters: 40), P(kind: .terrain, meters: 2_000)])
+        XCTAssertEqual(s.map(\.kind), [.paved, .terrain])
+        XCTAssertEqual(s[0].meters, 8_100, accuracy: 1e-9)
+        XCTAssertEqual(s.reduce(0) { $0 + $1.meters }, 10_100, accuracy: 1e-9)
+        /* At the very start a sliver goes into the next stretch. */
+        let first = NavSurfaceAhead.spans([P(kind: .unknown, meters: 30), P(kind: .paved, meters: 1_000)])
+        XCTAssertEqual(first.map(\.kind), [.paved])
+        XCTAssertEqual(first[0].meters, 1_030, accuracy: 1e-9)
+    }
+
+    func testRemainingCutsUnderTheCar() {
+        let s = NavSurfaceAhead.spans([P(kind: .paved, meters: 12_000), P(kind: .unpaved, meters: 2_000), P(kind: .terrain, meters: 4_000)])
+        let r = NavSurfaceAhead.remaining(s, done: 9_000)
+        XCTAssertEqual(r.map(\.kind), [.paved, .unpaved, .terrain])
+        XCTAssertEqual(r[0].meters, 3_000, accuracy: 1e-9)
+        XCTAssertEqual(r[0].startM, 9_000, accuracy: 1e-9)
+        XCTAssertEqual(NavSurfaceAhead.remaining(s, done: 13_000).map(\.kind), [.unpaved, .terrain])
+        /* 50 m of asphalt left: folded into the dirt that follows. */
+        let sliver = NavSurfaceAhead.remaining(s, done: 11_950)
+        XCTAssertEqual(sliver.map(\.kind), [.unpaved, .terrain])
+        XCTAssertEqual(sliver[0].meters, 2_050, accuracy: 1e-9)
+        XCTAssertTrue(NavSurfaceAhead.remaining(s, done: 18_000).isEmpty)
+    }
+
+    func testShowsOnlyWithDirtOrOffRoad() {
+        XCTAssertFalse(NavSurfaceAhead.shows(NavSurfaceAhead.spans([P(kind: .paved, meters: 9_000)])))
+        XCTAssertFalse(NavSurfaceAhead.shows(NavSurfaceAhead.spans([P(kind: .paved, meters: 9_000), P(kind: .unknown, meters: 500)])))
+        XCTAssertFalse(NavSurfaceAhead.shows([]))
+        XCTAssertTrue(NavSurfaceAhead.shows(NavSurfaceAhead.spans([P(kind: .paved, meters: 9_000), P(kind: .rough, meters: 500)])))
+    }
+
+    func testLineListsThreeThenPlus() {
+        let s = NavSurfaceAhead.spans([P(kind: .paved, meters: 3_000), P(kind: .unpaved, meters: 1_000), P(kind: .terrain, meters: 2_000),
+                                       P(kind: .rough, meters: 500)])
+        XCTAssertEqual(NavSurfaceAhead.line(s), "زفلت ٣ كم ← ترابي ١ كم ← بر مفتوح ٢ كم ← +")
+        XCTAssertEqual(NavSurfaceAhead.accessibility(s), "الباقي من الطريق: زفلت ٣ كم، ثم ترابي ١ كم، ثم بر مفتوح ٢ كم، ثم وعر ٥٠٠ م")
+    }
+
+    func testPiecesFromRunsUseTheCachedSums() {
+        let a = LngLat(lng: 46.70, lat: 24.70), b = LngLat(lng: 46.70, lat: 24.71), c = LngLat(lng: 46.70, lat: 24.72)
+        let runs = [NavSurfaceRun(kind: .paved, coordinates: [a, b]), NavSurfaceRun(kind: .unpaved, coordinates: [b, c]),
+                    NavSurfaceRun(kind: .terrain, coordinates: [c])]
+        let measured = NavSurfaceAhead.pieces(runs)
+        let cached = NavSurfaceAhead.pieces(runs, cum: NavRouteMetrics.surfaceCumulative(runs))
+        XCTAssertEqual(measured.count, 2)
+        XCTAssertEqual(measured.map(\.kind), cached.map(\.kind))
+        XCTAssertEqual(measured[1].meters, cached[1].meters, accuracy: 1e-6)
+    }
+}

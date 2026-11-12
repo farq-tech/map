@@ -175,6 +175,8 @@ enum NavBarLayout {
 /// bottom bar now.
 struct NavManeuverBanner: View {
     @ObservedObject var nav: NavSession
+    /// The per-surface km strip under the maneuver; off where the guidance bar lists the surfaces in order.
+    var showsSurfaceStrip = true
     @StateObject private var pip = NavPictureInPicture()
     @Environment(\.sary) private var theme
     @Environment(\.layoutDirection) private var layoutDirection
@@ -270,7 +272,7 @@ struct NavManeuverBanner: View {
                 }
             }
             /* Asphalt / dirt / off-road km still ahead, in the map's colours (only when dirt or off-road is left). */
-            if !nav.rerouting, let km = nav.remainingSurfaces {
+            if showsSurfaceStrip, !nav.rerouting, let km = nav.remainingSurfaces {
                 NavSurfaceKmStrip(km: km, labels: false)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
@@ -587,12 +589,16 @@ struct NavBottomBar: View {
     var changeDestination: (() -> Void)? = nil
     /// The bar is the sheet's 70 pt peek (the live screen): no room for a third line.
     var peek = false
+    /// The route's surfaces in driving order under the numbers (`NavSurfaceAheadStrip`); the live screen's
+    /// peek is taller for it (`LiveSheetShape.surfaces`).
+    var surfaces = false
     @Environment(\.sary) private var theme
     @Environment(\.saryWidthClass) private var widthClass
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let p = theme.palette
+        VStack(alignment: .leading, spacing: 6) {
         Group {
             if nav.phase == .arrived {
                 HStack(spacing: theme.space(.m)) {
@@ -609,6 +615,11 @@ struct NavBottomBar: View {
                     row(compact: true, change: true)
                 }
             }
+        }
+        /* «زفلت ١٢ كم ← ترابي ٢ كم ← بر مفتوح ٤ كم»: only on a route with dirt or off-road in it. */
+        if surfaces, nav.phase != .arrived, let ahead = nav.surfaceAhead {
+            NavSurfaceAheadStrip(ui: ahead)
+        }
         }
         .padding(.horizontal, theme.space(.l))
         .frame(maxWidth: .infinity)
@@ -974,5 +985,95 @@ extension NavSession {
         let done = max(0, r.distanceM - p.distanceRemainingM)
         let k = NavSurfaceKm.remaining(r.surfaceRuns, from: done, cum: NavRouteMetrics.tables(r).surfaceCum, routeM: p.distanceRemainingM)
         return k.showsSplit ? k : nil
+    }
+
+    /// The route's surfaces in driving order and the metres already driven (`NavSurfaceAhead`), only when
+    /// the route has dirt or off-road in it (nil when all asphalt or without surface data).
+    var surfaceAhead: NavSurfaceAheadUI? {
+        guard let r = active, !r.surfaceRuns.isEmpty else { return nil }
+        let spans = NavSurfaceAhead.spans(NavSurfaceAhead.pieces(r.surfaceRuns, cum: NavRouteMetrics.tables(r).surfaceCum))
+        guard NavSurfaceAhead.shows(spans) else { return nil }
+        let done = shownProgress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
+        return NavSurfaceAheadUI(spans: spans, doneM: min(done, spans.last?.endM ?? 0))
+    }
+}
+
+/// What `NavSurfaceAheadStrip` draws.
+struct NavSurfaceAheadUI: Equatable {
+    var spans: [NavSurfaceSpan]
+    var doneM: Double
+    var totalM: Double { spans.last?.endM ?? 0 }
+    var remaining: [NavSurfaceSpan] { NavSurfaceAhead.remaining(spans, done: doneM) }
+}
+
+/// In the guidance bar (owner's request «كم زفلت وبعدها كم بري»): a thin bar of the route's surfaces in
+/// driving order, in the map's colours, the part already driven greyed; under it what is left, in order:
+/// «زفلت ١٢ كم ← ترابي ٢ كم ← بر مفتوح ٤ كم». Follows the reading direction (the start on the right).
+struct NavSurfaceAheadStrip: View {
+    var ui: NavSurfaceAheadUI
+    @Environment(\.sary) private var theme
+
+    /// The map's surface colours (`NavMapDrawer.SurfaceStyle`, as `NavSurfaceSwatch`).
+    static func color(_ k: NavSurfaceKind) -> Color {
+        switch k {
+        case .paved: return Color(rgb: SaryPalette.navBlueDay)
+        case .unpaved: return Color(rgb: NavMapDrawer.SurfaceStyle.dirtRGB)
+        case .terrain: return Color(rgb: NavMapDrawer.SurfaceStyle.terrainRGB)
+        case .rough: return Color(rgb: NavMapDrawer.SurfaceStyle.roughRGB)
+        case .unknown, .gridSnap: return Color(rgb: NavMapDrawer.SurfaceStyle.unknownRGB)
+        }
+    }
+
+    var body: some View {
+        let p = theme.palette
+        let left = ui.remaining
+        VStack(alignment: .leading, spacing: 4) {
+            bar
+            HStack(spacing: 6) {
+                ForEach(Array(left.prefix(NavSurfaceAhead.maxListed).enumerated()), id: \.offset) { i, s in
+                    if i > 0 {
+                        Text("←").saryText(.caption, weight: .bold).foregroundStyle(p.textTertiary)
+                    }
+                    HStack(spacing: 3) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Self.color(s.kind)).frame(width: 8, height: 8)
+                        Text(NavSurfaceAhead.label(s.kind)).saryText(.caption, weight: .medium).foregroundStyle(p.textSecondary)
+                        Text(SaryFormat.distance(meters: s.meters)).saryNumber(.caption, weight: .bold).foregroundStyle(p.textPrimary)
+                    }
+                }
+                if left.count > NavSurfaceAhead.maxListed {
+                    Text("← +").saryText(.caption, weight: .bold).foregroundStyle(p.textTertiary)
+                }
+                Spacer(minLength: 0)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        }
+        .dynamicTypeSize(...NavBarLayout.numbersTypeCap)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(NavSurfaceAhead.accessibility(left)))
+        .accessibilityIdentifier("nav.surfaceAhead")
+    }
+
+    private var bar: some View {
+        let p = theme.palette
+        let total = max(1, ui.totalM)
+        let gap: CGFloat = 2
+        return GeometryReader { g in
+            let room = max(0, g.size.width - gap * CGFloat(max(0, ui.spans.count - 1)))
+            HStack(spacing: gap) {
+                ForEach(Array(ui.spans.enumerated()), id: \.offset) { _, s in
+                    let w = room * CGFloat(s.meters / total)
+                    let driven = s.meters > 0 ? min(1, max(0, (ui.doneM - s.startM) / s.meters)) : 0
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(Self.color(s.kind))
+                        Rectangle().fill(p.stale).frame(width: w * CGFloat(driven))
+                    }
+                    .frame(width: w, height: 5)
+                    .clipShape(Capsule())
+                }
+            }
+        }
+        .frame(height: 5)
+        .accessibilityHidden(true)
     }
 }

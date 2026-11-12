@@ -6,13 +6,18 @@ extension SheetDetentUI {
     /// Height of the minimized sheet: handle + summary line (+ drive size).
     /// `trip`: the quick row (ملاحة، المحادثة، التجمع، أخفِ موقعي، طريق الرجعة، المزيد) sits under
     /// the summary line.
-    static func peekHeight(drive: Bool, trip: Bool = false) -> CGFloat {
-        trip ? (drive ? 172 : 140) : (drive ? 88 : 70)
+    /// `surfaces`: the guidance bar lists the route's surfaces in order under its numbers (`NavSurfaceAheadStrip`).
+    static func peekHeight(drive: Bool, trip: Bool = false, surfaces: Bool = false) -> CGFloat {
+        let base: CGFloat = trip ? (drive ? 172 : 140) : (drive ? 88 : 70)
+        return base + (surfaces && !trip ? surfacesExtra(drive: drive) : 0)
     }
 
-    func presentationDetent(drive: Bool, trip: Bool = false) -> PresentationDetent {
+    /// The thin bar and its one line under the guidance numbers.
+    static func surfacesExtra(drive: Bool) -> CGFloat { drive ? 34 : 30 }
+
+    func presentationDetent(drive: Bool, trip: Bool = false, surfaces: Bool = false) -> PresentationDetent {
         switch self {
-        case .peek: return .height(Self.peekHeight(drive: drive, trip: trip))
+        case .peek: return .height(Self.peekHeight(drive: drive, trip: trip, surfaces: surfaces))
         case .half: return .medium
         case .full: return .large
         }
@@ -41,8 +46,11 @@ struct LiveSheetShape: Equatable {
     var drive: Bool
     /// The quick row sits under the summary line at peek (`LiveScreenRules.peekShowsQuickRow`).
     var trip: Bool
+    /// Guiding on a route with dirt or off-road: the surfaces' line under the guidance numbers. Decided per
+    /// route (not per tick), so the detent set changes at most when the route does.
+    var surfaces = false
 
-    var peekHeight: CGFloat { SheetDetentUI.peekHeight(drive: drive, trip: trip) }
+    var peekHeight: CGFloat { SheetDetentUI.peekHeight(drive: drive, trip: trip, surfaces: surfaces) }
 
     /// The shape the sheet uses now: the one frozen when a finger went down, else the live one.
     static func resolve(live: LiveSheetShape, frozen: LiveSheetShape?) -> LiveSheetShape { frozen ?? live }
@@ -61,12 +69,13 @@ private struct SarySheetPresentation: ViewModifier {
     func body(content: Content) -> some View {
         let drive = shape?.drive ?? theme.drive
         let trip = shape?.trip ?? false
+        let surfaces = shape?.surfaces ?? false
         let binding = Binding<PresentationDetent>(
-            get: { detent.presentationDetent(drive: drive, trip: trip) },
+            get: { detent.presentationDetent(drive: drive, trip: trip, surfaces: surfaces) },
             set: { detent = SheetDetentUI($0, drive: drive) }
         )
         content
-            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: drive, trip: trip) }), selection: binding)
+            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: drive, trip: trip, surfaces: surfaces) }), selection: binding)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationDragIndicator(.visible)
             /* `.resizes` (was `.scrolls`): a drag on the content resizes the sheet until it reaches its

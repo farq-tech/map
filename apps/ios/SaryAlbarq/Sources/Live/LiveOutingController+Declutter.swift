@@ -161,7 +161,11 @@ extension LiveOutingController {
     /// The live sheet's detent shape (`LiveSheetShape`): the peek height from the context the screen
     /// has AT PEEK, so raising / lowering the sheet never changes its own detent set.
     func sheetShape(drive: Bool) -> LiveSheetShape {
-        guard !tripEnded, !nav.isActive else { return LiveSheetShape(drive: drive, trip: false) }
+        guard !tripEnded, !nav.isActive else {
+            /* Guiding on a route with dirt or off-road: room for «زفلت … ← ترابي …» under the numbers. */
+            let surfaces = !tripEnded && nav.isActive && nav.phase != .arrived && nav.surfaceAhead != nil
+            return LiveSheetShape(drive: drive, trip: false, surfaces: surfaces)
+        }
         /* The idle sheet holds the search field at peek: the taller peek the quick row used. */
         if idleHome { return LiveSheetShape(drive: drive, trip: true) }
         let f = focusFacts

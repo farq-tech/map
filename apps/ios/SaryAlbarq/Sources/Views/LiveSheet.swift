@@ -26,7 +26,8 @@ struct LiveSheet: View {
                 NavBottomBar(nav: controller.nav, end: controller.stopGuidanceTapped,
                              more: { controller.modal = .actions },
                              changeDestination: controller.navChangeDestination,
-                             peek: ui.sheetDetent == .peek)
+                             peek: ui.sheetDetent == .peek,
+                             surfaces: controller.sheetShape(drive: theme.drive).surfaces)
                 if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
                     /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة» (and «غيّر الوجهة»
                      * when the compact bar has no room for it). */
