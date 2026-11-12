@@ -30,6 +30,33 @@
 
 بنود الجهاز لا تُقفل إلا بصورة أو فيديو من جوال حقيقي. ما لم يُجرَّب يُكتب في PR وفي وصف البناء بصراحة: **«ما انجرّب»**، ولا يُسمّى «نجح» لأن الاختبارات على المحاكي نجحت.
 
+## لقطات كل الشاشات
+
+`UITests/AllScreensShotsUITests.swift` يمرّ على كل شاشة في `docs/SCREENS.md` ببيانات العرض التجريبي (بلا خادم)، ويحفظ لقطة محاكٍ مسمّاة لكل شاشة: `NN-area-SS-screen`، فترتيب الأسماء هو ترتيب التطبيق. الصنف لا يشتغل في التشغيل العادي؛ يتخطّاه `XCTSkipIf` ما لم يكن `SARY_ALL_SHOTS=1`. الشاشة التي لا يوصلها المحاكي (كاميرا، GPS، خادم) تُصوَّر كما هي، ومعها مرفق نصي `<الاسم>-NOTE` يقول السبب، بلا فشل.
+
+التشغيل على iPhone 15 Pro (كل الصنف قرابة ساعة؛ لمنطقة واحدة أضف اسم الدالة، مثل `.../AllScreensShotsUITests/test05Home`):
+
+```sh
+cd apps/ios/SaryAlbarq
+OUT="$HOME/Desktop/sary-all-screens"; mkdir -p "$OUT"
+TEST_RUNNER_SARY_ALL_SHOTS=1 TEST_RUNNER_SARY_SHOTS="$OUT" \
+xcodebuild -project SaryAlbarq.xcodeproj -scheme SaryAlbarq \
+  -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+  -clonedSourcePackagesDirPath ~/code/map-wt/_spm \
+  -resultBundlePath /tmp/sary-all-screens.xcresult \
+  test -only-testing:SaryAlbarqUITests/AllScreensShotsUITests
+```
+
+- `TEST_RUNNER_SARY_SHOTS` يكتب كل لقطة PNG باسمها في `$OUT` مباشرة، وكل ملاحظة `-NOTE.txt` جنبها. هذا أسهل طريق.
+- اللقطات نفسها مرفقات `keepAlways` في `xcresult`. لتصديرها من هناك (Xcode 16 أو أحدث):
+
+```sh
+xcrun xcresulttool export attachments --path /tmp/sary-all-screens.xcresult --output-path "$OUT/xcresult"
+```
+
+  أسماء الملفات المصدّرة معرّفات؛ الاسم المقروء في `manifest.json` (الحقل `suggestedHumanReadableName`).
+- حالة كل اختبار: `xcrun xcresulttool get test-results summary --path /tmp/sary-all-screens.xcresult`.
+
 ## أين تُكتب الأشياء
 
 - **PR:** تعليق لكل دورة: جدول بالبند والنتيجة والدليل.
