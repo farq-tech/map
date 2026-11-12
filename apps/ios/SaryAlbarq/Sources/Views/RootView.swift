@@ -39,6 +39,12 @@ struct RootView: View {
                     } message: {
                         Text(model.accountNotice?.notice?.message ?? "")
                     }
+            } else if OneMapFlag.isOn(), let user = model.identity?.user {
+                /* EM1: the navigation map as the first screen (internal flag, off by default). */
+                IdleMapHost(user: user, model: model, appearance: appearance)
+                    .id(user.id)
+                    .transition(.opacity)
+                    .onAppear { if authorization != .notDetermined { OnboardingProgress.done = true } }
             } else {
                 HomeView()
                     .transition(.opacity)

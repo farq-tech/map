@@ -75,7 +75,7 @@ extension LiveOutingController {
 
     /// «ارجع للرحلة»: back to the trip, the group framed again.
     func exitExplore(reframe: Bool = true) {
-        guard exploreActive else { return }
+        guard exploreActive, !idleHome else { return }
         exploreActive = false
         exploreAuto = false
         terrain3D = false
@@ -84,7 +84,7 @@ extension LiveOutingController {
 
     /// Driving always leaves exploration (guidance started, or the car is moving).
     func exploreDrivingCheck() {
-        guard exploreActive, nav.isActive || motion.moving else { return }
+        guard exploreActive, !idleHome, nav.isActive || motion.moving else { return }
         exitExplore(reframe: !nav.isActive)
         toast("رجعنا لشاشة القيادة")
     }

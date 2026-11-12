@@ -89,6 +89,8 @@ struct MapCameraRequest: Equatable {
         case fit([LngLat])
         /// Frame a track as closely as the satellite imagery allows (z19).
         case fitTrack([LngLat])
+        /// Tilt to this pitch in degrees (the idle map's 3D look); the centre and zoom stay.
+        case tilt(Double)
     }
 
     var kind: Kind
@@ -253,6 +255,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 c.fit(pts)
             case let .fitTrack(pts):
                 c.fit(pts, maxZoom: SatelliteLabels.trackMaxZoom)
+            case let .tilt(deg):
+                c.tilt(to: deg)
             }
         }
     }
@@ -689,6 +693,11 @@ struct OutingMapboxView: UIViewRepresentable {
             if styleReady { try? map.mapboxMap.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": terrainExaggeration]) }
             let cam = CameraOptions(pitch: on ? 62 : 0)
             ease(map, to: cam, .tilt)
+        }
+
+        func tilt(to degrees: Double) {
+            guard let map, !terrain3D else { return }
+            ease(map, to: CameraOptions(pitch: degrees), .tilt)
         }
 
         func setExplore(_ e: MapExplore) {
