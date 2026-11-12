@@ -31,6 +31,10 @@ struct IdleMapHost: View {
                 /* The navigation map's 3D look, centred on me (R02); the person can change it with two fingers. */
                 let hot = ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
                 let pitch = IdleMapRules.idlePitch(lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled, thermalHot: hot)
+                #if DEBUG
+                /* `-SaryHiResCam lat,lng,zoom` puts the camera on a test spot itself: the idle map must not race it. */
+                if ProcessInfo.processInfo.arguments.contains("-SaryHiResCam") { return }
+                #endif
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     controller.ask(.me)
                     controller.ask(.tilt(pitch))
