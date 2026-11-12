@@ -16,8 +16,17 @@ struct NewPageHeader<Trailing: View>: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
+        /* The plain case (title + ✕) is the shared window title; back / subtitle / trailing buttons need the fuller row below. */
+        if back == nil, subtitle == nil, Trailing.self == EmptyView.self, let close {
+            SaryWindowTitle(title, closeID: closeID, onClose: close)
+        } else {
+            fullRow
+        }
+    }
+
+    private var fullRow: some View {
         let p = theme.palette
-        HStack(alignment: .center, spacing: theme.space(.s)) {
+        return HStack(alignment: .center, spacing: theme.space(.s)) {
             if let back {
                 SaryIconButton(systemImage: SaryIcon.back, label: "رجوع", id: "page-back", action: back)
             }

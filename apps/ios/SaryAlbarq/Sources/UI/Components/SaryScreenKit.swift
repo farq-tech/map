@@ -56,6 +56,8 @@ struct SaryScreenState: View {
     var message: String
     var actionTitle: String?
     var actionID: String = "state-action"
+    /// Existing screens keep the id their tests already look for (default: the shared one).
+    var messageID: String = "state-message"
     var action: () -> Void = {}
     @Environment(\.sary) private var theme
 
@@ -75,7 +77,7 @@ struct SaryScreenState: View {
                 .foregroundStyle(p.textPrimary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("state-message")
+                .accessibilityIdentifier(messageID)
             if let actionTitle {
                 SaryPrimaryButton(actionTitle, id: actionID, action: action)
                     .padding(.top, SarySpace.xs.rawValue)

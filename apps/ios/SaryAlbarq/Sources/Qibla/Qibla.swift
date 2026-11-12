@@ -346,41 +346,30 @@ struct QiblaView: View {
         }
     }
 
-    /// Build 47: no location yet. An icon in a circle, ONE Najdi line (what happened and what to do), one primary button.
+    /// Build 47: no location yet, from the shared screen components: an icon in a circle, ONE Najdi line, one primary button.
+    @ViewBuilder
     private func newState(scale: CGFloat) -> some View {
         let p = theme.palette
-        return VStack(spacing: theme.space(.l)) {
+        Group {
             switch compass.locationState {
             case .locating:
-                ProgressView().controlSize(.large).tint(p.accent).frame(width: 64, height: 64)
-                Text("ننتظر موقعك لنحسب اتجاه القبلة").saryType(.headline).foregroundStyle(p.textSecondary)
-                    .multilineTextAlignment(.center).accessibilityIdentifier("qibla.waiting")
+                VStack(spacing: theme.space(.l)) {
+                    SarySkeleton(shape: .circle, width: 72, height: 72)
+                    Text("ننتظر موقعك لنحسب اتجاه القبلة").saryType(.headline).foregroundStyle(p.textSecondary)
+                        .multilineTextAlignment(.center).accessibilityIdentifier("qibla.waiting")
+                }
+                .padding(.horizontal, theme.space(.l))
             case .denied:
-                newGlyph("location.slash.fill", p.warning)
-                Text("اسمح للموقع لنحسب اتجاه القبلة").saryType(.headline).foregroundStyle(p.textPrimary)
-                    .multilineTextAlignment(.center).accessibilityIdentifier("qibla.location-denied")
-                SaryPrimaryButton("إعدادات الموقع", systemImage: "gearshape.fill", id: "qibla.open-settings") {
+                SaryScreenState(kind: .empty, systemImage: "location.slash.fill", message: "اسمح للموقع لنحسب اتجاه القبلة",
+                                actionTitle: "إعدادات الموقع", actionID: "qibla.open-settings", messageID: "qibla.location-denied") {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                 }
             default:
-                newGlyph("location.circle", p.warning)
-                Text("ما قدرنا نحدد موقعك الآن، حاول مرة ثانية").saryType(.headline).foregroundStyle(p.textPrimary)
-                    .multilineTextAlignment(.center).accessibilityIdentifier("qibla.location-error")
-                SaryPrimaryButton("حاول مرة ثانية", systemImage: SaryIcon.retry, id: "qibla.retry") { compass.retryLocation() }
+                SaryScreenState(kind: .error, systemImage: "location.circle", message: "ما قدرنا نحدد موقعك الآن، حاول مرة ثانية",
+                                actionTitle: "حاول مرة ثانية", actionID: "qibla.retry", messageID: "qibla.location-error") { compass.retryLocation() }
             }
         }
-        .padding(.horizontal, theme.space(.l))
         .frame(maxWidth: .infinity, minHeight: Qibla.compassDesign.height * scale)
-    }
-
-    private func newGlyph(_ symbol: String, _ color: Color) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 30, weight: .semibold))
-            .foregroundStyle(color)
-            .frame(width: 72, height: 72)
-            .background(Circle().fill(theme.palette.surface))
-            .overlay(Circle().strokeBorder(theme.palette.stroke, lineWidth: 1))
-            .accessibilityHidden(true)
     }
 
     @ViewBuilder
