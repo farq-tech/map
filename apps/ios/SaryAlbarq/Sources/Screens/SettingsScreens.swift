@@ -553,7 +553,6 @@ struct AdvancedSettingsView: View {
     @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.auto.rawValue
 
     var body: some View {
-        let p = theme.palette
         SaryPage(title: "متقدم", back: back) {
             SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط الموقع الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
