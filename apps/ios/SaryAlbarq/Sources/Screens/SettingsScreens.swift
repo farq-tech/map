@@ -552,6 +552,7 @@ struct AdvancedSettingsView: View {
     @State private var gpx: [(id: String, url: URL)] = []
     @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.auto.rawValue
     @AppStorage(OneMapFlag.key) private var oneMap = false
+    @AppStorage(NewUI.key) private var newUI = false
 
     var body: some View {
         let p = theme.palette
@@ -559,6 +560,8 @@ struct AdvancedSettingsView: View {
             SarySection(title: "تجريبي", footer: OneMapFlag.restartNote) {
                 SaryToggleRow(title: OneMapFlag.settingsTitle, subtitle: OneMapFlag.settingsDetail, systemImage: "map.fill",
                               isOn: $oneMap, id: "dev.oneMap")
+                SaryToggleRow(title: NewUI.settingsTitle, subtitle: NewUI.settingsDetail, systemImage: "sparkles",
+                              isOn: $newUI, id: "dev.newUI")
             }
             SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط الموقع الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
