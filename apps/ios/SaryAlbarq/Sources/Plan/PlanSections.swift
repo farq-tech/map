@@ -70,14 +70,15 @@ struct PlanDetailsSections: View {
                         Text(tp.notes).saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                     }
                     if tp.isEmpty {
-                        Text(iLead ? "ما فيه خطة بعد. ارسم المسار أو استورد ملف مسار." : "ما فيه خطة بعد.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        SaryInlineState(systemImage: "map", text: iLead ? "ما فيه خطة بعد. ارسم المسار أو استورد ملف مسار." : "ما فيه خطة بعد. يرسمها أمير الطلعة، وتطلع هنا أول ما يحفظها.")
                     }
                     HStack(spacing: theme.space(.s)) {
                         if iLead || !tp.isEmpty {
                             Button { editorOpen = true } label: {
                                 SaryButtonLabel(title: iLead ? (tp.isEmpty ? "ارسم المسار" : "عدّل الخطة") : "افتح الخطة", systemImage: iLead ? "pencil.tip" : "map")
                             }
-                            .buttonStyle(.sary(iLead && tp.isEmpty ? .primary : .secondary, compact: true))
+                            /* Secondary: «افتح الخريطة» is the details page's one primary. */
+                            .buttonStyle(.sary(.secondary, compact: true))
                             .accessibilityIdentifier("details.planOpen")
                         }
                         if tp.hasRoute {
@@ -259,7 +260,7 @@ struct ChecklistSection: View {
                     HStack(spacing: theme.space(.s)) {
                         SaryTextField(title: "أضف غرض", placeholder: "مثل: ماء", text: $newTitle, id: "checklist.field", maxLength: ChecklistItem.titleMax)
                         Button { addTyped() } label: { Image(systemName: "plus").font(.system(size: 18, weight: .bold)).frame(width: 50, height: 50) }
-                            .buttonStyle(.sary(.primary, width: .hug, compact: true))
+                            .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                             .disabled(ChecklistState.cleanTitle(newTitle) == nil)
                             .accessibilityLabel("أضف")
                             .accessibilityIdentifier("checklist.add")

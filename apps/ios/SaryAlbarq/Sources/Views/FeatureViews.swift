@@ -26,14 +26,13 @@ struct WaypointsSection: View {
                     SaryBanner(text: "بلا اتصال · آخر نسخة \(SaryFormat.elapsed(since: at, now: Date()))", tone: .info, systemImage: SaryIcon.offline)
                         .padding(.vertical, theme.space(.s))
                 case .loading where features.waypoints.isEmpty:
-                    ProgressView().frame(maxWidth: .infinity).padding(theme.space(.m))
+                    SarySkeletonRow()
+                    SarySkeletonRow()
                 default:
                     EmptyView()
                 }
                 if features.waypoints.isEmpty, features.phase == .loaded {
-                    Text("ما فيه نقاط بعد. أضف مخيم أو ماء أو خطر يشوفه الكل على الخريطة.")
-                        .saryText(.subhead).foregroundStyle(p.textSecondary)
-                        .padding(.vertical, theme.space(.s))
+                    SaryInlineState(systemImage: "mappin.slash", text: "ما فيه نقاط بعد. أضف مخيم أو ماء أو خطر يشوفه الكل على الخريطة.")
                 }
                 ForEach(features.waypoints) { w in
                     WaypointRow(waypoint: w, by: features.creatorName(w), from: myPoint, mapBearing: controller.overlay.projection.bearing) {
@@ -262,11 +261,7 @@ struct WaypointComposer: View {
         let p = theme.palette
         ScrollView {
             VStack(alignment: .leading, spacing: theme.space(.m)) {
-                HStack {
-                    Text("نقطة جديدة").saryText(.title2).foregroundStyle(p.textPrimary)
-                    Spacer()
-                    SaryIconButton(systemImage: SaryIcon.close, label: "إلغاء", id: "waypoint.cancel") { features.modal = nil }
-                }
+                SarySheetHeader(title: "نقطة جديدة", closeLabel: "إلغاء", closeID: "waypoint.cancel", close: { features.modal = nil })
                 Text(coordText).saryNumber(.footnote, weight: .medium).foregroundStyle(p.textSecondary)
                     .environment(\.layoutDirection, .leftToRight)
                     .accessibilityLabel(Text("المكان: \(coordText)"))
@@ -422,7 +417,7 @@ struct WaypointCard: View {
                 HStack(alignment: .top, spacing: theme.space(.m)) {
                     SaryWaypointGlyph(kind: w.kind, size: 48)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(w.title).saryText(.title2).foregroundStyle(p.textPrimary)
+                        Text(w.title).saryText(.title2).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85)
                         Text(subtitle(w)).saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                     Spacer()
@@ -512,11 +507,7 @@ struct ConvoyEditor: View {
         let myId = controller.session.view?.myId
         ScrollView {
             VStack(alignment: .leading, spacing: theme.space(.m)) {
-                HStack {
-                    Text("وضع القافلة").saryText(.title2).foregroundStyle(p.textPrimary)
-                    Spacer()
-                    SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "convoy.close") { features.modal = nil }
-                }
+                SarySheetHeader(title: "وضع القافلة", closeID: "convoy.close", close: { features.modal = nil })
                 picker("المقدمة", selection: $lead, members: members, myId: myId, id: "convoy.lead")
                 picker("المؤخرة", selection: $tail, members: members, myId: myId, id: "convoy.tail")
                 SarySection(title: "أقصى مسافة بين السيارات", footer: "ننبّه إذا تأخرت سيارة خلف المؤخرة أكثر من هذه المسافة، أو سبقت المقدمة.") {
@@ -595,11 +586,7 @@ struct PastWaypointsView: View {
         let p = theme.palette
         let entries = WaypointCache.all().filter { $0.outing_id != currentOuting }
         VStack(alignment: .leading, spacing: theme.space(.m)) {
-            HStack {
-                Text("نقاط من طلعات سابقة").saryText(.title2).foregroundStyle(p.textPrimary)
-                Spacer()
-                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "past.close", action: close)
-            }
+            SarySheetHeader(title: "نقاط من طلعات سابقة", closeID: "past.close", close: close)
             if entries.isEmpty {
                 SaryStateView(kind: .empty(title: "ما فيه نقاط محفوظة", message: "النقاط من طلعاتك تُحفظ على جوالك لما تفتح الطلعة.", systemImage: "mappin.slash"))
             } else {
@@ -643,7 +630,7 @@ struct PastWaypointDetail: View {
                 HStack(spacing: theme.space(.m)) {
                     SaryWaypointGlyph(kind: w.kind, size: 44)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(w.title).saryText(.title2).foregroundStyle(p.textPrimary)
+                        Text(w.title).saryText(.title2).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85)
                         Text(w.kind.label + (ISODate.parse(w.created_at).map { " · " + SaryFormat.elapsed(since: $0, now: Date()) } ?? ""))
                             .saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
@@ -698,18 +685,17 @@ struct TripWaypointsSection: View {
     @State private var open: Waypoint?
 
     var body: some View {
-        let p = theme.palette
         SarySection(title: "نقاط الطلعة", footer: note) {
             if let list {
                 if list.isEmpty {
-                    Text("ما أُضيفت نقاط في هذه الطلعة.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
+                    SaryInlineState(systemImage: "mappin.slash", text: "ما انضافت نقاط في هالطلعة.")
                 }
                 ForEach(list) { w in
                     WaypointRow(waypoint: w, by: w.display_name ?? w.kind.label, from: nil) { open = w }
                     if w.id != list.last?.id { SaryDivider() }
                 }
             } else {
-                ProgressView().frame(maxWidth: .infinity).padding(theme.space(.m))
+                SarySkeletonRow()
             }
         }
         .accessibilityIdentifier("summary.waypoints")

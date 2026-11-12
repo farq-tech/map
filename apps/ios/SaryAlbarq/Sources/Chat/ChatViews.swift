@@ -69,7 +69,7 @@ struct ChatEntryRow: View {
                 }
                 Spacer(minLength: 0)
                 if n > 0 { ChatBadge(count: n) }
-                Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
+                Image(systemName: SaryIcon.disclosure).saryGlyph(13, weight: .bold, relativeTo: .footnote).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.m))
             .contentShape(Rectangle())
@@ -167,7 +167,7 @@ struct ChatHomeView: View {
                 }
             }
             if !context.ended {
-                Text("تُحذف المحادثات تلقائيًا بعد \(SaryFormat.digits(String(chat.retentionDays))) يومًا من نهاية الطلعة.")
+                Text("تنحذف المحادثات تلقائيًا بعد \(SaryFormat.number(chat.retentionDays)) يوم من نهاية الطلعة.")
                     .saryText(.footnote).foregroundStyle(p.textTertiary)
             }
         }
@@ -263,9 +263,17 @@ struct ChatThreadView: View {
                                 .buttonStyle(.sary(.secondary))
                                 .accessibilityIdentifier("chat.older")
                         }
+                        if !thread.loaded && thread.messages.isEmpty {
+                            SarySkeletonRow()
+                            SarySkeletonRow()
+                            SarySkeletonRow()
+                        }
                         if thread.loaded && thread.messages.isEmpty {
-                            Text(with.isGroup ? "ما فيه رسائل بعد. قل هلا 👋" : "ابدأ المحادثة مع \(title).")
-                                .saryText(.subhead).foregroundStyle(p.textSecondary).padding(.top, theme.space(.xl))
+                            SaryStateView(kind: .empty(title: with.isGroup ? "ما فيه رسائل بعد" : "ابدأ المحادثة مع \(title)",
+                                                       message: with.isGroup ? "قل هلا 👋 ويوصل كلامك لكل الأصدقاء." : "رسالتك الخاصة توصله هو بس.",
+                                                       systemImage: "bubble.left.and.bubble.right"),
+                                          actionTitle: writable ? "اكتب أول رسالة" : nil, actionID: "chat.empty.write",
+                                          actionIcon: "square.and.pencil") { focused = true }
                         }
                         ForEach(thread.messages, id: \.key) { m in
                             bubble(m).id(m.key)
@@ -333,7 +341,7 @@ struct ChatThreadView: View {
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(title).saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
-                Text(with.isGroup ? "\(SaryFormat.digits(String(context.members.count))) أعضاء" : "رسالة خاصة")
+                Text(with.isGroup ? "\(SaryFormat.number(context.members.count)) في الطلعة" : "رسالة خاصة")
                     .saryText(.caption).foregroundStyle(p.textSecondary)
             }
             Spacer(minLength: 0)

@@ -50,7 +50,7 @@ struct EnjadSheet: View {
             }
             if !Enjad.hasPhone(input) {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
-                    SaryBanner(text: "رقم جوالك غير مضاف: أضفه قبل الإرسال ليتواصلون معك، أو اكتبه في الرسالة بنفسك.", tone: .warning, systemImage: "phone.badge.plus")
+                    SaryBanner(text: "رقم جوالك مو مضاف: أضفه قبل الإرسال عشان يتواصلون معك، أو اكتبه في الرسالة بنفسك.", tone: .warning, systemImage: "phone.badge.plus")
                     Button(action: addPhone) { SaryButtonLabel(title: "أضف رقمي", systemImage: "phone.badge.plus") }
                         .buttonStyle(.sary(.secondary, compact: true))
                         .accessibilityIdentifier("enjad.addPhone")
@@ -60,7 +60,8 @@ struct EnjadSheet: View {
                 let wa = UIApplication.shared.canOpenURL(Enjad.whatsappScheme)
                 openURL(Enjad.sendURL(text, whatsappInstalled: wa, online: online))
             } label: { SaryButtonLabel(title: "اطلب إنجاد (واتساب)", systemImage: "message.fill") }
-                .buttonStyle(.sary(.destructive))
+                /* One red button per screen: on a solo outing «اتصل ٩١١» above is it, Enjad comes second. */
+                .buttonStyle(.sary(official911First ? .secondary : .destructive))
                 .accessibilityIdentifier("enjad.whatsapp")
             Button { openURL(Enjad.callURL) } label: { SaryButtonLabel(title: "اتصل بإنجاد", systemImage: "phone.fill") }
                 .buttonStyle(.sary(.secondary))
@@ -68,7 +69,7 @@ struct EnjadSheet: View {
             Button { openURL(Enjad.smsURL(text)) } label: { SaryButtonLabel(title: "أرسل رسالة نصية بدل واتساب", systemImage: "text.bubble") }
                 .buttonStyle(.sary(.plain))
                 .accessibilityIdentifier("enjad.sms")
-            SarySection(title: "الرسالة", footer: "تفتح في واتساب (أو الرسائل) جاهزة، وأنت اللي ترسلها. ما نرسل شيئًا عنك.") {
+            SarySection(title: "الرسالة", footer: "تفتح في واتساب (أو الرسائل) جاهزة، وأنت اللي ترسلها. ما نرسل عنك شي.") {
                 Text(text)
                     .saryText(.subhead)
                     .foregroundStyle(p.textPrimary)

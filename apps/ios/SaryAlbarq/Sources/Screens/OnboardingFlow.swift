@@ -318,7 +318,7 @@ struct ProfileStep: View {
                           help: "يظهر فوق سيارتك على الخريطة.")
             SaryTextField(title: "رقم الجوال (اختياري)", placeholder: "05XXXXXXXX", text: $phone, id: "onboarding.phone", keyboard: .phonePad, maxLength: 14,
                           state: phoneOK ? .normal : .error("اكتب رقمًا سعوديًا يبدأ بـ ٠٥"),
-                          help: "يظهر لأصدقائك في طلعاتك فقط ليتصلوا بك أو يراسلوك واتساب. تقدر تحذفه متى شئت.")
+                          help: "يظهر لأصدقائك في طلعاتك فقط ليتصلوا بك أو يراسلوك واتساب. تقدر تحذفه متى ما بغيت.")
                 .environment(\.layoutDirection, .rightToLeft)
             if let error { SaryInlineMessage(text: error, tone: .error) }
             Button {
@@ -344,7 +344,7 @@ struct ProfileStep: View {
             let ok = await model.createIdentity(name: trimmed, phone: phone, avatar: avatar)
             busy = false
             if ok { done() } else {
-                error = model.errorText ?? "تعذّر الحفظ. أعد المحاولة."
+                error = model.errorText ?? "ما قدرنا نحفظ. جرّب مرة ثانية."
                 model.errorText = nil
             }
         }
