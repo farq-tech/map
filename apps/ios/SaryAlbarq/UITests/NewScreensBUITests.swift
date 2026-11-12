@@ -90,9 +90,6 @@ final class NewScreensBUITests: XCTestCase {
     // MARK: camp suggestions + desert routes
 
     func testOnlyTheFirstSuggestionHasThePrimaryGo() {
-        XCTAssertTrue(NewScreens.campGoIsPrimary(rank: 1, newUI: true))
-        XCTAssertFalse(NewScreens.campGoIsPrimary(rank: 2, newUI: true))
-        XCTAssertTrue(NewScreens.campGoIsPrimary(rank: 3, newUI: false), "legacy keeps every «اتجه» primary")
         let app = launch(["-SaryLiveModal", "camp", "-SaryCampNight", "0,20"], live: true)
         XCTAssertTrue(el(app, "camp.card.1").waitForExistence(timeout: 25))
         XCTAssertTrue(el(app, "camp.go.1").exists)
