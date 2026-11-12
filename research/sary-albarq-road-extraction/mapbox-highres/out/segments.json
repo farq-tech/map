@@ -1,0 +1,8 @@
+{
+ "n_segments": 24,
+ "thr_abs_z_p95_control": 28.84664298904377,
+ "frac_real_above": 0.08333333333333333,
+ "frac_control_above": 0.05154639175257732,
+ "median_abs_z_real": 11.018491141174241,
+ "median_abs_z_control": 7.603427655220585
+}
