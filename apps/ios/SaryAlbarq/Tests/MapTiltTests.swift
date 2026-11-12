@@ -76,7 +76,9 @@ final class MapTiltTests: XCTestCase {
         XCTAssertEqual(CameraTiltRules.glyph(is3D: true), "٢د")
         let flat = SaryMapControlItem.cameraTilt(is3D: false)
         XCTAssertEqual(flat.accessibilityID, "map.tilt")
-        XCTAssertEqual(flat.glyph, "٣د")
+        XCTAssertNil(flat.glyph, "an icon, not «٣د»: it read as minutes beside the ETA")
+        XCTAssertEqual(flat.systemImage, "view.3d")
+        XCTAssertEqual(SaryMapControlItem.cameraTilt(is3D: true).systemImage, "view.2d")
         XCTAssertFalse(flat.label.isEmpty, "an accessible label")
         XCTAssertNotEqual(SaryMapControlItem.cameraTilt(is3D: true), flat)
     }
