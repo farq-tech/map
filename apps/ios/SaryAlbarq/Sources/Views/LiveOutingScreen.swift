@@ -130,7 +130,7 @@ struct LiveOutingScreen: View {
          * its own window (the dock's copy is hidden or covered then). */
         .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded && !controller.settingsOpen,
                                    state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger,
-                                   frame: frames["sos"], size: controller.liveContext(drive: theme.drive) == .driving ? 60 : 52,
+                                   frame: frames["sos"], size: sosSize,
                                    countdown: controller.groupUI.serverSOS))
         /* A friend's SOS: full screen in its own window, over every sheet, page and dialog (UI-AUDIT 0.1). */
         .background(FriendSOSAlertHost(alert: LiveOutingPresenter.fullScreenSOS(ui.sos), theme: theme,
@@ -157,6 +157,12 @@ struct LiveOutingScreen: View {
                 .saryAppearance(appearance)
                 .sarySheetPresentation(detent: $controller.sheetDetent, shape: sheetShape)
         }
+    }
+
+    /// «طوارئ» while the maneuver card is up: compact (48 pt); else 60 driving, 52 stopped.
+    private var sosCompact: Bool { controller.navBarV2 && controller.nav.phase == .guiding }
+    private var sosSize: CGFloat {
+        NavDriveLayout.sosSize(card: sosCompact, driving: controller.liveContext(drive: theme.drive) == .driving)
     }
 
     /// The live sheet's detent shape: frozen during a touch, else from the context at peek.
@@ -275,8 +281,9 @@ struct LiveOutingScreen: View {
                              maxListHeight: LiveFit.alertListMaxHeight(screenHeight: full.height), width: full.width, weather: controller.weather,
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller),
                              radio: GroupAudioCenters.of(controller),
-                             sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger,
-                                                                   countdown: controller.groupUI.serverSOS)),
+                             /* v2: a compact «طوارئ» under the maneuver card, no caption (`NavDriveLayout.sosSize`). */
+                             sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: sosSize, trigger: controller.actions.sos.trigger,
+                                                                   countdown: controller.groupUI.serverSOS, caption: !sosCompact)),
                              /* My SOS on (focused mode): no side buttons — the strip, the walkie-talkie and the map. */
                              side: showSide && !controller.sosFocused ? AnyView(sideView(side, exploring: exploring, captions: sideCaptions).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
@@ -323,7 +330,7 @@ struct LiveOutingScreen: View {
                                 .chromeFrame("dock")
                             Spacer(minLength: 0)
                             /* A solo outing has no walkie-talkie (`LiveScreenRules.solo`). */
-                            if !ended && controller.groupUI.walkieTalkie {
+                            if !ended && controller.groupUI.walkieTalkie && !controller.navBarV2 {
                                 SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: false, level: controller.pttLevel,
                                               openChannels: { controller.modal = .pttChannels })
                                     .chromeFrame("ptt")
@@ -357,6 +364,8 @@ struct LiveOutingScreen: View {
                     /* «رسالة صوتية»: the recording bar, «فلان يتكلم…», unheard notes — just over the dock.
                      * Never in a solo outing: a recording would be uploaded, refused and deleted. */
                     let talk = controller.groupUI.walkieTalkie && controller.groupUI.voiceNotes
+                    /* v2 guidance bar: the walkie-talkie is in the bar's footer, not over the map. */
+                    let dockTalk = talk && !controller.navBarV2
                     if talk {
                         VoiceNoteDock(center: controller.session.voiceNotes, openList: { controller.modal = .pttChannels })
                             .chromeFrame("voice-note")
@@ -374,8 +383,8 @@ struct LiveOutingScreen: View {
                     /* Owner (2026-11-11): while driving every primary («وين رايحين؟», «وصلنا»…) is a compact pill;
                      * the sheet raised also shrinks it so it never covers the cars above the sheet. */
                     let ctaCompact = LiveScreenRules.primaryCompact(sheetRaised: controller.sheetDetent != .peek, driving: driving)
-                    let pttBig = talk && driving && (ctaCompact || !hasCTA)
-                    let pttPill = talk && (pttBig || !hasCTA)
+                    let pttBig = dockTalk && driving && (ctaCompact || !hasCTA)
+                    let pttPill = dockTalk && (pttBig || !hasCTA)
                     let showsSpeedBubble = driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil && !guidingHUD
                     /* The row's room on this phone (`LiveFit.dock`): at 375 pt the speed, the 200 pt pill and
                      * a compact primary (or the guiding speed cluster) were wider than the screen — the
@@ -417,7 +426,7 @@ struct LiveOutingScreen: View {
                         }
                         /* Round beside the big primary: no caption under it (its label is spoken by VoiceOver).
                          * A solo outing: no walkie-talkie at all. */
-                        if talk {
+                        if dockTalk {
                             SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: pttPill, level: controller.pttLevel, pill: pttPill, big: pttBig,
                                           channelLabel: controller.session.walkie.showsChannels ? PTTChannels.chipLabel(controller.session.walkie.currentChannel) : nil,
                                           openChannels: { controller.modal = .pttChannels },
@@ -795,7 +804,7 @@ private struct LiveTopStack: View {
         let nav = controller.nav
         switch nav.phase {
         case .guiding:
-            NavManeuverBanner(nav: nav, showsSurfaceStrip: nav.surfaceAhead == nil)
+            NavManeuverBanner(nav: nav, showsSurfaceStrip: nav.surfaceAhead == nil, card: controller.navBarV2)
                 .transition(SaryTransition.banner(theme))
             if let moved = controller.navMemberMovedMeters, let t = nav.target {
                 Button { controller.navigateToMember(t.memberId ?? "") } label: {
