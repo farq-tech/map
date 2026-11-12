@@ -236,7 +236,9 @@ struct LiveSheet: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case .layers:
-            ExploreLayersSheet(controller: controller)
+            Group {
+                if MapLayersSheetFlag.useLegacy { ExploreLayersSheet(controller: controller) } else { MapLayersSheet(controller: controller) }
+            }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case .places:

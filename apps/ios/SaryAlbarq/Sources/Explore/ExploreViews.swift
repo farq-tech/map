@@ -226,6 +226,26 @@ struct ExploreLayersSheet: View {
                     .accessibilityIdentifier("layer.\(l.rawValue)")
                 }
             }
+            ExploreLayerSections(controller: controller)
+        }
+        .onAppear { offline.reload() }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.layers.sheet")
+    }
+}
+
+/// Everything under the base-layer cards of «الطبقات» (imagery, weather, camps, tracks, terrain,
+/// realistic mode, offline). Shared by `MapLayersSheet` and the DEBUG-only legacy `ExploreLayersSheet`
+/// until S3 moves these into the registry too.
+struct ExploreLayerSections: View {
+    @ObservedObject var controller: LiveOutingController
+    @ObservedObject private var offline = OfflineMaps.shared
+    @Environment(\.sary) private var theme
+    @AppStorage(DrivingRealismPrefs.osmKey) private var osmTracks = true
+
+    var body: some View {
+        let p = theme.palette
+        Group {
             HiResLayerSection()
             WeatherLayersSection()
             CampSitesLayerSection(controller: controller)
@@ -288,9 +308,6 @@ struct ExploreLayersSheet: View {
                 .padding(.horizontal, theme.space(.m))
             }
         }
-        .onAppear { offline.reload() }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("explore.layers.sheet")
     }
 }
 
