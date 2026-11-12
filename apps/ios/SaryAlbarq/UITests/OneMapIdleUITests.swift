@@ -236,4 +236,23 @@ final class OneMapIdleUITests: XCTestCase {
             }
         }
     }
+
+    /// «متقدم» holds the switch, off by default; turning it on is what `OneMapFlag` reads.
+    func testAdvancedSettingsHasTheOneMapSwitchOffByDefault() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "advanced", "-SaryScheme", "light"]
+        app.launch()
+        app.allowLocationIfAsked()
+        let sw = app.switches["dev.oneMap"]
+        XCTAssertTrue(sw.waitForExistence(timeout: 30), "the switch is in «متقدم»")
+        XCTAssertEqual(sw.value as? String, "0", "off by default")
+        XCTAssertTrue(app.staticTexts[OneMapSwitchText.title].exists)
+        shot("advanced-switch-off")
+        sw.tap()
+        XCTAssertEqual(sw.value as? String, "1")
+        shot("advanced-switch-on")
+        sw.tap()   // leave it off
+    }
 }
+
+private enum OneMapSwitchText { static let title = "الخريطة الواحدة (تجريبي)" }
