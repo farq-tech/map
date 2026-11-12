@@ -81,6 +81,19 @@ enum ChipLayout {
 
     static func groupKey(_ ids: [String]) -> String { ids.sorted().joined(separator: "|") }
 
+    /// What a wide card laid over the map (the weather legend) leaves of `area`: the band from
+    /// the card to the nearer edge is cut off, the way the top chrome is. No card, a card outside
+    /// `area`, or a narrow one (under half the width: the legend's restore button) leaves it as is.
+    static func clear(_ area: CGRect, of card: CGRect?, gap: CGFloat = 4) -> CGRect {
+        guard let card, card.width >= area.width / 2, card.intersects(area) else { return area }
+        if area.maxY - card.maxY >= card.minY - area.minY {
+            let top = min(area.maxY, card.maxY + gap)
+            return CGRect(x: area.minX, y: top, width: area.width, height: area.maxY - top)
+        }
+        let bottom = max(area.minY, card.minY - gap)
+        return CGRect(x: area.minX, y: area.minY, width: area.width, height: bottom - area.minY)
+    }
+
     /// The chip's natural place: centred over its car.
     static func natural(_ it: Item, lift: CGFloat) -> CGRect {
         CGRect(x: it.anchor.x - it.chip.width / 2, y: it.anchor.y - lift - it.chip.height, width: it.chip.width, height: it.chip.height)
