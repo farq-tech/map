@@ -47,4 +47,21 @@ final class MapCapabilityTests: XCTestCase {
         XCTAssertTrue(c.mapExplore(places: [], tracks: TrackLibrary.shared).active)
         s.close()
     }
+
+    /// EM5 (P12/P13): the permanent coordinate card + crosshair on the live map while the capabilities are on.
+    func testThePermanentReadoutIsOnlyForTheCapableMapOutsideExplorationTheEndCardAndPicking() {
+        XCTAssertTrue(MapCapabilityRules.permanentReadout(capable: true, exploring: false, ended: false, picking: false))
+        XCTAssertFalse(MapCapabilityRules.permanentReadout(capable: false, exploring: false, ended: false, picking: false), "without the flag the outing map is untouched")
+        XCTAssertFalse(MapCapabilityRules.permanentReadout(capable: true, exploring: true, ended: false, picking: false), "exploration has its own top bar")
+        XCTAssertFalse(MapCapabilityRules.permanentReadout(capable: true, exploring: false, ended: true, picking: false), "never over the end card")
+        XCTAssertFalse(MapCapabilityRules.permanentReadout(capable: true, exploring: false, ended: false, picking: true), "never while picking a point")
+    }
+
+    func testTheReadoutFollowsTheCapabilitiesThroughDrivingAndGuidance() {
+        for (nav, follow, move) in [(true, false, false), (false, true, false), (false, false, true)] {
+            let capable = MapCapabilityRules.unlocked(exploring: false, oneMap: true, navigating: nav, following: follow, moving: move)
+            XCTAssertFalse(MapCapabilityRules.permanentReadout(capable: capable, exploring: false, ended: false, picking: false),
+                           "the card goes with the capabilities while driving (nav=\(nav) follow=\(follow) moving=\(move))")
+        }
+    }
 }

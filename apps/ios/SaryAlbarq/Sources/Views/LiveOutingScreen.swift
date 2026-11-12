@@ -114,7 +114,8 @@ struct LiveOutingScreen: View {
                 }
                 .ignoresSafeArea()
 
-                if exploring {
+                if exploring || MapCapabilityRules.permanentReadout(capable: capable, exploring: exploring, ended: controller.tripEnded,
+                                                                    picking: controller.picking.active) {
                     ExploreCrosshair(model: controller.exploreReading)
                         .ignoresSafeArea()
                 }
@@ -324,6 +325,13 @@ struct LiveOutingScreen: View {
             VStack(spacing: theme.space(.s)) {
                 if exploring {
                     ExploreTopBar(controller: controller, exit: { controller.exitExplore() })
+                        .transition(SaryTransition.banner(theme))
+                } else if MapCapabilityRules.permanentReadout(capable: controller.mapCapabilitiesOn, exploring: exploring, ended: ended,
+                                                              picking: controller.picking.active) {
+                    /* EM5 (flag): the coordinate card is always there while the capabilities are on. */
+                    ExploreCoordinateBar(model: controller.exploreReading, format: controller.coordFormat,
+                                         toggleFormat: { controller.coordFormat = controller.coordFormat == .decimal ? .dms : .decimal },
+                                         copy: controller.copyCrosshair, save: controller.saveCrosshair)
                         .transition(SaryTransition.banner(theme))
                 }
                 if ended {

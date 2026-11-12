@@ -14,6 +14,13 @@ enum MapCapabilityRules {
         if oneMap, navigating || following || moving { return false }
         return exploring || oneMap
     }
+
+    /// EM5 (P12/P13): the coordinate card and the crosshair stay on the live map while the capabilities are on, not only
+    /// inside exploration (which has its own top bar). Never over the end card, while picking a point, or without the flag
+    /// (`capable` is false without it unless exploring, so today's outing map is untouched).
+    static func permanentReadout(capable: Bool, exploring: Bool, ended: Bool, picking: Bool) -> Bool {
+        capable && !exploring && !ended && !picking
+    }
 }
 
 extension LiveOutingController {

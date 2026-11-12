@@ -320,6 +320,19 @@ final class OutingCapabilitiesUITests: XCTestCase {
 
     private func el(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
 
+    /// EM5: the coordinate card (P12) is on the stopped outing map with the flag, and absent without it.
+    func testTheCoordinateCardIsPermanentOnTheStoppedOutingMapOnlyWithTheFlag() {
+        let on = launch(oneMap: true)
+        XCTAssertTrue(el(on, "explore.readout").waitForExistence(timeout: 30), "the card is there without entering exploration")
+        XCTAssertTrue(el(on, "explore.coordinate").exists)
+        shot("em5-readout-flag-on")
+        on.terminate()
+        let off = launch(oneMap: false)
+        XCTAssertTrue(el(off, "outing-locate").waitForExistence(timeout: 30) || off.buttons.firstMatch.waitForExistence(timeout: 30))
+        XCTAssertFalse(el(off, "explore.readout").exists, "without the flag the outing map is untouched")
+        shot("em5-readout-flag-off")
+    }
+
     private func shot(_ name: String) {
         let s = XCUIScreen.main.screenshot()
         let a = XCTAttachment(screenshot: s); a.name = name; a.lifetime = .keepAlways; add(a)
