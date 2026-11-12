@@ -194,7 +194,7 @@ struct SaryListRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .saryType(.headline)
-                    .saryLongName(lines: 1, minScale: 0.7)
+                    .saryLongName(lines: 2, minScale: 0.7)
                     .foregroundStyle(p.textPrimary)
                 if let subtitle {
                     Text(subtitle)

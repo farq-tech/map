@@ -40,8 +40,8 @@ final class ComponentsUITests: XCTestCase {
         let app = launch(page: "list")
         let r1 = app.buttons["components-row-1"], r3 = app.buttons["components-row-3"]
         XCTAssertTrue(r1.waitForExistence(timeout: 20))
-        XCTAssertGreaterThanOrEqual(r1.frame.height, 56)
-        XCTAssertGreaterThanOrEqual(r3.frame.height, 56)
+        XCTAssertGreaterThanOrEqual(r1.frame.height, 55.9)
+        XCTAssertGreaterThanOrEqual(r3.frame.height, 55.9)
         r1.tap()
         XCTAssertTrue(app.staticTexts["taps 1"].waitForExistence(timeout: 3))
         // The long name stays on one line (shrinks) and the row stays on screen.

@@ -68,6 +68,7 @@ struct SaryComponentsGallery: View {
         }
         .saryTheme(theme)
         .dynamicTypeSize(ShowcaseLab.parseType(UserDefaults.standard.string(forKey: "SaryComponentsType")) ?? .large)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("components-root")
     }
 
