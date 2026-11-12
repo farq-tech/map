@@ -73,6 +73,14 @@ struct MapHomeScreen: View {
     @State private var layersOpen = false
     /// «دروب البر» opened from here: drawn on this map while its sheet is open.
     @ObservedObject private var desertRoutes = DesertRoutesHub.shared
+    /// V2: Display Zoom / narrow windows start the shortcut grid as icons.
+    @Environment(\.saryWidthClass) private var widthClass
+    /// V2: the weather on the bottom card's top line (my area, rounded to 0.1° like the live chip's «منطقتك»).
+    @StateObject private var homeWeather = WeatherStore()
+
+    /// The owner-approved layout (one bar on top, one card at the bottom, two map buttons); the old one
+    /// behind DEBUG `-SaryHomeV1`. The in-trip destination picker keeps the old sheet (no outing card there).
+    private var v2: Bool { destinationPicker == nil && HomeLayoutSwitch.isV2 }
 
     struct SelectedPlace: Equatable {
         var destination: OutingDestination
@@ -91,30 +99,41 @@ struct MapHomeScreen: View {
         GeometryReader { g in
             let screen = g.size.height + g.safeAreaInsets.top + g.safeAreaInsets.bottom
             let sheetH = sheetHeight(screen: screen)
+            let mapInset = v2 ? CGFloat(HomeLayoutRules.mapBottomInset(width: Double(g.size.width),
+                                                                         restingCard: restingHeight(screen: screen, expanded: false))) : 0
             ZStack(alignment: .bottom) {
+                /* V2: the map ends where the resting card starts, so the Mapbox logo and «ⓘ» (OSM
+                 * attribution) sit above the card instead of under it; this fills behind the card's corners. */
+                if mapInset > 0 { theme.palette.background.ignoresSafeArea() }
                 PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, userLocation: myPoint,
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin", desert: true)) },
                             desert: desertOverlay,
                             onDesertTap: { id in pinTapped(id) },
                             qiblaOrigin: qiblaMapOrigin, baseLayer: baseLayer)
+                    .padding(.bottom, mapInset)
+                    .animation(theme.animation(.smooth), value: mapInset)
                     .ignoresSafeArea()
                     .accessibilityIdentifier("home.map")
-                VStack(spacing: theme.space(.s)) {
-                    if selected == nil { categoryChips }
-                    HStack {
-                        Spacer()
-                        VStack(spacing: theme.space(.s)) {
-                            layersMapButton
-                            locateButton
-                            qiblaMapButton
+                if v2 {
+                    v2Chrome(sheetHeight: sheetH)
+                } else {
+                    VStack(spacing: theme.space(.s)) {
+                        if selected == nil { categoryChips }
+                        HStack {
+                            Spacer()
+                            VStack(spacing: theme.space(.s)) {
+                                layersMapButton
+                                locateButton
+                                qiblaMapButton
+                            }
                         }
+                        .padding(.horizontal, theme.space(.l))
+                        Spacer()
                     }
-                    .padding(.horizontal, theme.space(.l))
-                    Spacer()
+                    .padding(.top, theme.space(.s))
+                    .padding(.bottom, sheetH)
                 }
-                .padding(.top, theme.space(.s))
-                .padding(.bottom, sheetH)
                 sheet(height: sheetH, screen: screen)
             }
             .ignoresSafeArea(edges: .bottom)
@@ -293,9 +312,11 @@ struct MapHomeScreen: View {
             // a two-line place name while letting the map remain visible. At accessibility
             // sizes, give the card room to grow; its content remains scrollable as a fallback.
             /* + the weather line and the second row of actions («اتجه» + the outing action). */
-            base = dynamicTypeSize.isAccessibilitySize ? min(screen - 60, max(420, screen * 0.72)) : 232
+            base = dynamicTypeSize.isAccessibilitySize ? min(screen - 60, max(420, screen * 0.72)) : (v2 ? 256 : 232)
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
+        } else if v2 {
+            base = CGFloat(HomeLayoutRules.height(v2Plan(screen: screen), status: stateCard, textScale: Double(textScale100 / 100)))
         } else {
             base = CGFloat(HomeSheetRules.collapsedHeight(card: stateCard, textScale: Double(textScale100 / 100)))
         }
@@ -330,11 +351,16 @@ struct MapHomeScreen: View {
                 .accessibilityIdentifier("home.place.scroll")
             } else {
                 VStack(spacing: 0) {
-                    searchBar
+                    /* V2: the search is the bar on top of the map, not the sheet's first row. */
+                    if !v2 { searchBar }
                     ScrollView {
                         VStack(alignment: .leading, spacing: theme.space(.l)) {
                             if showingResults {
+                                /* V2: the chips live in the sheet; they stay above a category's list to switch it. */
+                                if v2 { sheetCategories }
                                 resultsList
+                            } else if v2 {
+                                v2SheetContent(screen: screen)
                             } else {
                                 if let a = assigning { assignBanner(a) }
                                 shortcutsRow
@@ -366,6 +392,8 @@ struct MapHomeScreen: View {
         /* The collapsed height follows the state card; results replace the home content. */
         .animation(theme.animation(.smooth), value: stateCard)
         .animation(theme.animation(.smooth), value: showingResults)
+        /* V2: the weather line arrives with the first position (the card grows by one line). */
+        .animation(theme.animation(.smooth), value: myPoint == nil)
         .onChange(of: sheetDragging) { _, dragging in
             guard !dragging else { return }
             /* A cancelled drag (no `onEnded`): settle back instead of staying where the finger left it.
@@ -570,62 +598,80 @@ struct MapHomeScreen: View {
 
     private var searchBar: some View {
         let p = theme.palette
-        let me = model.identity?.user
         return HStack(spacing: theme.space(.s)) {
             HStack(spacing: theme.space(.s)) {
-                Image(systemName: "magnifyingglass").foregroundStyle(p.textSecondary)
-                TextField("", text: $query, prompt: Text(assigning.map { "ابحث عن \($0.label)" } ?? "وين رايحين؟ ابحث هنا").foregroundStyle(p.textTertiary))
-                    .font(.sary(16, .medium))
-                    .foregroundStyle(p.textPrimary)
-                    .focused($searchFocused)
-                    .submitLabel(.search)
-                    .onSubmit { schedule(query, now: true) }
-                    .accessibilityIdentifier("home.search")
-                if !query.isEmpty {
-                    Button { clearSearch() } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary)
-                            /* Same glyph, 44 pt touch area (the capsule is 50 tall). */
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel(Text("امسح"))
-                    .accessibilityIdentifier("home.search.clear")
-                }
-                Button { voice.toggle() } label: {
-                    Image(systemName: voice.isListening ? "waveform" : "mic.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(voice.isListening ? p.onAccent : p.accentText)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(voice.isListening ? p.accent : Color.clear))
-                        .symbolEffect(.variableColor, isActive: voice.isListening && !theme.reduceMotion)
-                        /* 34 pt circle, 44 pt touch area (the capsule is 50 tall). */
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityLabel(Text(voice.isListening ? "أوقف الاستماع" : "ابحث بصوتك"))
-                .accessibilityIdentifier("home.mic")
+                searchFieldItems
             }
             .padding(.leading, theme.space(.m))
             .padding(.trailing, 1)
             .frame(height: 50)
             .background(Capsule().fill(p.sunken))
-            Button { profileOpen = true } label: {
-                SaryAvatar(name: me?.display_name ?? "؟", color: theme.accent.fill, photo: AvatarCodec.image(from: me?.avatar), size: 44)
-            }
-            .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("ملفي"))
-            .accessibilityIdentifier("home.profile")
+            profileButton(size: 44)
         }
         .padding(.horizontal, theme.space(.l))
         .onChange(of: searchFocused) { _, f in if f { setExpanded(true) } }
-        .overlay(alignment: .bottom) {
-            if voice.state == .denied || voice.state == .unavailable {
-                Text(voice.state == .denied ? "اسمح للمايك والتعرّف على الكلام من الإعدادات" : "البحث بالصوت غير متاح الآن")
-                    .saryText(.caption).foregroundStyle(p.warningText)
-                    .offset(y: 18)
-            }
+        .overlay(alignment: .bottom) { voiceUnavailableNote }
+    }
+
+    /// «ملفي»: the avatar (V1: beside the search capsule; V2: inside the top bar).
+    private func profileButton(size: CGFloat) -> some View {
+        let me = model.identity?.user
+        return Button { profileOpen = true } label: {
+            SaryAvatar(name: me?.display_name ?? "؟", color: theme.accent.fill, photo: AvatarCodec.image(from: me?.avatar), size: size)
+                .frame(minWidth: theme.minTarget, minHeight: theme.minTarget)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text("ملفي"))
+        .accessibilityIdentifier("home.profile")
+    }
+
+    /// Under the search bar when the voice search cannot run.
+    @ViewBuilder
+    private var voiceUnavailableNote: some View {
+        if voice.state == .denied || voice.state == .unavailable {
+            Text(voice.state == .denied ? "اسمح للمايك والتعرّف على الكلام من الإعدادات" : "البحث بالصوت غير متاح الآن")
+                .saryText(.caption).foregroundStyle(theme.palette.warningText)
+                .offset(y: 18)
+        }
+    }
+
+    /// The search field's row: the magnifier, the field, «امسح» and the mic (same ids in V1 and V2).
+    @ViewBuilder
+    private var searchFieldItems: some View {
+        let p = theme.palette
+        Image(systemName: "magnifyingglass").foregroundStyle(p.textSecondary)
+        TextField("", text: $query, prompt: Text(assigning.map { "ابحث عن \($0.label)" } ?? (v2 ? "وين رايحين؟" : "وين رايحين؟ ابحث هنا")).foregroundStyle(p.textTertiary))
+            .font(.sary(16, .medium))
+            .foregroundStyle(p.textPrimary)
+            .focused($searchFocused)
+            .submitLabel(.search)
+            .onSubmit { schedule(query, now: true) }
+            .accessibilityIdentifier("home.search")
+        if !query.isEmpty {
+            Button { clearSearch() } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary)
+                    /* Same glyph, 44 pt touch area (the capsule is 50 tall). */
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text("امسح"))
+            .accessibilityIdentifier("home.search.clear")
+        }
+        Button { voice.toggle() } label: {
+            Image(systemName: voice.isListening ? "waveform" : "mic.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(voice.isListening ? p.onAccent : p.accentText)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(voice.isListening ? p.accent : Color.clear))
+                .symbolEffect(.variableColor, isActive: voice.isListening && !theme.reduceMotion)
+                /* 34 pt circle, 44 pt touch area (the capsule is 50 tall). */
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text(voice.isListening ? "أوقف الاستماع" : "ابحث بصوتك"))
+        .accessibilityIdentifier("home.mic")
     }
 
     private var shortcutsRow: some View {
@@ -889,6 +935,8 @@ struct MapHomeScreen: View {
         let d = s.destination
         let point = LngLat(lng: d.lng, lat: d.lat)
         let isSaved = saved.places.contains { PlanGeo.meters($0.position, point) < 30 }
+        /* V2: the coordinates have their own line below; a pressed point does not repeat them as its subtitle. */
+        let subtitle = v2 && s.subtitle == CoordinateShare.displayDecimal(point) ? nil : s.subtitle
         return VStack(alignment: .leading, spacing: theme.space(.m)) {
             HStack(alignment: .top, spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: s.icon, color: p.accent)
@@ -901,20 +949,22 @@ struct MapHomeScreen: View {
                             if let me = myPoint {
                                 Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                             }
-                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(2) }
+                            if let sub = subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(2) }
                         }
                     } else {
                         HStack(spacing: 6) {
                             if let me = myPoint {
                                 Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                             }
-                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                            if let sub = subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                         }
                     }
                 }
                 Spacer(minLength: 0)
                 SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "home.place.close", visual: 34) { closePlace() }
             }
+            /* V2: the coordinates and the elevation live here (no permanent bar over the home map). */
+            if v2 { pointLine(point) }
             if let a = assigning {
                 Button {
                     HomeShortcutStore.set(a, d)
@@ -1313,5 +1363,198 @@ struct MapHomeScreen: View {
             }
             searching = false
         }
+    }
+}
+
+// MARK: - Home V2 (one bar on top, one card at the bottom, two buttons on the map)
+
+extension MapHomeScreen {
+    /// Over the map: ONE glass bar («وين رايحين؟», the mic, «ملفي») and ONE small capsule with the
+    /// two map buttons (the layers, then «موقعي»). Nothing else floats on the map.
+    fileprivate func v2Chrome(sheetHeight: CGFloat) -> some View {
+        VStack(spacing: theme.space(.s)) {
+            topBar
+            HStack {
+                Spacer()
+                SaryControlCluster(items: v2MapControls) { id in
+                    if id == "layers" { layersOpen = true } else { recenter(zoom: 14) }
+                }
+            }
+            .padding(.horizontal, theme.space(.l))
+            Spacer()
+        }
+        .padding(.top, theme.space(.s))
+        .padding(.bottom, sheetHeight)
+    }
+
+    /// The same two ids as before: `map.layers` (THE layers button) and `home.locate`.
+    private var v2MapControls: [SaryMapControlItem] {
+        [.layers(), SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "home.locate")]
+    }
+
+    /// The one bar on top: the search field, the mic and the avatar in one glass pill.
+    private var topBar: some View {
+        HStack(spacing: theme.space(.xs)) {
+            searchFieldItems
+            profileButton(size: 38)
+        }
+        .padding(.leading, theme.space(.m))
+        .padding(.trailing, theme.space(.xxs))
+        .frame(minHeight: 52)
+        .saryGlass(Capsule(), role: .chrome)
+        .padding(.horizontal, theme.space(.l))
+        .onChange(of: searchFocused) { _, f in if f { setExpanded(true) } }
+        .overlay(alignment: .bottom) { voiceUnavailableNote }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home.topbar")
+    }
+
+    fileprivate func v2Plan(screen: CGFloat) -> HomeLayoutRules.Plan {
+        HomeLayoutRules.plan(screen: Double(screen), textScale: Double(textScale100 / 100), narrow: widthClass == .narrow,
+                             weather: homeWeatherLine != nil, status: stateCard, hasRecent: model.history.first != nil)
+    }
+
+    /// My area's weather now (kept reading) and the sunset; nil without a position.
+    private var homeWeatherLine: HomeWeatherLine? {
+        HomeLayoutRules.weatherLine(homeWeather.report, point: myPoint, now: Date())
+    }
+
+    /// The sheet's chips row (V1 had it over the map), edge to edge inside the sheet's padding.
+    fileprivate var sheetCategories: some View {
+        categoryChips
+            .padding(.horizontal, -theme.space(.l))
+    }
+
+    /// The sheet's content when nothing is searched or picked. Collapsed: the card only. Raised:
+    /// البيت/الشغل/المفضلة and the chips first, then the card, then «أماكن سابقة» and «طلعاتي».
+    @ViewBuilder
+    fileprivate func v2SheetContent(screen: CGFloat) -> some View {
+        let plan = v2Plan(screen: screen)
+        if let a = assigning { assignBanner(a) }
+        if expanded {
+            shortcutsRow
+            sheetCategories
+        }
+        v2Card(plan)
+        if expanded {
+            if !model.online { SaryOfflineStrip() }
+            expandedContent
+        }
+    }
+
+    /// The bottom card: the weather line, ONE primary «ابدأ طلعة», the four desert shortcuts and the outing row.
+    private func v2Card(_ plan: HomeLayoutRules.Plan) -> some View {
+        let area = myPoint.map { WeatherArea(around: $0.lat, lng: $0.lng) }
+        return VStack(alignment: .leading, spacing: theme.space(.m)) {
+            if plan.weatherLine, let line = homeWeatherLine { weatherLineView(line) }
+            Button { creating = true } label: { SaryButtonLabel(title: "ابدأ طلعة", systemImage: "plus") }
+                .buttonStyle(.sary(.primary))
+                .accessibilityIdentifier("home.start.create")
+            shortcutGrid(plan.grid)
+            v2OutingRow(recent: plan.recentRow)
+                .transition(SaryTransition.appear(theme))
+                .id(stateCardKind)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home.card")
+        .task(id: area?.key ?? "") {
+            guard let area else { return }
+            await homeWeather.update(area)
+        }
+    }
+
+    private func weatherLineView(_ line: HomeWeatherLine) -> some View {
+        let p = theme.palette
+        return HStack(spacing: theme.space(.s)) {
+            if let w = line.weather {
+                Text(w).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if let s = line.sun {
+                Text(s).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
+            }
+        }
+        .frame(minHeight: 22)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("home.weatherline")
+    }
+
+    /// «كشتة» · «دروب البر» · «الطقس» · «القبلة»: the «البر» tools, one tap each (no outing needed).
+    private func shortcutGrid(_ grid: HomeLayoutRules.Grid) -> some View {
+        let weatherAt = HomeDesertTools.weatherPoint(me: myPoint)
+        return HStack(spacing: theme.space(.s)) {
+            tile("tent.fill", "كشتة", id: "home.tile.camp", grid: grid) { openTool(.camp) }
+            /* «دروب البر» needs a destination: the «البر» sheet says how (pick a place, its card offers the routes). */
+            tile("point.topleft.down.to.point.bottomright.curvepath", "دروب البر", id: "home.tile.routes", grid: grid) { openTool(.menu) }
+            tile("cloud.sun.fill", "الطقس", id: "home.tile.weather", grid: grid, enabled: weatherAt != nil,
+                 hint: weatherAt == nil ? "نحتاج موقعك عشان نجيب جوّك" : nil) {
+                if let w = weatherAt { openTool(.weather(w)) }
+            }
+            tile("location.north.line.fill", "القبلة", id: "home.tile.qibla", grid: grid) { openTool(.qibla) }
+        }
+    }
+
+    private func tile(_ icon: String, _ title: String, id: String, grid: HomeLayoutRules.Grid, enabled: Bool = true, hint: String? = nil,
+                      run: @escaping () -> Void) -> some View {
+        let p = theme.palette
+        return Button(action: run) {
+            VStack(spacing: theme.space(.xs)) {
+                Image(systemName: icon).font(.system(size: 20, weight: .semibold)).foregroundStyle(p.accentText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: grid == .tiles ? 52 : theme.minTarget)
+                    .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.elevated))
+                if grid == .tiles {
+                    Text(title).saryText(.caption, weight: .bold).foregroundStyle(p.textPrimary)
+                        .lineLimit(1).minimumScaleFactor(0.75)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: theme.minTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.55)
+        .accessibilityLabel(Text(title))
+        .accessibilityHint(Text(hint ?? ""))
+        .accessibilityIdentifier(id)
+    }
+
+    /// The card's last row: the state card when there is one (running, upcoming, invite, failed),
+    /// else the last ended outing (dropped first on small screens). Raised, «طلعاتي» lists them.
+    @ViewBuilder
+    private func v2OutingRow(recent: Bool) -> some View {
+        switch stateCard {
+        case let .active(id):
+            if let o = model.current.first(where: { $0.id == id }) { activeCard(o) }
+        case let .upcoming(id):
+            if let o = model.current.first(where: { $0.id == id }) { upcomingCard(o) }
+        case .invite:
+            inviteCard
+        case let .failed(message):
+            if !expanded { failedCard(message) }
+        case .start, .none:
+            if recent, !expanded, let last = model.history.first {
+                OutingCard(o: last, open: { push(.summary(last.id)) }, details: nil, compact: true)
+                    .sarySurface(radius: SaryRadius.m)
+                    .accessibilityIdentifier("home.recentOuting")
+            }
+        }
+    }
+
+    /// The picked point's coordinates and, when the map can tell, its elevation (`MapTerrainProbe`).
+    fileprivate func pointLine(_ point: LngLat) -> some View {
+        let p = theme.palette
+        let terrain = MapTerrainProbe.sample(point)
+        let elevation: String? = terrain.elevationM == nil ? nil : PlaceBriefRules.elevationText(terrain)
+        let text = [CoordinateShare.displayDecimal(point), elevation].compactMap { $0 }.joined(separator: " · ")
+        return HStack(spacing: 6) {
+            Image(systemName: "scope").font(.system(size: 12, weight: .semibold)).foregroundStyle(p.textTertiary)
+                .accessibilityHidden(true)
+            Text(text).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .textSelection(.enabled)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("home.place.coordinate")
     }
 }

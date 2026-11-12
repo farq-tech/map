@@ -429,6 +429,16 @@ final class HomeLayoutRulesTests: XCTestCase {
         XCTAssertNil(old.weather)
     }
 
+    func testMapIsLiftedAboveTheCardOnlyWhereTheCardCoversTheLogo() {
+        // A phone: the card is full width, so the map ends where the card starts (logo + «ⓘ» stay visible).
+        XCTAssertEqual(R.mapBottomInset(width: 393, restingCard: 352), 352)
+        XCTAssertEqual(R.mapBottomInset(width: 375, restingCard: 278), 278)
+        // iPad / landscape: the centred 560 pt card leaves the bottom-left corner free.
+        XCTAssertEqual(R.mapBottomInset(width: 1024, restingCard: 352), 0)
+        XCTAssertEqual(R.mapBottomInset(width: 0, restingCard: 352), 0, "not measured yet")
+        XCTAssertEqual(R.mapBottomInset(width: 393, restingCard: .nan), 0)
+    }
+
     func testOldLayoutOnlyBehindTheDebugArgument() {
         XCTAssertFalse(HomeLayoutSwitch.v1(arguments: []))
         #if DEBUG

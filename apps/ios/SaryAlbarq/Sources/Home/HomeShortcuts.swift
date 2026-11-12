@@ -338,6 +338,20 @@ enum HomeLayoutRules {
         return (handle + top + content + bottom).rounded()
     }
 
+    /// The sheet's widest (iPad / landscape: centred, the map beside it).
+    static let cardMaxWidth = 560.0
+    /// Room the Mapbox logo and «ⓘ» need from the map's bottom-left corner.
+    static let ornamentsWidth = 120.0
+
+    /// How far the map's bottom edge is lifted (pt) so the Mapbox logo and the attribution button
+    /// stay above the resting card: the card's height on a phone; 0 when the centred card leaves
+    /// the corner free (wide windows).
+    static func mapBottomInset(width: Double, restingCard: Double) -> Double {
+        guard width.isFinite, restingCard.isFinite, width > 0 else { return 0 }
+        let side = (width - min(width, cardMaxWidth)) / 2
+        return side >= ornamentsWidth ? 0 : max(0, restingCard)
+    }
+
     /// The line's two halves; nil (no line) without a position: nothing to say then.
     static func weatherLine(_ r: WeatherReport?, point: LngLat?, now: Date, timeZone: TimeZone = .current) -> HomeWeatherLine? {
         guard let point, PlanGeo.valid(lat: point.lat, lng: point.lng) else { return nil }
