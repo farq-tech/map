@@ -186,3 +186,77 @@ test('clouds tiles: mid-level cloud is drawn clearly (stronger curve than the ou
   assert.ok(tile[7] > dflt[7] + 40, `mid cloud alpha ${tile[7]} vs ${dflt[7]}`);
   assert.ok(tile[11] >= 240);
 });
+
+/** A fake WMS (as in the HTTP test above) whose picture replies can be delayed, like the slow EUMETView. */
+function slowWms(delayMs) {
+  const shifts = { '2026-11-11T19:00:00Z': 20, '2026-11-11T18:30:00Z': 10, '2026-11-11T18:00:00Z': 0 };
+  return async (url) => {
+    if (/GetCapabilities/.test(url)) {
+      return { status: 200, type: 'text/xml', body: Buffer.from('<Dimension name="time">2026-11-10T00:00:00Z/2026-11-11T19:00:00.000Z/PT10M</Dimension>') };
+    }
+    await new Promise((r) => setTimeout(r, delayMs()));
+    const t = /time=([^&]+)/.exec(url)[1].replace(/%3A/g, ':');
+    return { status: 200, type: 'image/png', body: textured(shifts[t] ?? 0) };
+  };
+}
+
+test('warmOutlook: a warmed cell is served at once afterwards, even if the upstream is then slow (no cold 503)', async () => {
+  const nowMs = Date.parse('2026-11-11T19:59:00Z');
+  const real = Date.now;
+  Date.now = () => nowMs;
+  clouds._reset();
+  let delay = 0;
+  fetcher.setFetch(slowWms(() => delay));
+  try {
+    const w = await out.warmOutlook(nowMs, [[26.3, 43.97]]); // Qassim cell
+    assert.equal(w.ok, 1, JSON.stringify(w));
+    /* Ten minutes later a new picture exists (new cache key) and the upstream is now very slow: the last-good window answers. */
+    delay = 60_000;
+    const later = nowMs + 5 * MIN;
+    Date.now = () => later;
+    const t0 = real.call(Date);
+    const j = await out.outlook(26.33, 43.97, later);
+    assert.equal(j.ok, true);
+    assert.ok(real.call(Date) - t0 < 1500, 'served from the last-good window, not waited for the upstream');
+    assert.equal(j.image_time, '2026-11-11T19:00:00.000Z');
+  } finally {
+    Date.now = real;
+    fetcher.setFetch(null);
+    clouds._reset();
+  }
+});
+
+test('HTTP: /clouds/outlook on a cold cell with a slow upstream answers 202 warming, then 200 once the background load is done', async () => {
+  const nowMs = Date.parse('2026-11-11T19:59:00Z');
+  const real = Date.now;
+  Date.now = () => nowMs;
+  clouds._reset();
+  out._reset();
+  process.env.WEATHER_ROUTE_DEADLINE_MS = '300';
+  delete require.cache[require.resolve('../routes/weather')];
+  fetcher.setFetch(slowWms(() => 250)); // 3 pictures × 250 ms > the 300 ms route deadline
+  const createWeatherRouter = require('../routes/weather');
+  const app = express();
+  app.use('/api', createWeatherRouter());
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    let r = await fetch(`${base}/api/weather/clouds/outlook?lat=26.33&lng=43.97`);
+    assert.equal(r.status, 202);
+    const j0 = await r.json();
+    assert.equal(j0.ok, false);
+    assert.equal(j0.error, 'warming');
+    assert.equal(r.headers.get('retry-after'), '30');
+    await new Promise((res) => setTimeout(res, 1200)); // the window finishes loading in the background
+    r = await fetch(`${base}/api/weather/clouds/outlook?lat=26.33&lng=43.97`);
+    assert.equal(r.status, 200);
+    assert.equal((await r.json()).ok, true);
+  } finally {
+    server.close();
+    delete process.env.WEATHER_ROUTE_DEADLINE_MS;
+    delete require.cache[require.resolve('../routes/weather')];
+    fetcher.setFetch(null);
+    Date.now = real;
+    clouds._reset();
+  }
+});

@@ -82,12 +82,12 @@ function fieldsFromPng(buf) {
   return { gray: { w: src.width, h: src.height, data: gray }, opacity: { w: src.width, h: src.height, data: opacity } };
 }
 
-async function loadFields(box, tMs) {
+async function loadFields(box, tMs, background = false) {
   const url = clouds.wmsMapUrl(box, WINDOW_PX, WINDOW_PX, tMs);
   /* EUMETView answers 504 or a blank picture now and then: one retry (each attempt hard-capped). */
   for (let k = 0; k < 2; k++) {
     try {
-      const r = await fetchBuffer(url, { timeoutMs: WINDOW_TIMEOUT_MS, queueTimeoutMs: 20_000, label: 'clouds' });
+      const r = await fetchBuffer(url, { timeoutMs: WINDOW_TIMEOUT_MS, queueTimeoutMs: background ? 120_000 : 20_000, label: 'clouds', background });
       if (r.status === 200 && /png/.test(r.type)) {
         const f = fieldsFromPng(r.body);
         if (f) return f;
@@ -132,7 +132,7 @@ function cellOf(lat, lng) {
   return { lat: Math.round(lat), lng: Math.round(lng) };
 }
 
-async function outlook(lat, lng, nowMs = Date.now()) {
+async function outlook(lat, lng, nowMs = Date.now(), { background = false } = {}) {
   const latest = await clouds.latestImageTime(nowMs);
   const sel = pickFrames(clouds.planFrames(latest, nowMs));
   if (!sel) return { ok: false, error: 'not_enough_frames' };
@@ -144,7 +144,7 @@ async function outlook(lat, lng, nowMs = Date.now()) {
     const box = [cx - half, cy - half, cx + half, cy + half];
     const ts = [sel.newer, sel.older, sel.oldest].filter(Boolean);
     const got = [];
-    for (const f of ts) got.push(await loadFields(box, Date.parse(f.time))); // one at a time: EUMETView is slow and fragile
+    for (const f of ts) got.push(await loadFields(box, Date.parse(f.time), background)); // one at a time: EUMETView is slow and fragile
     if (!got[0] || !got[1]) return null;
     const w = { box, newer: got[0], older: got[1], oldest: got[2] || null, sel };
     lastGood.set(`${cell.lat}/${cell.lng}`, w);
@@ -210,4 +210,42 @@ async function outlook(lat, lng, nowMs = Date.now()) {
   };
 }
 
-module.exports = { pickFrames, analyse, fieldsFromPng, toMercator, cellOf, outlook, WINDOW_KM, WINDOW_PX, MIN_CONFIDENCE };
+
+/**
+ * Pre-warm: the upstream (EUMETView) answers in 15–25 s and the window needs 2–3 pictures, so a cold
+ * request can never finish inside the route deadline (production 503s, 2026-11-13). Reading the key
+ * cells in the background keeps a last-good window for each, which `outlook` then serves at once (with its
+ * true age) while a fresh one loads. Background priority: it never queues in front of a person.
+ */
+const WARM_CELLS = (process.env.CLOUD_OUTLOOK_WARM_CELLS
+  ? process.env.CLOUD_OUTLOOK_WARM_CELLS.split(';').map((c) => c.split(',').map(Number)).filter((c) => c.length === 2 && c.every(Number.isFinite))
+  : [[26.3, 43.97], [24.7, 46.7], [27.5, 41.7], [26.4, 50.1], [24.5, 39.6], [21.5, 39.2]]); // Qassim, Riyadh, Hail, Dammam, Medina, Jeddah
+let warmingOutlook = false;
+async function warmOutlook(nowMs = Date.now(), cells = WARM_CELLS) {
+  if (warmingOutlook) return { skipped: 'already_running' };
+  warmingOutlook = true;
+  const out = { cells: cells.length, ok: 0, failed: 0 };
+  try {
+    for (const [lat, lng] of cells) {
+      try {
+        const r = await outlook(lat, lng, nowMs, { background: true });
+        if (r.ok) out.ok++; else out.failed++;
+      } catch {
+        out.failed++;
+      }
+    }
+    if (!process.env.NODE_TEST_CONTEXT) console.log(`[clouds] outlook warm ${JSON.stringify(out)}`);
+    return out;
+  } finally {
+    warmingOutlook = false;
+  }
+}
+
+/** Tests only: forget every cached window. */
+function _reset() {
+  cache.map.clear();
+  lastGood.map.clear();
+  inflight.clear();
+}
+
+module.exports = { _reset, warmOutlook, WARM_CELLS, pickFrames, analyse, fieldsFromPng, toMercator, cellOf, outlook, WINDOW_KM, WINDOW_PX, MIN_CONFIDENCE };
