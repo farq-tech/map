@@ -111,13 +111,19 @@ final class LayersButtonUITests: XCTestCase {
             let app = launch(.exploring, text: size)
             el(app, "map.layers").tap()
             XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10))
+            // Pull the sheet to its large detent first (at large text on a short phone the medium one has little room).
+            let top = el(app, "layer.satellite").frame.minY
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: max(0.05, (top - 62) / app.frame.height)))
+                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)))
+            sleep(1)
             let sos = el(app, "sos.overlay")
             XCTAssertTrue(sos.waitForExistence(timeout: 8), "\(tag): the floating SOS is over the sheet")
             let page = app.scrollViews.firstMatch
-            for _ in 0..<12 { page.swipeUp(velocity: .slow) }
+            let last = el(app, "explore-offline")
+            // Scroll until the last row is wholly inside the scroll area (a tall row at large text takes many slow swipes).
+            for _ in 0..<40 where !(last.exists && last.frame.maxY <= page.frame.maxY + 1) { page.swipeUp(velocity: .slow) }
             sleep(1)
             XCTAssertLessThanOrEqual(page.frame.maxY, sos.frame.minY + 1, "\(tag): the scroll area ends above the SOS disc (\(page.frame) vs \(sos.frame))")
-            let last = el(app, "explore-offline")
             XCTAssertTrue(last.isHittable, "\(tag): the last row is reachable")
             let x = last.frame.intersection(sos.frame)
             XCTAssertFalse(x.width > 1 && x.height > 1, "\(tag): the last row is clear of the SOS disc")
