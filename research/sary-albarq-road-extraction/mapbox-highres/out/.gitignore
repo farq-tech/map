@@ -1,0 +1,3 @@
+# Figures that draw the shape of the reference GPS track must never be committed (owner rule); regenerate locally if needed.
+track_coverage_map.png
+exp2_coverage_map.png

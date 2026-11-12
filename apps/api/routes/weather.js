@@ -56,7 +56,7 @@ function createWeatherRouter() {
   }));
 
   router.get('/weather/clouds/tile/:id/:z/:x/:y.png', wrap(async (req, res) => {
-    const r = await clouds.tile(req.params.id, int(req.params.z), int(req.params.x), int(req.params.y));
+    const r = await clouds.tile(req.params.id, int(req.params.z), int(req.params.x), int(req.params.y), Date.now(), { legacy: req.query.style === 'legacy' });
     /* A frame never changes once sensed. */
     return sendTile(res, r, 86400);
   }));
