@@ -147,6 +147,7 @@ extension AppearanceSettings {
         if arg("-SaryDrive") == "0" { s.prefs.driveMode = .off }
         if arg("-SaryNight") == "1" { s.prefs.nightMode = .on }
         if arg("-SaryNight") == "0" { s.prefs.nightMode = .off }
+        if let c = SaryThemeChoice.fromArguments(args) { s.themeChoice = c }
         if arg("-SaryFallback") == "1" { s.forceGlassFallback = true }
         /* Offline proof: cut the Mapbox stack off the network; the map must draw from the TileStore. */
         if args.contains("-SaryMapboxOffline") { OfflineSwitch.getInstance().setMapboxStackConnectedForConnected(false) }

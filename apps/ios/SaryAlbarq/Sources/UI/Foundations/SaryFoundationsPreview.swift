@@ -5,7 +5,8 @@ import SwiftUI
 /// (screenshots + `FoundationsUITests`). Optional `-SaryShowcaseType AX3`-style size via `-SaryFoundationsType`.
 struct SaryFoundationsPreview: View {
     @State private var taps = 0
-    private let theme = SaryTheme.resolve(prefs: AppearancePreferences(), scheme: .dark, night: false, drive: false)
+    /// `-SaryNewUITheme dark|light|dim` (default dark).
+    private let theme = SaryThemeChoice.previewTheme(SaryThemeChoice.fromArguments(ProcessInfo.processInfo.arguments) ?? .dark)
 
     var body: some View {
         let p = theme.palette
@@ -44,6 +45,66 @@ struct SaryFoundationsPreview: View {
 
     static var typeSize: DynamicTypeSize {
         ShowcaseLab.parseType(UserDefaults.standard.string(forKey: "SaryFoundationsType")) ?? .large
+    }
+}
+
+extension SaryThemeChoice {
+    /// A fixed theme for previews, the gallery and screenshots (not driving; `auto` previews as dark).
+    static func previewTheme(_ choice: SaryThemeChoice) -> SaryTheme {
+        let r = choice.resolve(autoNight: false, driving: false)
+        return SaryTheme.resolve(prefs: AppearancePreferences(), scheme: r.scheme, night: r.night, drive: false)
+    }
+}
+
+/// DEBUG `-SaryThemesGallery`: the three themes one under the other (dark, light, dim) with the same
+/// components, palette swatches and the glass recipe, for design review and screenshots.
+struct SaryThemesGallery: View {
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach([SaryThemeChoice.dark, .light, .dim]) { choice in
+                    panel(choice).accessibilityIdentifier("themes-panel-\(choice.rawValue)")
+                }
+            }
+        }
+        .accessibilityIdentifier("themes-gallery-root")
+    }
+
+    private func panel(_ choice: SaryThemeChoice) -> some View {
+        let theme = SaryThemeChoice.previewTheme(choice)
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: SarySpace.m.rawValue) {
+            Text(choice.label).saryType(.title).foregroundStyle(p.textPrimary)
+            HStack(spacing: SarySpace.s.rawValue) {
+                swatch(p.background, "خلفية", p); swatch(p.elevated, "مرتفع", p); swatch(p.surface, "سطح", p)
+                swatch(p.accent, "مميز", p); swatch(p.navBlue, "ملاحة", p); swatch(p.live, "مباشر", p)
+            }
+            ZStack {
+                LinearGradient(colors: [Color(rgb: 0xC9A26B), Color(rgb: 0x9AA7B8), Color(rgb: 0x6E7A55)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                SaryGlassSurface {
+                    VStack(spacing: SarySpace.s.rawValue) {
+                        Text("٢٤° صافي · المغرب ٥:١٢").saryType(.body).foregroundStyle(p.textPrimary)
+                        Text("ملاحظة ثانوية").saryType(.caption).foregroundStyle(p.textSecondary)
+                        SaryPrimaryButton("＋ ابدأ طلعة", id: "themes-primary-\(choice.rawValue)") {}
+                        SarySecondaryButton("اختر من جهات الاتصال", id: "themes-secondary-\(choice.rawValue)") {}
+                    }
+                }.padding(SarySpace.l.rawValue)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: SaryRadius.bar, style: .continuous))
+        }
+        .padding(SarySpace.l.rawValue)
+        .frame(maxWidth: .infinity)
+        .background(p.background)
+        .saryTheme(theme)
+    }
+
+    private func swatch(_ c: Color, _ name: String, _ p: SaryPalette) -> some View {
+        VStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 10).fill(c).frame(height: 36)
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(p.stroke, lineWidth: 1))
+            Text(name).saryType(.caption).foregroundStyle(p.textSecondary)
+        }.frame(maxWidth: .infinity)
     }
 }
 #endif
