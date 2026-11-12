@@ -214,7 +214,7 @@ struct QRScanSheet: View {
         let p = theme.palette
         let noCamera = AVCaptureDevice.default(for: .video) == nil
         let refused = status == .denied || status == .restricted
-        return GroupCPage(title, closeID: "qr.close", scrolls: false, onClose: cancel) {
+        return SaryScreenScaffold(title: title, closeID: "qr.close", onClose: cancel, scrolls: false) {
             VStack(spacing: SarySpace.l.rawValue) {
                 if noCamera {
                     SaryStateView(kind: .error(title: "ما فيه كاميرا", message: "اكتب الرمز بيدك بدل المسح."))

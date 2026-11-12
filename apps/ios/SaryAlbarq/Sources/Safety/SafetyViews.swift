@@ -426,7 +426,8 @@ struct ReturnTimerEditor: View {
     private var newBody: some View {
         let n = safety.now()
         let p = theme.palette
-        return GroupCPage("مؤقت الرجوع", closeID: "timer-close", onClose: { safety.editorOpen = false }) {
+        return SaryScreenScaffold(title: "مؤقت الرجوع", closeID: "timer-close", onClose: { safety.editorOpen = false }) {
+          VStack(alignment: .leading, spacing: SarySpace.l.rawValue) {
             Text(safety.localOnly
                  ? "منبّه على جوالك فقط: يذكّرك بوقت رجوعك، وما يوصل لأحد. إذا تحتاج مساعدة اتصل بـ٩١١."
                  : "حدد متى ترجع، وأرسل رابطًا لأحد من أهلك. إذا ما ضغطت «وصلت» قبل الوقت، يوصله تنبيه.")
@@ -442,7 +443,8 @@ struct ReturnTimerEditor: View {
                             .accessibilityIdentifier("timer-quick-\(h)")
                     }
                 }
-                GroupCCard {
+                SaryListGroup {
+Group {
                     VStack(alignment: .leading, spacing: SarySpace.s.rawValue) {
                         DatePicker("اليوم والساعة", selection: $due, in: n.addingTimeInterval(ReturnTimerLogic.minLead)...n.addingTimeInterval(ReturnTimerLogic.maxLead),
                                    displayedComponents: [.date, .hourAndMinute])
@@ -455,12 +457,15 @@ struct ReturnTimerEditor: View {
                             .saryType(.numeric).foregroundStyle(p.accentText)
                     }
                 }
+.padding(SarySpace.m.rawValue).frame(maxWidth: .infinity, alignment: .leading)
+}
             }
             if !safety.localOnly {
                 SaryTextField(title: "اسم اللي يتابعك", placeholder: "مثل: أم فهد", text: $contact, id: "timer-contact", maxLength: ReturnTimerLogic.contactMax)
                 VStack(alignment: .leading, spacing: SarySpace.s.rawValue) {
                     Text("وش يشوف من الرابط؟").saryType(.headline).foregroundStyle(p.textPrimary)
-                    GroupCCard {
+                    SaryListGroup {
+Group {
                         VStack(alignment: .leading, spacing: SarySpace.m.rawValue) {
                             bullet("person.2.fill", "اسم الطلعة وأسماء اللي معك ووقت رجوعك.")
                             bullet("eye.slash.fill", "ما يشوف مواقعكم ما دام الوقت ما خلص.")
@@ -468,9 +473,12 @@ struct ReturnTimerEditor: View {
                             bullet(SafetyIcon.arrived, "إذا ضغطت «وصلت» يوصله «وصلوا بالسلامة».")
                         }
                     }
+.padding(SarySpace.m.rawValue).frame(maxWidth: .infinity, alignment: .leading)
+}
                 }
             }
             Text("نذكّرك قبل الموعد بـ٣٠ دقيقة و١٠ دقائق.").saryType(.caption).foregroundStyle(p.textTertiary)
+          }
         } bottom: {
             Button { Task { await safety.arm(due: due, contact: contact) } } label: {
                 SaryButtonLabel(title: safety.localOnly ? "اضبط المنبّه" : "اضبط وأرسل الرابط",

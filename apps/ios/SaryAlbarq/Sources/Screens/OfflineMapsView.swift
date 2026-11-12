@@ -19,8 +19,8 @@ struct OfflineMapsView: View {
             if NewUI.enabled {
                 /* New interface (Build 47, group C): the unified window title; «حمّل منطقة» is the one
                    primary button, pinned at the bottom. Everything else is where it was. */
-                GroupCPage("الخرائط بلا إنترنت", subtitle: "للبر حيث لا تغطية", closeID: "offline.close", onClose: back) {
-                    sections(addInline: false)
+                SaryScreenScaffold(title: "الخرائط بلا إنترنت", subtitle: "للبر حيث لا تغطية", closeID: "offline.close", onClose: back) {
+                    VStack(alignment: .leading, spacing: SarySpace.l.rawValue) { sections(addInline: false) }
                 } bottom: {
                     addButton
                 }
