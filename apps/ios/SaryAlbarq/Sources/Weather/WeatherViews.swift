@@ -222,6 +222,8 @@ struct WeatherSheet: View {
     var changeDestination: (() -> Void)? = nil
     /// Said honestly when the destination is only on this phone.
     var destinationNote: String? = nil
+    /// W-1: the live screen's page also holds the map layers and their controls (nil model = no map on screen).
+    var showsMapControls = false
     @Environment(\.sary) private var theme
     @State private var now = Date()
     @State private var pickDeparture = false
@@ -231,6 +233,8 @@ struct WeatherSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    /* W-1: the layers come first on the live screen's page: it is what the map's chip opened it for. */
+                    if showsMapControls, let m = WeatherLegendModel.active { mapSection(m) }
                     if weather.destinationPoint != nil {
                         /* The destination first: it is what the chip on the map shows. */
                         WeatherCardView(ui: weather.destinationCard(now: now, hours: 24))
@@ -323,6 +327,12 @@ struct WeatherSheet: View {
         }
         .padding(theme.space(.l))
         .sarySurface(radius: SaryRadius.l)
+    }
+
+    private func mapSection(_ m: WeatherLegendModel) -> some View {
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            WeatherMapSection(model: m)
+        }
     }
 
     private var wadiSection: some View {

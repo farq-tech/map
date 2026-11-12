@@ -381,6 +381,7 @@
 		99D7D53D0C335A8D09A60A73 /* CloudFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6279B67DAA10A1762E33D070 /* CloudFlow.swift */; };
 		9A3CD88BCA8CC00D11A65A80 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = FC139EAD42D49AEAA31C42F6 /* README.md */; };
 		9B71C5433FA3670679205CCA /* MapboxNavigationCore in Frameworks */ = {isa = PBXBuildFile; productRef = 13C88C33837F81FD3A5CE12B /* MapboxNavigationCore */; };
+		9BE99B195B05F131BFFC9309 /* WeatherPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE92A933BA61FD6E3DF89489 /* WeatherPage.swift */; };
 		9C195B55BAB39D77B8998B62 /* DesertRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9438EB2A51D2B452C8AA81AD /* DesertRouter.swift */; };
 		9C57BC9BFE5C9DEA0719B95F /* OutingActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD389CA8D4885D6779BFE2B /* OutingActivityBuilder.swift */; };
 		9C683761B3FB672C83B60FDA /* PTTLinkText.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC8220C3D4E05C5EC1BB1781 /* PTTLinkText.swift */; };
@@ -420,6 +421,7 @@
 		AC4D8D8D085E2268D59A5158 /* DestinationCompassUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFE5C7E847E942F99E5EDF6C /* DestinationCompassUITests.swift */; };
 		AC7E4F8BBE981CD3F2F475C5 /* HomeDesert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FB2DA77DABE9F602B10595 /* HomeDesert.swift */; };
 		ACB552ABFF343486BE8244CE /* NavGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26444FB642192D73393CFABD /* NavGuidance.swift */; };
+		AD9BC324A699D803D36F62AF /* WeatherPageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B93DD32D2B749531124216 /* WeatherPageTests.swift */; };
 		ADB6DE867E0647CAAC0D69C6 /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C955FB296901E5F5AA3ED3A /* ChatModels.swift */; };
 		AE052ABDC550D4A7E5A0127D /* NewHomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C85983186AF6BDE74BD6DF3 /* NewHomeUITests.swift */; };
 		B029B98238C9EDEABB757DD5 /* OutingDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0BA2EAA55F3208B7380B12C /* OutingDestination.swift */; };
@@ -954,6 +956,7 @@
 		8047438796945B9B2C699C8B /* LiveOutingPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingPresenter.swift; sourceTree = "<group>"; };
 		80CE3133B0257B80CB692127 /* DestinationCompass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationCompass.swift; sourceTree = "<group>"; };
 		816FF5DA4F1C348B22CC18E1 /* LiveDeclutterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveDeclutterTests.swift; sourceTree = "<group>"; };
+		81B93DD32D2B749531124216 /* WeatherPageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherPageTests.swift; sourceTree = "<group>"; };
 		826A2810F7AE639B91EB56BD /* NavText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavText.swift; sourceTree = "<group>"; };
 		829DC987210D81AB7F10A4F2 /* AccountDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletion.swift; sourceTree = "<group>"; };
 		8395E766FD74F9D3636588C2 /* NavPromptTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavPromptTimingTests.swift; sourceTree = "<group>"; };
@@ -1238,6 +1241,7 @@
 		FD8418D1111701D4B5F03B01 /* IntroOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntroOverlay.swift; sourceTree = "<group>"; };
 		FD9FA98B1A53C6183E33883C /* SendGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendGate.swift; sourceTree = "<group>"; };
 		FDFDB795B66CD76B1738FF47 /* ExploreMapDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreMapDrawer.swift; sourceTree = "<group>"; };
+		FE92A933BA61FD6E3DF89489 /* WeatherPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherPage.swift; sourceTree = "<group>"; };
 		FE9BC401E005AFE8C3788F3C /* NavETATests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavETATests.swift; sourceTree = "<group>"; };
 		FF000A053D67AA53866613C3 /* CarColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarColors.swift; sourceTree = "<group>"; };
 		FFE442D7AFEE6869AAD0FB1F /* DemoPlanBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoPlanBackend.swift; sourceTree = "<group>"; };
@@ -1731,6 +1735,7 @@
 				292BB5809C3D66E13C3848D4 /* WalkieTalkieTests.swift */,
 				ADD3481E4956173E7476C431 /* WaypointTests.swift */,
 				DCAAA1A3A5005482E11D0A51 /* WeatherLayersTests.swift */,
+				81B93DD32D2B749531124216 /* WeatherPageTests.swift */,
 				42C1C3FA58A8C93A2102ACB0 /* WeatherTests.swift */,
 				EB747F2B6C8789C6A7588BE7 /* WindRainMotionTests.swift */,
 				01FB7D7462CB968C1B2B7987 /* Fixtures */,
@@ -2288,6 +2293,7 @@
 				75DA0B9A4AF344663731ED5F /* WeatherLayersSection.swift */,
 				9CAF059F25F880DEEA683E7A /* WeatherModels.swift */,
 				DB0DD9D61893377188CDE35B /* WeatherOverlay.swift */,
+				FE92A933BA61FD6E3DF89489 /* WeatherPage.swift */,
 				2A68479D023A2BE748792785 /* WeatherPresenter.swift */,
 				7A9CE38AC34666A5BD969B27 /* WeatherProvider.swift */,
 				6A448E556D76113B8C8771FA /* WeatherRules.swift */,
@@ -2776,6 +2782,7 @@
 				5F38F339B71924FB4B0725B6 /* WalkieTalkieTests.swift in Sources */,
 				98F4EB3B6FBDCC01779015FA /* WaypointTests.swift in Sources */,
 				7CFCF40C8A75281649BD4B3C /* WeatherLayersTests.swift in Sources */,
+				AD9BC324A699D803D36F62AF /* WeatherPageTests.swift in Sources */,
 				4A03A5EB17408785D87EC545 /* WeatherTests.swift in Sources */,
 				72411298B8268FE663C077C7 /* WindRainMotionTests.swift in Sources */,
 			);
@@ -3147,6 +3154,7 @@
 				3DE75AB0D311F8CCF4E0449C /* WeatherLayersSection.swift in Sources */,
 				221DBCA2BC5B78E51263FF28 /* WeatherModels.swift in Sources */,
 				4A7A82B0B905F4E791B2D6BB /* WeatherOverlay.swift in Sources */,
+				9BE99B195B05F131BFFC9309 /* WeatherPage.swift in Sources */,
 				E8DD03C2973FBFA303C4C411 /* WeatherPresenter.swift in Sources */,
 				3679603A6D6B22F72369A9C7 /* WeatherProvider.swift in Sources */,
 				75CFCA76ED14EDCBC2D42CDE /* WeatherRules.swift in Sources */,
