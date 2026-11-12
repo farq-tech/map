@@ -266,8 +266,11 @@ struct DestinationCompassView: View {
     @State private var rose: Double?
     @State private var needle: Double?
     @State private var marker: Double?
+    /// The target list (a popover, not a `Menu`: a Menu label gets the system's capsule background on
+    /// iOS 26, which squeezed the round dial into a pill and clipped «غ» / «ق» — owner report, Build 46).
+    @State private var choosing = false
 
-    static let dial: CGFloat = 112
+    static let dial: CGFloat = 120
 
     private struct Letter: Hashable {
         var text: String
@@ -277,20 +280,7 @@ struct DestinationCompassView: View {
     private static let letters = [Letter(text: "ش", deg: 0), Letter(text: "ق", deg: 90), Letter(text: "ج", deg: 180), Letter(text: "غ", deg: 270)]
 
     var body: some View {
-        Menu {
-            ForEach(options) { o in
-                Button { pick(o.target) } label: {
-                    Label {
-                        Text(DestinationCompass.title(o.target))
-                        if let n = o.note { Text(n) }
-                    } icon: {
-                        Image(systemName: o.target == reading.target ? "checkmark" : DestinationCompass.icon(o.target))
-                    }
-                }
-                .disabled(!o.enabled)
-                .accessibilityIdentifier("live.compass.\(o.target.rawValue)")
-            }
-        } label: {
+        Button { choosing = true } label: {
             VStack(spacing: 6) {
                 dialView
                 chip
@@ -307,6 +297,10 @@ struct DestinationCompassView: View {
                 }
             }
             .contentShape(Rectangle())
+        }
+        .popover(isPresented: $choosing, arrowEdge: .bottom) {
+            targetList
+                .presentationCompactAdaptation(.popover)
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityElement(children: .ignore)
@@ -326,6 +320,49 @@ struct DestinationCompassView: View {
         }
     }
 
+    /// The five targets, as in the mockup: the chosen one filled, a reason under a disabled one.
+    private var targetList: some View {
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: 2) {
+            ForEach(options) { o in
+                let on = o.target == reading.target
+                Button {
+                    choosing = false
+                    pick(o.target)
+                } label: {
+                    HStack(spacing: theme.space(.s)) {
+                        Image(systemName: DestinationCompass.icon(o.target))
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 22)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(DestinationCompass.title(o.target))
+                                .saryText(.body, weight: .bold)
+                            if let n = o.note {
+                                Text(n)
+                                    .saryText(.micro, weight: .medium)
+                                    .foregroundStyle(on ? p.onAccent.opacity(0.8) : p.textSecondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        if on { Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)) }
+                    }
+                    .foregroundStyle(on ? p.onAccent : p.textPrimary)
+                    .padding(.horizontal, theme.space(.m))
+                    .frame(minHeight: 48)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? p.accent : Color.clear))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!o.enabled)
+                .opacity(o.enabled ? 1 : 0.5)
+                .accessibilityIdentifier("live.compass.\(o.target.rawValue)")
+            }
+        }
+        .padding(6)
+        .frame(width: 250)
+    }
+
     private var dialView: some View {
         let p = theme.palette
         let d = Self.dial
@@ -336,8 +373,8 @@ struct DestinationCompassView: View {
                 ForEach(0..<24, id: \.self) { i in
                     Capsule()
                         .fill(i % 6 == 0 ? p.textPrimary : p.textTertiary)
-                        .frame(width: i % 6 == 0 ? 2.5 : 1.5, height: i % 6 == 0 ? 9 : 5)
-                        .offset(y: -(d / 2 - 9))
+                        .frame(width: i % 6 == 0 ? 2.5 : 1.5, height: i % 6 == 0 ? 7 : 4)
+                        .offset(y: -(d / 2 - 6))
                         .rotationEffect(.degrees(Double(i) * 15))
                 }
                 ForEach(Self.letters, id: \.self) { l in
@@ -346,7 +383,8 @@ struct DestinationCompassView: View {
                         .foregroundStyle(l.deg == 0 ? p.accentText : p.textSecondary)
                         /* The letters stay upright while the rose turns. */
                         .rotationEffect(.degrees(-(l.deg + roseAngle)))
-                        .offset(y: -(d / 2 - 23))
+                        /* Between the rim's ticks and the centre disc (r 28), clear of both. */
+                        .offset(y: -(d / 2 - 22))
                         .rotationEffect(.degrees(l.deg))
                 }
             }
@@ -361,8 +399,9 @@ struct DestinationCompassView: View {
             }
             CompassNeedleShape()
                 .fill(p.accent)
-                .frame(width: 16, height: 20)
-                .offset(y: -(d / 2 - 15))
+                .frame(width: 14, height: 16)
+                /* On the outer ring, over the ticks: it never hides a letter for long. */
+                .offset(y: -(d / 2 - 9))
                 .rotationEffect(.degrees(needleAngle))
             VStack(spacing: 0) {
                 Text(SaryFormat.distance(meters: reading.distanceM))
@@ -377,7 +416,7 @@ struct DestinationCompassView: View {
                     .minimumScaleFactor(0.7)
             }
             .padding(.horizontal, 4)
-            .frame(width: 64, height: 64)
+            .frame(width: 56, height: 56)
             .background(Circle().fill(p.chromeOpaque))
         }
         .frame(width: d, height: d)
