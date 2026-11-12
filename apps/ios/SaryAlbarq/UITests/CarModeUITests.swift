@@ -1,7 +1,7 @@
 import XCTest
 
 /// «وضع السيارة»: with `-SaryCarMode` the live screen shows the car layer: «إنهاء» is on the screen and every control is at
-/// least 64 pt, also in a 1280×480 preview viewport (`-SaryCarModeSize`). Screenshots are kept for the review.
+/// least 64 pt (the code floor is 72), also in a 1280×480 preview viewport (`-SaryCarModeSize`). Screenshots are kept for the review.
 final class CarModeUITests: XCTestCase {
     override func setUp() { continueAfterFailure = true }
 
@@ -42,7 +42,7 @@ final class CarModeUITests: XCTestCase {
         let app = launch()
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.descendants(matching: .any)["car.layer"].waitForExistence(timeout: 15))
-        assertBigEnough(app, ids: ["car.end", "car.layers", "car.tilt", "car.exit"])
+        assertBigEnough(app, ids: ["car.sos", "car.end", "car.layers", "car.tilt", "car.exit"])
         shot("car-default")
     }
 
@@ -50,7 +50,7 @@ final class CarModeUITests: XCTestCase {
         let app = launch(size: "1280x480")
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.descendants(matching: .any)["car.layer"].waitForExistence(timeout: 15))
-        assertBigEnough(app, ids: ["car.end", "car.layers", "car.tilt", "car.exit"])
+        assertBigEnough(app, ids: ["car.sos", "car.end", "car.layers", "car.tilt", "car.exit"])
         shot("car-1280x480")
     }
 
@@ -58,7 +58,7 @@ final class CarModeUITests: XCTestCase {
         let app = launch(size: "1920x720")
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.descendants(matching: .any)["car.layer"].waitForExistence(timeout: 15))
-        assertBigEnough(app, ids: ["car.end", "car.layers", "car.exit"])
+        assertBigEnough(app, ids: ["car.sos", "car.end", "car.layers", "car.exit"])
         shot("car-1920x720")
     }
 

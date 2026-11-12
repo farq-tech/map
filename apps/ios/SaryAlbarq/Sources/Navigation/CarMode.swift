@@ -59,8 +59,12 @@ enum CarMode {
 struct CarModeLayout: Equatable {
     enum Kind: String { case ultraWide, wide, standard }
 
-    static let minButton: CGFloat = 64
-    static let minFont: CGFloat = 20
+    /// The mirrored picture is SCALED DOWN on the car screen (a phone-sized frame shown on a 1280×480 display), so the floors
+    /// are above the phone's own: buttons 72 pt, every text 24 pt, the instruction 28 pt, the distance 64 pt.
+    static let minButton: CGFloat = 72
+    static let minFont: CGFloat = 24
+    static let minInstruction: CGFloat = 28
+    static let minDistance: CGFloat = 64
 
     var size: CGSize
     var kind: Kind
@@ -85,11 +89,11 @@ struct CarModeLayout: Equatable {
     }
 
     /// `safe` is the viewport's safe area (the layout lives inside it). `buttons`: how many control buttons.
-    static func make(size: CGSize, safe: EdgeInsets = EdgeInsets(), buttons: Int = 7) -> CarModeLayout {
+    static func make(size: CGSize, safe: EdgeInsets = EdgeInsets(), buttons: Int = 9) -> CarModeLayout {
         let usableH = max(1, size.height - safe.top - safe.bottom)
         let usableW = max(1, size.width - safe.leading - safe.trailing)
         let k = kind(for: size)
-        let button = min(96, max(minButton, usableH * 0.17))
+        let button = min(104, max(minButton, usableH * 0.17))
         let gap = max(10, button * 0.16)
         let perColumn = max(1, Int(((usableH + gap) / (button + gap)).rounded(.down)))
         let columns = min(3, max(1, Int((Double(buttons) / Double(perColumn)).rounded(.up))))
@@ -97,15 +101,18 @@ struct CarModeLayout: Equatable {
         return CarModeLayout(
             size: size, kind: k, button: button, gap: gap, columns: columns,
             cardWidth: min(usableW * cardShare, 560),
-            distanceFont: min(104, max(52, usableH * 0.17)),
-            instructionFont: min(44, max(24, usableH * 0.07)),
-            barFont: min(34, max(22, usableH * 0.052)),
-            labelFont: max(minFont, min(24, usableH * 0.042)),
+            distanceFont: min(112, max(minDistance, usableH * 0.17)),
+            instructionFont: min(48, max(minInstruction, usableH * 0.075)),
+            barFont: min(38, max(minFont, usableH * 0.055)),
+            labelFont: max(minFont, min(28, usableH * 0.045)),
             showsLabels: usableH >= 520)
     }
 
+    /// A column is wider than a button so a labelled button («إنهاء», «الملخص») shows its word at the full 24 pt.
+    var columnWidth: CGFloat { button * 1.5 }
+
     /// The width the control columns take (so the map keeps its camera inset on that side).
-    var controlsWidth: CGFloat { CGFloat(columns) * button + CGFloat(max(0, columns - 1)) * gap + 24 }
+    var controlsWidth: CGFloat { CGFloat(columns) * columnWidth + CGFloat(max(0, columns - 1)) * gap + 24 }
 
     /// Map camera insets (left, right are PHYSICAL): the card is on the leading edge, the controls on the trailing one.
     func mapInsets(rtl: Bool) -> UIEdgeInsets {
@@ -190,4 +197,55 @@ final class CarModeCapture: ObservableObject {
     static func isMirrored(captured: [Bool], screenCount: Int) -> Bool {
         captured.contains(true) || screenCount > 1
     }
+}
+
+// MARK: - Keep the screen on (the driver does not touch the phone)
+
+/// The mirrored picture freezes when the phone locks, so while the car mode is on the idle timer stays off. `NavSession` also
+/// writes `isIdleTimerDisabled` (false on arrival / end), so the layer re-asserts it every few seconds.
+enum CarModeAwake {
+    /// Seconds between re-assertions while the layer is on screen.
+    static let reassertEvery: TimeInterval = 15
+
+    @MainActor
+    static func hold() {
+        if !UIApplication.shared.isIdleTimerDisabled { UIApplication.shared.isIdleTimerDisabled = true }
+    }
+
+    /// Leaving car mode: back to what guidance wants (it keeps the screen on only while it guides).
+    @MainActor
+    static func release(guiding: Bool) { UIApplication.shared.isIdleTimerDisabled = guiding }
+}
+
+/// Low Power Mode dims and slows the phone and the system may turn the screen off sooner; an app cannot switch it off,
+/// so the layer tells the person. A hot phone (always-on screen, GPS and the capture together) is the other warning.
+enum CarModeWarning {
+    static func text(lowPower: Bool, thermal: ProcessInfo.ThermalState) -> String? {
+        if thermal.rawValue >= ProcessInfo.ThermalState.serious.rawValue {
+            return "الجوال سخن، حطه في مكان بارد أو شغّل التكييف عليه"
+        }
+        if lowPower { return "وضع توفير الطاقة شغال وقد يخفّت الشاشة. عطّله من إعدادات الجوال" }
+        return nil
+    }
+}
+
+@MainActor
+final class CarModePower: ObservableObject {
+    @Published private(set) var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @Published private(set) var thermal = ProcessInfo.processInfo.thermalState
+    private var tokens: [NSObjectProtocol] = []
+
+    init() {
+        let center = NotificationCenter.default
+        tokens.append(center.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled }
+        })
+        tokens.append(center.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.thermal = ProcessInfo.processInfo.thermalState }
+        })
+    }
+
+    deinit { for t in tokens { NotificationCenter.default.removeObserver(t) } }
+
+    var warning: String? { CarModeWarning.text(lowPower: lowPower, thermal: thermal) }
 }

@@ -12,6 +12,9 @@ struct CarModeLayer: View {
     var alerts: [LiveAlertUI]
     @Environment(\.sary) private var theme
     @ObservedObject private var tilt = MapTiltModel.shared
+    @StateObject private var power = CarModePower()
+    /// Re-asserts the idle timer (`NavSession` clears it on arrival / end).
+    private let awakeTick = Timer.publish(every: CarModeAwake.reassertEvery, on: .main, in: .common).autoconnect()
 
     /// One control of the trailing columns.
     private struct Control: Identifiable {
@@ -22,8 +25,8 @@ struct CarModeLayer: View {
         var danger = false
         var forceLabel = false
         var action: () -> Void = {}
-        /// Replaces the generic button (the walkie-talkie and «طوارئ» are components of their own).
-        var custom: AnyView? = nil
+        /// Replaces the generic button (the walkie-talkie and «طوارئ» are components of their own); gets the button size.
+        var custom: ((CGFloat) -> AnyView)? = nil
     }
 
     var body: some View {
@@ -55,6 +58,10 @@ struct CarModeLayer: View {
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        /* The driver does not touch the phone and the mirrored picture freezes when it locks: the screen stays on. */
+        .onAppear { CarModeAwake.hold() }
+        .onReceive(awakeTick) { _ in CarModeAwake.hold() }
+        .onDisappear { CarModeAwake.release(guiding: nav.isActive) }
         .accessibilityIdentifier("car.layer")
     }
 
@@ -67,11 +74,38 @@ struct CarModeLayer: View {
                 SaryAlertLane(alerts: AlertQueue.ordered(alerts), limit: 1, tapped: controller.actions.alertTapped,
                               dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent)
             }
+            /* What the driver cannot check by touching: the voice is muted, the phone is hot, Low Power Mode is on. */
+            statusChips(l)
             Spacer(minLength: 0)
                 .allowsHitTesting(false)
             if nav.isActive && !controller.tripEnded { arrivalBar(l) }
         }
         .frame(width: l.cardWidth)
+    }
+
+    @ViewBuilder
+    private func statusChips(_ l: CarModeLayout) -> some View {
+        if nav.isActive && nav.muted {
+            chip("الصوت مكتوم", symbol: "speaker.slash.fill", tint: theme.palette.warning, ink: theme.palette.onWarning, l)
+                .accessibilityIdentifier("car.muted")
+        }
+        if let text = power.warning {
+            chip(text, symbol: "bolt.fill", tint: Color.black.opacity(0.85), ink: .white, l)
+                .accessibilityIdentifier("car.power")
+        }
+    }
+
+    private func chip(_ text: String, symbol: String, tint: Color, ink: Color, _ l: CarModeLayout) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+            Text(text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .font(.sary(CarModeLayout.minFont, .bold))
+        .foregroundStyle(ink)
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(tint))
     }
 
     @ViewBuilder
@@ -106,7 +140,7 @@ struct CarModeLayer: View {
                         Text(parts.unit).font(.sary(max(CarModeLayout.minFont, l.distanceFont * 0.4), .bold))
                     }
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.85)
                     .accessibilityIdentifier("car.distance")
                     Text(NavText.instruction(step, targetName: nav.target?.name))
                         .font(.sary(l.instructionFont, .heavy))
@@ -176,47 +210,50 @@ struct CarModeLayer: View {
 
     // MARK: trailing columns: the controls
 
+    /// «طوارئ» and «إنهاء» come FIRST (the top of the first column) and never move: whoever is next to the driver finds them
+    /// in the same place at every size. Everything else follows; «الوضع العادي» is last.
     private func controls() -> [Control] {
         var items: [Control] = []
         let guiding = nav.isActive
         let ended = controller.tripEnded
         let mode = CameraTiltRules.mode(heading: controller.mapFollowMode == .heading, idle: controller.idleHome)
         if !ended {
-            items.append(Control(id: "car.layers", title: "الطبقات", symbol: "square.3.layers.3d",
-                                 action: { controller.modal = .layers }))
-            items.append(Control(id: "car.tilt", title: tilt.is3D(mode) ? "٣د" : "٢د", symbol: "view.3d",
-                                 active: tilt.is3D(mode), action: { tilt.toggle(mode) }))
+            items.append(Control(id: "car.sos", title: "طوارئ", symbol: "exclamationmark.triangle.fill", custom: { size in AnyView(
+                LovableSOS(state: ui.sos.mine, size: max(CarModeLayout.minButton - 8, size - 8), trigger: controller.actions.sos.trigger,
+                           countdown: controller.groupUI.serverSOS, caption: false)
+                    .accessibilityIdentifier("car.sos")) }))
+            /* «إنهاء» is ALWAYS here: the one control that must never be lost (the dock-vanish bug of Build 46). */
+            items.append(Control(id: "car.end", title: "إنهاء", symbol: "stop.circle.fill",
+                                 danger: true, forceLabel: true, action: { controller.openEndChoice() }))
             if guiding {
                 let overview = nav.camera == .overview
+                items.append(Control(id: "car.mute", title: nav.muted ? "الصوت" : "كتم", symbol: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                                     active: nav.muted, action: { nav.muted.toggle() }))
                 items.append(Control(id: "car.camera", title: overview ? "تتبعني" : "نظرة عامة",
                                      symbol: overview ? "location.north.line.fill" : "map.fill",
                                      action: { overview ? controller.recenterCamera() : controller.navControlTapped("nav.overview") }))
-                items.append(Control(id: "car.mute", title: nav.muted ? "الصوت" : "كتم", symbol: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                                     active: nav.muted, action: { nav.muted.toggle() }))
             } else {
                 items.append(Control(id: "car.locate", title: "موقعي", symbol: "location.fill",
                                      action: { controller.actions.locateMe() }))
             }
+            items.append(Control(id: "car.layers", title: "الطبقات", symbol: "square.3.layers.3d",
+                                 action: { controller.modal = .layers }))
+            items.append(Control(id: "car.tilt", title: tilt.is3D(mode) ? "٣د" : "٢د", symbol: "view.3d",
+                                 active: tilt.is3D(mode), action: { tilt.toggle(mode) }))
             if controller.groupUI.walkieTalkie {
-                items.append(Control(id: "car.ptt", title: "اضغط وتكلم", symbol: "mic.fill", custom: AnyView(
+                items.append(Control(id: "car.ptt", title: "اضغط وتكلم", symbol: "mic.fill", custom: { size in AnyView(
                     SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: false, level: controller.pttLevel,
                                   openChannels: { controller.modal = .pttChannels })
-                        .accessibilityIdentifier("car.ptt"))))
+                        .frame(width: size, height: size)
+                        .accessibilityIdentifier("car.ptt")) }))
             }
-            items.append(Control(id: "car.sos", title: "طوارئ", symbol: "exclamationmark.triangle.fill", custom: AnyView(
-                LovableSOS(state: ui.sos.mine, size: 64, trigger: controller.actions.sos.trigger,
-                           countdown: controller.groupUI.serverSOS, caption: false)
-                    .accessibilityIdentifier("car.sos"))))
-            /* «إنهاء» is ALWAYS here: the one control that must never be lost (the dock-vanish bug of Build 46). */
-            items.append(Control(id: "car.end", title: guiding ? "إنهاء الرحلة" : "إنهاء الطلعة", symbol: "stop.circle.fill",
-                                 danger: true, forceLabel: true, action: { controller.openEndChoice() }))
         } else {
             items.append(Control(id: "car.summary", title: "الملخص", symbol: "doc.text.fill", forceLabel: true,
                                  action: { controller.openSummary() }))
             items.append(Control(id: "car.home", title: "الرئيسية", symbol: "house.fill", forceLabel: true,
                                  action: { controller.onExit() }))
         }
-        items.append(Control(id: "car.exit", title: "الوضع العادي", symbol: "iphone", forceLabel: true,
+        items.append(Control(id: "car.exit", title: "عادي", symbol: "iphone", forceLabel: true,
                              action: { CarModeState.shared.set(false) }))
         return items
     }
@@ -228,11 +265,14 @@ struct CarModeLayer: View {
             ForEach(Array(chunks.enumerated()), id: \.offset) { _, column in
                 VStack(spacing: l.gap) {
                     ForEach(column) { item in
-                        if let custom = item.custom {
-                            custom.frame(width: l.button, height: l.button)
-                        } else {
-                            button(item, l)
+                        Group {
+                            if let custom = item.custom {
+                                custom(l.button).frame(width: l.button, height: l.button)
+                            } else {
+                                button(item, l)
+                            }
                         }
+                        .frame(width: l.columnWidth, height: l.button)
                     }
                 }
             }
@@ -248,12 +288,12 @@ struct CarModeLayer: View {
             VStack(spacing: 2) {
                 Image(systemName: c.symbol).font(.system(size: l.button * (label ? 0.34 : 0.42), weight: .bold))
                 if label {
-                    Text(c.title).font(.sary(l.labelFont * (c.forceLabel && !l.showsLabels ? 0.9 : 1), .bold))
-                        .lineLimit(1).minimumScaleFactor(0.6)
+                    Text(c.title).font(.sary(l.labelFont, .bold))
+                        .lineLimit(1).minimumScaleFactor(0.85)
                 }
             }
             .foregroundStyle(ink)
-            .frame(width: l.button, height: l.button)
+            .frame(width: c.forceLabel ? l.columnWidth : l.button, height: l.button)
             .background(RoundedRectangle(cornerRadius: l.button * 0.28, style: .continuous).fill(fill))
             .overlay(RoundedRectangle(cornerRadius: l.button * 0.28, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
             .contentShape(Rectangle())
