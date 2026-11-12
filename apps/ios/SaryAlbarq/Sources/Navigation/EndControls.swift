@@ -52,10 +52,15 @@ enum EndControls {
     /// A trip action is a harmless one; the rest end or leave the outing.
     static func isDestructive(_ a: Action) -> Bool { a != .endTrip }
 
+    /// The guidance-stop button's word: «إنهاء الرحلة» (previous design) or «أوقف التوجيه» (new design).
+    static var stopWord: String { NewUI.enabled ? "أوقف التوجيه" : "إنهاء الرحلة" }
+
     static func title(_ a: Action) -> String {
+        let new = NewUI.enabled
         switch a {
-        case .endTrip, .endSolo: return "إنهاء الرحلة"
-        case .endOutingForAll: return "إنهاء الطلعة للجميع"
+        case .endTrip: return new ? "أوقف التوجيه" : "إنهاء الرحلة"
+        case .endSolo: return new ? "أنهِ المشوار" : "إنهاء الرحلة"
+        case .endOutingForAll: return new ? "أنهِ الطلعة للجميع" : "إنهاء الطلعة للجميع"
         case .leaveOnly: return "مغادرتي فقط"
         case .leaveOuting: return "مغادرة الطلعة"
         }
@@ -80,7 +85,8 @@ enum EndControls {
     }
 
     static func sheetTitle(_ s: State) -> String {
-        s.solo ? "إنهاء الرحلة" : (s.guiding ? "إنهاء الرحلة أو الطلعة" : "إنهاء الطلعة")
+        if NewUI.enabled { return s.solo ? "أنهِ المشوار" : (s.guiding ? "أوقف التوجيه أو أنهِ الطلعة" : "أنهِ الطلعة") }
+        return s.solo ? "إنهاء الرحلة" : (s.guiding ? "إنهاء الرحلة أو الطلعة" : "إنهاء الطلعة")
     }
 
     static func identifier(_ a: Action) -> String { "end.action.\(a.rawValue)" }

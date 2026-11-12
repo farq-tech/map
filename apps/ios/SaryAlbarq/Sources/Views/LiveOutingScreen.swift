@@ -339,7 +339,7 @@ struct LiveOutingScreen: View {
                 } else if !ended {
                     /* «البوصلة» (owner's request): bottom-left, above the convoy line and the speed, driving or guiding at
                      * the sheet's peek. Not on the off-road leg (its own arrow card is up) nor on a short screen. */
-                    if DestinationCompass.shows(driving: driving, guiding: controller.nav.phase == .guiding, offRoad: controller.nav.phase == .offRoad,
+                    if NewUI.enabled, DestinationCompass.shows(driving: driving, guiding: controller.nav.phase == .guiding, offRoad: controller.nav.phase == .offRoad,
                                                 exploring: exploring, ended: ended, peek: controller.sheetDetent == .peek,
                                                 sosFocused: controller.sosFocused, bellOpen: controller.bellOpen, screenHeight: full.height) {
                         HStack(spacing: 0) {

@@ -174,15 +174,11 @@ enum NavBarLayout {
 /// maneuver card on top with «ثم …» as a chip under it, a compact «طوارئ» under the card, and ONE
 /// bottom bar (time left big, the trip line and the destination, the surfaces or a progress bar,
 /// then the friends, the walkie-talkie, «المزيد» and «أوقف التوجيه»). Pure, unit-tested in
-/// `NavigationTests`. The previous layout stays reachable in DEBUG with `-SaryDriveV1`.
+/// `NavigationTests`. Behind `NewUI.enabled` (off by default).
 enum NavDriveLayout {
-    /// The redesign is on (DEBUG `-SaryDriveV1`: the previous driving layout).
-    static var v2: Bool {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-SaryDriveV1") { return false }
-        #endif
-        return true
-    }
+    /// The redesign is on only with the new-design switch (`NewUI`, DEBUG `-SaryNewUI`): off, the previous
+    /// driving layout is untouched.
+    static var v2: Bool { NewUI.enabled }
 
     /// What the bar's footer row holds, in reading order (right to left in Arabic).
     enum FooterItem: String, Equatable {
@@ -1041,11 +1037,11 @@ struct NavBottomBar: View {
                     .contentShape(Circle())
             }
             .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("إنهاء الرحلة"))
+            .accessibilityLabel(Text(EndControls.stopWord))
             .accessibilityIdentifier(id)
         } else {
             Button(action: end) {
-                Text("إنهاء الرحلة")
+                Text(EndControls.stopWord)
                     .font(.sary(theme.drive ? 20 : 18, .heavy))
                     .foregroundStyle(p.onEmergency)
                     .lineLimit(1)
