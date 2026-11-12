@@ -40,7 +40,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                 }
                 if let e = model.errorText { SaryInlineMessage(text: e, tone: .error) }
                 if model.invites.isEmpty {
-                    Text("ما دعيت أحد بعد.").saryText(.footnote).foregroundStyle(p.textTertiary)
+                    SaryInlineState(systemImage: "person.crop.circle.badge.plus", text: ended ? "ما دعيت أحد في هالطلعة." : "ما دعيت أحد بعد. اختر من جهات الاتصال أو اكتب الاسم والرقم.")
                         .accessibilityIdentifier("invite.list.empty")
                 } else {
                     VStack(spacing: 0) {
@@ -95,7 +95,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
         let busy = model.busy.contains(i.id)
         return HStack(spacing: theme.space(.m)) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(i.invitee_name).saryText(.bodyStrong).foregroundStyle(p.textPrimary).lineLimit(1)
+                Text(i.invitee_name).saryText(.bodyStrong).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                 HStack(spacing: 6) {
                     SaryInviteStatusPill(text: PersonalInviteStatusText.label(i), tone: PersonalInviteStatusText.tone(i))
                         .accessibilityIdentifier("invite.status.\(i.status.rawValue)")
@@ -122,7 +122,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                         Text("انضم بهذا الاسم")
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle").font(.system(size: 22)).foregroundStyle(p.accentText)
+                    Image(systemName: "ellipsis.circle").saryGlyph(22, relativeTo: .title3).foregroundStyle(p.accentText)
                         .frame(width: theme.minTarget, height: theme.minTarget)
                 }
                 .disabled(busy)
