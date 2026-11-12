@@ -4,6 +4,9 @@ import SwiftUI
 /// «وين رايحين؟» (mic + profile), the shortcuts (البيت · الشغل · المفضلة) and what is
 /// happening now. Pulled up: every category, recent places and «طلعاتي».
 /// The flow: search → pick → continue the active outing or create a new one when no outing is active.
+/// Home V2 (default; the old layout behind DEBUG `-SaryHomeV1`): «وين رايحين؟» + mic + profile in ONE glass
+/// bar on top, the layers and «موقعي» in ONE capsule, and ONE bottom card (weather and sunset, «ابدأ طلعة»,
+/// كشتة · دروب البر · الطقس · القبلة, the outing row); the rest moves into the raised sheet. See the extension at the end.
 struct MapHomeScreen: View {
     var push: (HomeRoute) -> Void
     /// In-trip «وين رايحين؟» uses the same map, search, results and home sheet; picking

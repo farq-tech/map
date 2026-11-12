@@ -107,10 +107,9 @@ final class HomeFlowUITests: XCTestCase {
         XCTAssertTrue(el(app, "home.locate").exists)
         XCTAssertFalse(el(app, "home.qibla.toggle").exists, "Qibla: the layers sheet and the «القبلة» tile")
         XCTAssertFalse(el(app, "home.categories").exists, "the chips are in the raised sheet")
-        // The card: ONE primary action, the four desert shortcuts, the running demo outing.
+        // The card: ONE primary action and the four desert shortcuts (the outing row: ScreensUITests).
         XCTAssertTrue(el(app, "home.start.create").exists)
         for id in ["home.tile.camp", "home.tile.routes", "home.tile.weather", "home.tile.qibla"] { XCTAssertTrue(el(app, id).exists, id) }
-        XCTAssertTrue(el(app, "home.active").exists, "the running outing keeps its row in the card")
         XCTAssertLessThan(el(app, "home.locate").frame.maxY, el(app, "home.start.create").frame.minY, "the map buttons stay above the card")
         sleep(3)
         shot("v2-home")
