@@ -620,14 +620,7 @@ struct LivePanelView: View {
             HStack {
                 Text(panel.title).font(.sary(18, .bold)).foregroundStyle(p.textPrimary).accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button(action: close) {
-                    Image(systemName: SaryIcon.close).font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
-                        .frame(width: 36, height: 36).background(Circle().fill(p.sunken))
-                        .frame(width: theme.minTarget, height: theme.minTarget).contentShape(Rectangle())
-                }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityLabel(Text("إغلاق"))
-                .accessibilityIdentifier("panel.close")
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "panel.close", visual: 36, action: close)
             }
             .padding(.horizontal, theme.space(.l))
             .padding(.top, theme.space(.l))

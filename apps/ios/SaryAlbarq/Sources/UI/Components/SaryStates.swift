@@ -92,6 +92,56 @@ struct SaryStateView: View {
     }
 }
 
+/// The empty / error state INSIDE a section or card, where `SaryStateView`'s centred column is
+/// too big: a glyph in a sunken circle, one line that says what happened and what to do, and an
+/// optional secondary action. Never a bare grey sentence.
+struct SaryInlineState: View {
+    var systemImage: String
+    var text: String
+    var tone: SaryTone = .info
+    var actionTitle: String? = nil
+    var actionIcon: String? = nil
+    var actionID: String? = nil
+    var action: () -> Void = {}
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let ink: Color = {
+            switch tone {
+            case .info: return p.textTertiary
+            case .success: return p.liveText
+            case .warning: return p.warningText
+            case .error: return p.emergencyText
+            }
+        }()
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            HStack(alignment: .center, spacing: theme.space(.m)) {
+                Image(systemName: systemImage)
+                    .saryGlyph(15, weight: .semibold, relativeTo: .subheadline)
+                    .foregroundStyle(ink)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(p.sunken))
+                    .accessibilityHidden(true)
+                Text(text)
+                    .saryText(.subhead)
+                    .foregroundStyle(p.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            if let actionTitle {
+                Button(action: action) { SaryButtonLabel(title: actionTitle, systemImage: actionIcon) }
+                    .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                    .modifier(OptionalIdentifier(id: actionID))
+            }
+        }
+        .padding(.vertical, theme.space(.s))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+}
+
 /// Placeholder rows while loading. Shimmer only when motion is allowed.
 struct SarySkeletonRow: View {
     @Environment(\.sary) private var theme

@@ -121,7 +121,10 @@ maps `OutingView` + GPS into `LiveOutingUIState` (unit-tested).
 
 `Sources/Screens/` — every page outside the live map, built only from the
 components above (`SaryPage` header + scroll, `SarySection`, `SaryNavRow`,
-`SaryTextField`, `SaryStateView`, `SaryDialog` via `.saryDialog`):
+`SaryTextField`, `SaryStateView`, `SaryDialog` via `.saryDialog`). Sheets that are not a
+`SaryPage` use `SarySheetHeader` (one `.title2` title, optional trailing controls, the
+`SaryIconButton` close); an empty / error line inside a section or card is `SaryInlineState`
+(glyph + one line + optional secondary action), and data that loads shows `SarySkeletonRow`:
 
 | Screen | File | Notes |
 | --- | --- | --- |

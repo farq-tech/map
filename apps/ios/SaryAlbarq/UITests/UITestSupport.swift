@@ -144,6 +144,25 @@ extension XCUIApplication {
         create.scrollIntoView(in: self)
     }
 
+    /// The category chips on screen. Home V2: they live in the raised sheet (V1, `-SaryHomeV1`: over
+    /// the map), so raise it when the row is not there; then back to the top of the sheet.
+    func showHomeCategories(timeout: TimeInterval = 20) {
+        let row = descendants(matching: .any)["home.categories"].firstMatch
+        let handle = descendants(matching: .any)["home.sheet.handle"].firstMatch
+        if !row.exists, handle.waitForExistence(timeout: timeout) { handle.tap() }
+        _ = row.waitForExistence(timeout: 5)
+        let content = scrollViews["home.sheet.content"].firstMatch
+        for _ in 0..<4 where row.exists && !row.isHittable && content.exists { content.swipeDown() }
+    }
+
+    /// Taps one home category chip (`home.category.<id>`), raising the V2 sheet first when needed.
+    func tapHomeCategory(_ id: String, timeout: TimeInterval = 20) {
+        showHomeCategories(timeout: timeout)
+        let chip = descendants(matching: .any)["home.category.\(id)"].firstMatch
+        _ = chip.waitForExistence(timeout: 5)
+        chip.tap()
+    }
+
     /// «الإعدادات» → «متقدم» (screen shape, driving realism) scrolled into view.
     func openAdvancedSettings() {
         descendants(matching: .any)["settings-advanced"].firstMatch.scrollIntoView(in: self)

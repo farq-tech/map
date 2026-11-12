@@ -113,7 +113,7 @@ struct SafetyAlertCard: View {
         VStack(alignment: .leading, spacing: 2) {
             switch alert {
             case let .friendStuck(s):
-                Text("\(s.name) غرّز").saryText(theme.drive ? .headline : .callout, weight: .heavy).lineLimit(1)
+                Text("\(s.name) غرّز").saryText(theme.drive ? .headline : .callout, weight: .heavy).lineLimit(1).minimumScaleFactor(0.85)
                 HStack(spacing: 6) {
                     if s.distanceMeters != nil || s.bearingDegrees != nil {
                         SaryDistanceLabel(meters: s.distanceMeters, bearing: s.bearingDegrees, style: .footnote)
@@ -323,8 +323,8 @@ struct ReturnTimerCard: View {
                         Button("أعد المحاولة") { Task { await safety.load() } }.buttonStyle(.sary(.secondary, width: .hug, compact: true))
                     }
                 } else {
-                    HStack(spacing: theme.space(.s)) {
-                        ProgressView().tint(p.accent)
+                    VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                        SarySkeletonRow()
                         Text("نتحقق من مؤقت الرجوع…").saryText(.subhead).foregroundStyle(p.textSecondary)
                     }
                 }
@@ -335,7 +335,8 @@ struct ReturnTimerCard: View {
                 HStack(spacing: theme.space(.m)) {
                     header("مؤقت الرجوع", safety.localOnly ? "منبّه على جوالك يذكّرك بوقت رجوعك. ما يوصل لأحد." : "قل لأحد من أهلك متى ترجع. إذا تأخرت يوصله تنبيه.")
                     Button { safety.editorOpen = true } label: { SaryButtonLabel(title: "اضبط", systemImage: "plus") }
-                        .buttonStyle(.sary(.primary, width: .hug, compact: true))
+                        /* Secondary: an optional setup in a list; the section's accent stays for «طلعت» / «وصلت». */
+                        .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                         .accessibilityIdentifier("timer-set")
                 }
             case let .armed(due, contact):
@@ -422,11 +423,7 @@ struct ReturnTimerEditor: View {
         let p = theme.palette
         ScrollView {
             VStack(alignment: .leading, spacing: theme.space(.l)) {
-                HStack {
-                    Text("مؤقت الرجوع").saryText(.title2).foregroundStyle(p.textPrimary)
-                    Spacer()
-                    SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق") { safety.editorOpen = false }
-                }
+                SarySheetHeader(title: "مؤقت الرجوع", close: { safety.editorOpen = false })
                 Text(safety.localOnly
                      ? "حدد متى ترجع، ويذكّرك جوالك قبلها. هذا منبّه على جوالك بس: ما يوصل لأحد، فإذا تحتاج مساعدة اتصل بـ٩١١."
                      : "حدد متى ترجع، وأرسل رابطًا لأحد من أهلك. إذا ما ضغطت «وصلت» قبل الوقت، يوصله تنبيه.")
@@ -469,7 +466,7 @@ struct ReturnTimerEditor: View {
 
                 Button { Task { await safety.arm(due: due, contact: contact) } } label: {
                     SaryButtonLabel(title: safety.localOnly ? "اضبط المنبّه" : "اضبط وأرسل الرابط",
-                                    systemImage: safety.localOnly ? SafetyIcon.timer : SaryIcon.share, busy: safety.timerBusy, busyTitle: "جارٍ الضبط…")
+                                    systemImage: safety.localOnly ? SafetyIcon.timer : SaryIcon.share, busy: safety.timerBusy, busyTitle: "نضبطه…")
                 }
                 .buttonStyle(.saryPrimary)
                 .disabled((!safety.localOnly && ReturnTimerLogic.cleanContact(contact) == nil) || safety.timerBusy)

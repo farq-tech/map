@@ -54,7 +54,7 @@ final class UXSimplifyShotsUITests: XCTestCase {
         shot("03-home-expanded-outings")
         any(app, "home.sheet.handle").tap()
         sleep(1)
-        any(app, "home.category.restaurants").tap()
+        app.tapHomeCategory("restaurants")
         _ = any(app, "home.result").waitForExistence(timeout: 15)
         sleep(2)
         shot("04-home-category-results")

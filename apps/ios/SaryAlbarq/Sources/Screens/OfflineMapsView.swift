@@ -42,6 +42,12 @@ struct OfflineMapsView: View {
                 .buttonStyle(.sary(.primary))
                 .disabled({ if case .downloading = store.job { return true }; return false }())
                 .accessibilityIdentifier("offline.add")
+            if !store.loaded && store.areas.isEmpty {
+                SarySection(title: "المناطق المحفوظة") {
+                    SarySkeletonRow()
+                    SarySkeletonRow()
+                }
+            }
             if store.loaded && store.areas.isEmpty {
                 SaryStateView(kind: .empty(title: "ما حفظت مناطق بعد", message: "قبل الطلعة، وأنت على إنترنت، احفظ منطقتها: الخريطة والطرق والتضاريس تشتغل بعدها بدون تغطية.", systemImage: "map"))
                     .sarySurface(radius: SaryRadius.l)
@@ -109,7 +115,7 @@ struct OfflineMapsView: View {
         return HStack(spacing: theme.space(.m)) {
             SaryRowIcon(systemImage: a.isComplete ? "map.fill" : "exclamationmark.triangle.fill", color: a.isComplete ? nil : p.warning)
             VStack(alignment: .leading, spacing: 2) {
-                Text(a.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                Text(a.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85)
                 Text(detail(a)).saryText(.footnote).foregroundStyle(p.textSecondary)
             }
             Spacer()

@@ -364,7 +364,7 @@ struct SavedPlacesSheet: View {
                 HStack(spacing: theme.space(.m)) {
                     SaryRowIcon(systemImage: place.icon.systemImage)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(place.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(place.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         Text(CoordinateShare.displayDecimal(place.position)).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -535,7 +535,7 @@ struct TracksSheet: View {
                 HStack(spacing: theme.space(.m)) {
                     SaryRowIcon(systemImage: t.origin == .imported ? "square.and.arrow.down" : "square.and.arrow.up")
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(t.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(t.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         Text("\(t.origin == .imported ? "مستورد" : "مصدَّر") · \(SaryFormat.distance(meters: t.lengthM)) · \(SaryFormat.number(t.points.count)) نقطة")
                             .saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                     }
@@ -609,12 +609,11 @@ struct PlacesAndTracksSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: theme.space(.xs)) {
-                tab("أماكني", systemImage: "star.fill", .places, id: "places.tab")
-                tab("مساراتي", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath.fill", .tracks, id: "explore-tracks")
-            }
-            .padding(4)
-            .background(Capsule().fill(theme.palette.surface))
+            /* The design system's segmented control (44 pt, no second accent fill above the sheet's primary). */
+            SarySegmented(options: [Part.places, Part.tracks], selection: $part,
+                          label: { $0 == .places ? "أماكني" : "مساراتي" },
+                          systemImage: { $0 == .places ? "star.fill" : "point.bottomleft.forward.to.point.topright.scurvepath.fill" },
+                          optionID: { $0 == .places ? "places.tab" : "explore-tracks" })
             .padding(.horizontal, theme.space(.l))
             .padding(.top, theme.space(.m))
             switch part {
@@ -622,21 +621,6 @@ struct PlacesAndTracksSheet: View {
             case .tracks: TracksSheet(controller: controller)
             }
         }
-    }
-
-    private func tab(_ title: String, systemImage: String, _ p: Part, id: String) -> some View {
-        let on = part == p
-        return Button { part = p } label: {
-            Label(title, systemImage: systemImage)
-                .saryText(.subhead, weight: .bold)
-                .foregroundStyle(on ? theme.palette.onAccent : theme.palette.textPrimary)
-                .frame(maxWidth: .infinity, minHeight: 40)
-                .background(Capsule().fill(on ? theme.palette.accent : .clear))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-        .accessibilityIdentifier(id)
     }
 }
 
@@ -747,8 +731,10 @@ struct ExploreCoordinateBar: View {
                 HStack(spacing: 8) {
                     Image(systemName: "mappin.and.ellipse").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accentText)
                     VStack(alignment: .leading, spacing: 0) {
+                        /* The system number font: Huwiya draws the decimal separator «٫» like a comma
+                         * («٢٤,٥…»); SF Arabic draws it as «٫», with tabular digits that hold still while panning. */
                         Text(r.map { ExploreRules.coordinateText($0.center, format) } ?? "…")
-                            .font(.sary(14, .medium))
+                            .saryNumber(.subhead, weight: .medium)
                             .foregroundStyle(p.textPrimary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)

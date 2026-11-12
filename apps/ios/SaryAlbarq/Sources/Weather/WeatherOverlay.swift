@@ -51,6 +51,10 @@ final class WeatherOverlay {
     let legend = WeatherLegendModel()
     private var legendHost: UIHostingController<WeatherLegendCard>?
     private var flowHost: UIHostingController<CloudFlowHost>?
+    /// The legend card's frame on the map (nil while it is hidden). The host's own overlays
+    /// (the name chips, the edge arrows) keep clear of it; `onCardFrame` tells them when it changes.
+    private(set) var cardFrame: CGRect?
+    var onCardFrame: ((CGRect?) -> Void)?
 
     private struct Drawn: Equatable {
         var kind: WeatherOverlayKind
@@ -570,7 +574,7 @@ final class WeatherOverlay {
             #endif
             flow.view.isHidden = off
         }
-        guard show else { return }
+        guard show else { setCardFrame(nil); return }
         let width = min(map.bounds.width - 24, 360)
         let size = host.sizeThatFits(in: CGSize(width: width, height: 400))
         var y = request.chrome.top + 8
@@ -583,6 +587,13 @@ final class WeatherOverlay {
         } else {
             host.view.frame = CGRect(x: (map.bounds.width - width) / 2, y: y, width: width, height: size.height)
         }
+        setCardFrame(host.view.frame)
+    }
+
+    private func setCardFrame(_ f: CGRect?) {
+        guard f != cardFrame else { return }
+        cardFrame = f
+        onCardFrame?(f)
     }
 }
 
@@ -655,7 +666,8 @@ struct WeatherLegendCard: View {
             Image(systemName: systemImage)
                 .font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
                 .frame(width: 30, height: 30).background(Circle().fill(p.sunken))
-                .contentShape(Circle())
+                /* 30 pt circle, 44 pt touch area (the row keeps its height). */
+                .contentShape(Rectangle().inset(by: -7))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
@@ -738,8 +750,16 @@ struct WeatherLegendCard: View {
                 Text(model.time).saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .accessibilityIdentifier("weather.legend.time")
-                chip("chevron.down", id: "weather.legend.collapse", label: "تصغير البطاقة") { model.cardMode = .collapsed }
-                chip("xmark", id: "weather.legend.hide", label: "إخفاء البطاقة (الطبقة تبقى على الخريطة)") { model.cardMode = .hidden }
+                Button { model.onClose() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
+                        .frame(width: 26, height: 26).background(Circle().fill(p.sunken))
+                        /* 26 pt circle, 44 pt touch area (the row keeps its height). */
+                        .contentShape(Rectangle().inset(by: -9))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("weather.legend.close")
+                .accessibilityLabel(Text("إغلاق طبقة الطقس"))
             }
             if model.kind == .clouds {
                 HStack(spacing: 8) {
@@ -747,6 +767,8 @@ struct WeatherLegendCard: View {
                         Image(systemName: model.playing ? "pause.fill" : "play.fill")
                             .font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentText)
                             .frame(width: 26, height: 26).background(Circle().fill(p.accent.opacity(0.2)))
+                            /* 26 pt circle, 44 pt touch area (the row keeps its height). */
+                            .contentShape(Rectangle().inset(by: -9))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("weather.clouds.playpause")

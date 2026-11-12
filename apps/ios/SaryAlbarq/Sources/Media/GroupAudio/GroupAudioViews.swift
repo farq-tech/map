@@ -152,11 +152,11 @@ struct GroupAudioSheet: View {
         let p = theme.palette
         VStack(spacing: theme.space(.m)) {
             HStack {
-                Text("إذاعة الطلعة").saryText(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
+                Text("إذاعة الطلعة").saryText(.title2).foregroundStyle(p.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("radio.sheet")
                 Spacer()
-                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "radio.close", visual: 36) { dismiss() }
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "radio.close") { dismiss() }
             }
             ScrollView {
                 VStack(spacing: theme.space(.m)) {
@@ -211,9 +211,9 @@ private struct NowPlayingCard: View {
             if let item = center.nowItem {
                 HStack(spacing: theme.space(.s)) {
                     Text(item.live ? "مباشر" : "متزامن")
-                        .saryText(.caption, weight: .heavy).foregroundStyle(.white)
+                        .saryText(.caption, weight: .heavy).foregroundStyle(item.live ? p.onEmergency : .white)
                         .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(item.live ? Color.red : radioColor))
+                        .background(Capsule().fill(item.live ? p.emergency : radioColor))
                     Text(statusText).saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                         .accessibilityIdentifier("radio.status")
                 }
@@ -301,12 +301,14 @@ private struct StationList: View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             if center.stations.isEmpty {
-                HStack(spacing: theme.space(.s)) {
-                    ProgressView()
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    SarySkeletonRow()
+                    SarySkeletonRow()
                     Text("نجيب قائمة الإذاعات…").saryText(.callout).foregroundStyle(p.textSecondary)
+                        .padding(.horizontal, theme.space(.m))
                 }
-                .frame(maxWidth: .infinity)
-                .padding(theme.space(.m))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, theme.space(.s))
                 .accessibilityIdentifier("radio.catalog.loading")
             }
             ForEach(GroupAudioStation.Group.allCases, id: \.self) { g in
@@ -401,7 +403,7 @@ private struct AudiusPicker: View {
                         HStack {
                             Button { Task { await center.play(t.item) } } label: {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(t.title).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                                    Text(t.title).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                                     Text([t.user?.name ?? "", t.duration.map { MediaFormat.ltr(GroupAudioFormat.time($0)) } ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                                         .saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1)
                                 }
