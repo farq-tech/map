@@ -29,9 +29,10 @@ final class DesertGazetteerUITests: XCTestCase {
 
     private func any(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
 
-    /// The chip over the map (the raised sheet no longer repeats the categories, UI-AUDIT §٢):
-    /// scroll the chip row until it is on screen.
+    /// The chip row (Home V2: in the raised sheet; `-SaryHomeV1`: over the map):
+    /// scroll the chip row until the chip is on screen.
     private func open(_ app: XCUIApplication, _ id: String) {
+        app.showHomeCategories()
         let chip = any(app, "home.category.\(id)")
         XCTAssertTrue(chip.waitForExistence(timeout: 5), id)
         let row = any(app, "home.categories")
