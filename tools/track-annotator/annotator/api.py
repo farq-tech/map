@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import collect, config, export as export_mod, quality, store, tiles
+from . import collect, config, export as export_mod, quality, review, store, suggest, tiles
 from .geo import lonlat_to_tile
 
 app = FastAPI(title="Sary Albarq track annotator", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -33,6 +33,12 @@ class AnnotReq(BaseModel):
     clarity: int | None = None
     notes: str | None = None
     mask_width_m: float = config.MASK_WIDTH_M_DEFAULT
+    complete: bool | None = None
+    rejected_suggestions: list[str] | None = None
+
+
+class SuggestReq(BaseModel):
+    backend: str = "auto"
 
 
 class SkipReq(BaseModel):
@@ -45,6 +51,7 @@ class ExportReq(BaseModel):
     tile: int = 400
     include_fixtures: bool = False
     keep_empty: bool = False
+    only_complete: bool = False
     seed: int = 0
     block_km: float = 5.0
     buffer_m: float = 500.0
@@ -58,7 +65,8 @@ def _err(e: Exception, code: int = 400):
 def get_config():
     return {
         "types": config.TRACK_TYPES, "clarity": {str(k): v for k, v in config.CLARITY.items()},
-        "terrain": config.TERRAIN, "native_zoom": config.NATIVE_ZOOM,
+        "terrain": config.TERRAIN, "negative_categories": config.NEGATIVE_CATEGORIES,
+        "suggest_backends": suggest.available_backends(), "native_zoom": config.NATIVE_ZOOM,
         "has_token": config.has_token(), "budget": tiles.budget_status(),
         "mask_width_m": config.MASK_WIDTH_M_DEFAULT,
         "imagery_note": "الدقة الحقيقية z17@2x ≈ 0.54 م/بكسل عند خط عرض 25.5؛ ما فوق ذلك (z18+) تكبير فقط بلا تفاصيل جديدة.",
@@ -148,7 +156,7 @@ def get_sample(sid: str):
     except store.SampleError as e:
         raise HTTPException(404, str(e))
     prev = json.loads((store.sample_dir(sid) / "preview.json").read_text())
-    return {"metadata": m, "geojson": store.read_tracks(sid), "preview": prev}
+    return {"metadata": m, "geojson": store.read_tracks(sid), "preview": prev, "suggestions": store.read_suggestions(sid)}
 
 
 @app.get("/api/samples/{sid}/file/{name}")
@@ -165,13 +173,114 @@ def sample_file(sid: str, name: str):
 
 @app.put("/api/samples/{sid}/annotations")
 def put_annotations(sid: str, req: AnnotReq):
-    updates = {k: v for k, v in (("terrain", req.terrain), ("clarity", req.clarity), ("notes", req.notes)) if v is not None}
+    updates = {k: v for k, v in (("terrain", req.terrain), ("clarity", req.clarity), ("notes", req.notes),
+                                 ("complete", req.complete), ("rejected_suggestions", req.rejected_suggestions)) if v is not None}
     try:
         meta = store.save_annotations(sid, req.geojson, updates, req.mask_width_m)
         q = quality.check_sample(sid)
     except store.SampleError as e:
         _err(e)
     return {"metadata": meta, "quality": q}
+
+
+@app.post("/api/samples/{sid}/suggest")
+def start_suggest(sid: str, req: SuggestReq):
+    try:
+        store.read_metadata(sid)
+    except store.SampleError as e:
+        raise HTTPException(404, str(e))
+    if req.backend not in ("auto", "sam_road", "ridge"):
+        raise HTTPException(400, "backend غير معروف")
+    return {"job": suggest.start_job(sid, req.backend)}
+
+
+@app.get("/api/jobs/{jid}")
+def get_job(jid: str):
+    j = suggest.JOBS.get(jid)
+    if not j:
+        raise HTTPException(404, "مهمة غير موجودة")
+    return j
+
+
+@app.get("/api/impact/{sid}")
+def get_impact(sid: str):
+    try:
+        return collect.impact(sid)
+    except store.SampleError as e:
+        raise HTTPException(404, str(e))
+
+
+class VerdictReq(BaseModel):
+    pid: str
+    verdict: str
+    reason: str | None = None
+    ms: int | None = None
+    line_px: list | None = None
+    edits: list | None = None
+
+
+@app.get("/api/review/deck")
+def review_deck():
+    d = review.load_deck()
+    done = {v["pid"] for v in review.read_verdicts()}
+    prog = review.progress(d)
+    if not d:
+        return {"ready": False, "progress": prog, "build": review.JOB, "reasons": {k: v[0] for k, v in review.REASONS.items()}}
+    cards = [review.card_payload(c) for c in d["cards"] if c["pid"] not in done]
+    return {"ready": True, "progress": prog, "cards": cards, "meta": {k: d[k] for k in ("created_utc", "sources_count", "controls", "unavailable_sources", "non_osm_share") if k in d},
+            "reasons": {k: v[0] for k, v in review.REASONS.items()}, "build": review.JOB}
+
+
+@app.post("/api/review/build")
+def review_build(cards: int = 60):
+    return review.start_build(cards)
+
+
+@app.get("/api/review/img/{pid}.jpg")
+def review_img(pid: str):
+    c = review.card_by_id(pid)
+    if not c:
+        raise HTTPException(404)
+    try:
+        im = review.crop_image(c)
+    except tiles.BudgetExceeded as e:
+        return JSONResponse({"detail": str(e)}, status_code=429)
+    except (tiles.TileUnavailable, RuntimeError) as e:
+        raise HTTPException(502, str(e))
+    import io
+    b = io.BytesIO()
+    im.save(b, "JPEG", quality=88)
+    return Response(b.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/api/review/snap/{pid}")
+def review_snap(pid: str, wide: bool = False):
+    c = review.card_by_id(pid)
+    if not c:
+        raise HTTPException(404)
+    return review.snap(c, 64.0 if wide else 16.0)
+
+
+@app.post("/api/review/verdict")
+def review_verdict(req: VerdictReq):
+    try:
+        rec = review.verdict(req.pid, req.verdict, req.reason, req.ms, req.line_px, req.edits)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except (ValueError, store.SampleError) as e:
+        _err(e)
+    return {"verdict": rec, "progress": review.progress()}
+
+
+@app.post("/api/review/undo")
+def review_undo():
+    last = review.undo_last()
+    return {"undone": last, "progress": review.progress()}
+
+
+@app.get("/api/review/stats")
+def review_stats():
+    return {**review.stats(), "progress": review.progress()}
 
 
 @app.delete("/api/samples/{sid}")
@@ -205,13 +314,22 @@ def collection_skip(req: SkipReq):
 def do_export(req: ExportReq):
     try:
         root = export_mod.run_export(gsd=req.gsd, tile=req.tile, include_fixtures=req.include_fixtures,
-                                     keep_empty=req.keep_empty, seed=req.seed, block_km=req.block_km,
+                                     keep_empty=req.keep_empty, only_complete=req.only_complete, seed=req.seed, block_km=req.block_km,
                                      buffer_m=req.buffer_m)
     except (ValueError, FileExistsError) as e:
         _err(e)
     rep = json.loads((root / "quality_report.json").read_text())
     return {"path": str(root), "ready_for_training": rep["ready_for_training"], "counts": rep["counts"],
             "integrity_passed": rep["integrity_passed"], "sufficiency_issues": rep["sufficiency_issues"]}
+
+
+@app.middleware("http")
+async def _no_cache_static(request, call_next):
+    resp = await call_next(request)
+    p = request.url.path
+    if not p.startswith(("/tiles/", "/api/")) and "Cache-Control" not in resp.headers:
+        resp.headers["Cache-Control"] = "no-cache"   # the UI files change between versions
+    return resp
 
 
 app.mount("/", StaticFiles(directory=config.STATIC_DIR, html=True), name="static")

@@ -31,10 +31,20 @@ def main(argv=None) -> int:
     e.add_argument("--tile", type=int, default=400)
     e.add_argument("--include-fixtures", action="store_true")
     e.add_argument("--keep-empty", action="store_true")
+    e.add_argument("--only-complete", action="store_true", help="فقط النوافذ المكتملة الوسم (آمن بلا تعديل خسارة SAM-Road)")
     e.add_argument("--seed", type=int, default=0)
     e.add_argument("--block-km", type=float, default=5.0)
     e.add_argument("--buffer-m", type=float, default=500.0)
     e.add_argument("--label")
+    sc = sub.add_parser("score-cached", help="قياس اختلاف النموذج عن OSM على النوافذ المخزنة بالكامل (بلا شبكة) لترتيب الدفعة")
+    sc.add_argument("--backend", default="ridge", choices=["ridge", "sam_road"])
+    sc.add_argument("--max", type=int, default=40)
+    sc.add_argument("--allow-network", action="store_true", help="يسمح بجلب بلاطات ناقصة (ضمن الميزانية)")
+    sg = sub.add_parser("suggest", help="مقترحات نموذج لعينة")
+    sg.add_argument("sample_id")
+    sg.add_argument("--backend", default="auto", choices=["auto", "ridge", "sam_road"])
+    rb = sub.add_parser("review-build", help="بناء طابور بطاقات المراجعة (صح/خطأ)")
+    rb.add_argument("--cards", type=int, default=60)
     c = sub.add_parser("check", help="جودة عينة واحدة")
     c.add_argument("sample_id")
     a = ap.parse_args(argv)
@@ -61,10 +71,29 @@ def main(argv=None) -> int:
             b = collect.current_batch()
             print(collect.batch_markdown(b) if "windows" in b else json.dumps(b, ensure_ascii=False, indent=1))
     elif a.cmd == "export":
-        root = export_mod.run_export(gsd=a.gsd, tile=a.tile, include_fixtures=a.include_fixtures, keep_empty=a.keep_empty,
+        root = export_mod.run_export(gsd=a.gsd, tile=a.tile, include_fixtures=a.include_fixtures, keep_empty=a.keep_empty, only_complete=a.only_complete,
                                      seed=a.seed, block_km=a.block_km, buffer_m=a.buffer_m, label=a.label)
         print(f"التصدير: {root}")
         print((root / "quality_report.md").read_text())
+    elif a.cmd == "score-cached":
+        from . import suggest
+        n = 0
+        for c in collect.load_candidates():
+            if n >= a.max:
+                break
+            r = suggest.score_window(c, a.backend, allow_network=a.allow_network)
+            if r:
+                n += 1
+                print(c["id"], r)
+        print(f"قُيِّمت {n} نافذة")
+    elif a.cmd == "review-build":
+        from . import review
+        d = review.build_deck(a.cards)
+        print(d["n_cards"], "بطاقة", d["sources_count"], d["controls"], "غير-OSM", d["non_osm_share"])
+    elif a.cmd == "suggest":
+        from . import suggest
+        fc = suggest.suggest(a.sample_id, a.backend)
+        print(fc["backend"], len(fc["features"]), "خطًا،", fc["runtime_s"], "ث")
     elif a.cmd == "check":
         print(json.dumps(quality.check_sample(a.sample_id), ensure_ascii=False, indent=1))
     return 0

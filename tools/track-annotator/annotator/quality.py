@@ -106,8 +106,18 @@ def check_sample(sample_id: str) -> dict:
     out = {"sample_id": sample_id, "roundtrip_px": rt, "image_std": round(float(img.std()), 2)}
     mp = sdir / "mask.png"
     if not rasterize.centerline_features(fc):
-        out.update(empty=True, problems=problems + ["لا مسارات"], ok=False)
+        if m.get("complete") or rasterize.negative_features(fc):
+            out.update(empty=True, negative_only=True, problems=problems, ok=not problems)
+        else:
+            out.update(empty=True, problems=problems + ["لا مسارات"], ok=False)
         return out
+    out["complete"] = bool(m.get("complete"))
+    ann = m.get("annotation") or {}
+    sg = ann.get("suggestions")
+    if sg and sg.get("pending"):
+        out["warnings"] = [f"{sg['pending']} مقترح لم يُراجَع (قبول/حذف)"]
+    if not m.get("complete"):
+        out.setdefault("warnings", []).append("النافذة غير موسومة «مكتملة»: لن يُتعلَّم منها إلا الإيجابيات (بقية البكسلات تُتجاهل)")
     mask = np.array(Image.open(mp))
     out["coverage"] = round(float((mask > 0).mean()), 6)
     lo, hi = gate["coverage_range"]
@@ -167,14 +177,26 @@ def check_export(root: Path) -> dict:
         kp = np.array(Image.open(proc / f"keypoint_mask_{tid}.png"))
         tmask = np.array(Image.open(ext / f"{tid}__type_mask.png"))
         adj = pickle.load(open(rgb_dir / f"{tid}__gt_graph.p", "rb"))
-        t = {"id": tid, "split": split}
+        hneg = np.array(Image.open(ext / f"{tid}__hardneg_mask.png"))
+        ign = np.array(Image.open(ext / f"{tid}__ignore_mask.png"))
+        negative_tile = rec.get("kind") == "negative"
+        t = {"id": tid, "split": split, "kind": rec.get("kind", "positive"), "ignore_fraction": round(float((ign > 0).mean()), 4)}
         probs = []
         if img.shape != (T, T, 3) or road.shape != (T, T) or kp.shape != (T, T):
             probs.append("أحجام غير مطابقة")
         if float(img.std()) < gate["min_image_std"]:
             probs.append("صورة متجانسة/سوداء")
-        if not adj:
+        if not adj and not negative_tile:
             probs.append("رسم فارغ")
+        if hneg.any():
+            # a hard negative that sits mostly on a drawn positive is a contradiction in the labels
+            overlap = float(((hneg > 0) & (road > 0)).sum()) / float((hneg > 0).sum())
+            if overlap > 0.25:
+                probs.append(f"سلبيات «ليس درب» تتداخل {overlap:.0%} مع إيجابيات")
+        if (ign > 0).any() and ((ign > 0) & (road > 0)).any():
+            probs.append("منطقة ignore تغطي بكسلات إيجابية")
+        if rec.get("complete") and (ign > 0).any():
+            probs.append("نافذة مكتملة لكن لديها ignore")
         asym = sum(1 for n, ns in adj.items() for k in ns if n not in adj.get(k, []))
         oob = sum(1 for n in adj if not (0 <= n[0] <= T and 0 <= n[1] <= T))
         if asym:
@@ -187,11 +209,12 @@ def check_export(root: Path) -> dict:
         t["coverage"] = round(float((road > 0).mean()), 6)
         lo, hi = gate["coverage_range"]
         if road.max() == 0:
-            probs.append("قناع فارغ")
+            if not negative_tile:
+                probs.append("قناع فارغ")
         elif not lo <= t["coverage"] <= hi:
             probs.append(f"تغطية غير معتادة {t['coverage']}")
-        # width sanity: median over centreline samples of 2*DT-1 (distance transform) ~ rendered line width
-        t["mean_width_px"] = median_width_px(adj, road, T)
+        # width sanity (positive tiles only): median over centreline samples of 2*DT-1 (distance transform) ~ rendered line width
+        t["mean_width_px"] = median_width_px(adj, road, T) if adj else None
         if t["mean_width_px"] is not None:
             wlo, whi = gate["width_px_range"]
             if not wlo <= t["mean_width_px"] <= whi:
@@ -223,7 +246,18 @@ def check_export(root: Path) -> dict:
     # leakage again from the files on disk
     assign = {r["id"]: r["split"] for r in man["tiles"]}
     leak = sp.check_leakage(tiles_geom, assign, man["params"]["buffer_m"])
-    counts = {s: sum(1 for r in man["tiles"] if r["split"] == s) for s in sp.SPLITS}
+    counts = {s: sum(1 for r in man["tiles"] if r["split"] == s and r.get("kind", "positive") == "positive") for s in sp.SPLITS}
+    neg_counts = {s: sum(1 for r in man["tiles"] if r["split"] == s and r.get("kind") == "negative") for s in sp.SPLITS}
+    incomplete = sorted({r["sample_id"] for r in man["tiles"] if not r.get("complete")})
+    all_samples = sorted({r["sample_id"] for r in man["tiles"]})
+    hn_cats: dict = {}
+    for r in man["tiles"]:
+        for c in r.get("hardneg_categories", []):
+            hn_cats[c] = hn_cats.get(c, 0) + 1
+    warnings = []
+    if incomplete:
+        warnings.append(f"{len(incomplete)} من {len(all_samples)} عينة غير موسومة «النافذة مكتملة الوسم»: لا يُعلَّم منها إلا الإيجابيات "
+                        "وتُخرَج بقية بكسلاتها في ignore_mask (النموذج الأصلي لا يقرأه؛ عدّل الخسارة أو صدّر --only-complete).")
     n_blocks = len({b for b, v in man["split_report"]["blocks"].items()})
     # class balance table
     balance = {}
@@ -250,13 +284,20 @@ def check_export(root: Path) -> dict:
     if n_blocks < gate["min_blocks"]:
         suff.append(f"كتل مكانية {n_blocks} < {gate['min_blocks']}")
     suff += [f for f in flags if "بلاطة تدريب فقط" in f or "غائب" in f]
+    if man.get("needs_ignore_mask_loss"):
+        suff.append("بلاطات غير مكتملة الوسم تحتاج ignore_mask في الخسارة (غير مدعوم في SAM-Road الأصلي) — عدّل الخسارة أو صدّر --only-complete")
     if man.get("has_fixture_data"):
         suff.append("تحتوي بيانات اختبار برمجية (fixture) — ليست وسوم المالك")
     report = {
         "export_version": man["export_version"],
         "counts": counts,
         "n_tiles": len(per_tile),
-        "empty_masks": sum(1 for t in per_tile if any("فارغ" in p for p in t["problems"])),
+        "negative_tiles": neg_counts,
+        "warnings": warnings,
+        "incomplete_samples": incomplete,
+        "hard_negative_tiles_by_category": hn_cats,
+        "ignore_fraction_mean": round(float(np.mean([t["ignore_fraction"] for t in per_tile])), 4) if per_tile else None,
+        "empty_masks": sum(1 for t in per_tile if t.get("kind") == "positive" and any("فارغ" in p for p in t["problems"])),
         "integrity_passed": not integrity_issues,
         "integrity_issues": integrity_issues,
         "sufficiency_passed": not suff,
@@ -297,6 +338,10 @@ def report_markdown(r: dict) -> str:
         L += ["## مشاكل السلامة", *[f"- {i}" for i in r["integrity_issues"]], ""]
     if r["sufficiency_issues"]:
         L += ["## نواقص الكفاية", *[f"- {i}" for i in r["sufficiency_issues"]], ""]
+    if r.get("warnings"):
+        L += ["## تحذيرات", *[f"- ⚠ {w}" for w in r["warnings"]], ""]
+    L += [f"بلاطات سلبية فقط (نوافذ مكتملة/«ليس درب»): {r.get('negative_tiles')} — فئات «ليس درب»: {r.get('hard_negative_tiles_by_category')}",
+          f"متوسط نسبة ignore: {r.get('ignore_fraction_mean')}", ""]
     L += ["## توازن الأنواع", "", "| القسم | النوع | بلاطات | كم | بكسلات | حصة |", "|---|---|---|---|---|---|"]
     for s, d in r["class_balance"].items():
         for t, v in d.items():

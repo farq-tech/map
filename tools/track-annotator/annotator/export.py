@@ -156,12 +156,14 @@ def _clip_fc(fc: dict, tgrid: Grid) -> dict:
 # --------------------------------------------------------------- main
 def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = None, include_fixtures: bool = False,
                keep_empty: bool = False, seed: int = 0, block_km: float = 5.0, buffer_m: float = 500.0,
-               out_root: Path | None = None, label: str | None = None) -> Path:
+               out_root: Path | None = None, label: str | None = None, only_complete: bool = False) -> Path:
     tg = collect.load_targets()
     ratios = tg["split"]
     stride = stride or tile
     samples = [m for m in store.list_samples(include_fixtures=include_fixtures)
-               if (m.get("annotation") or {}).get("n_tracks")]
+               if ((m.get("annotation") or {}).get("n_tracks") or m.get("complete")
+                   or (m.get("annotation") or {}).get("n_negatives"))
+               and (m.get("complete") or not only_complete)]
     if not samples:
         raise ValueError("لا توجد عينات موسومة للتصدير")
     # ---- 1. tile everything in memory-light fashion, collect candidates
@@ -188,13 +190,18 @@ def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = No
     kept, empty = [], []
     for t in cand:
         adj = build_graph(t["fc"], t["grid"])
-        if not adj and not keep_empty:
+        t["hardneg"] = rasterize.make_negative_mask(t["grid"], t["fc"])
+        t["complete"] = bool(t["meta"].get("complete"))
+        # a tile without positives is still evidence when the owner declared the window complete
+        # (everything undrawn is background) or drew hard negatives in it
+        t["kind"] = "positive" if adj else "negative"
+        if not adj and not (t["complete"] or t["hardneg"].any() or keep_empty):
             empty.append(t["id"])
             continue
         t["adj"] = adj
         kept.append(t)
     if not kept:
-        raise ValueError("كل البلاطات فارغة (لا مسار داخلها)")
+        raise ValueError("كل البلاطات فارغة (لا مسار ولا نافذة مكتملة ولا سلبيات)")
     # ---- 3. spatial split
     sp = splits.split_tiles(kept, ratios, block_m=block_km * 1000.0, buffer_m=buffer_m, seed=seed)
     leak = splits.check_leakage(kept, sp["assign"], buffer_m)
@@ -212,6 +219,7 @@ def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = No
     for d in (rgb_dir, proc_dir, ext):
         d.mkdir(parents=True, exist_ok=True)
     split_ids: dict = {s: [] for s in splits.SPLITS}
+    neg_ids: dict = {s: [] for s in splits.SPLITS}
     records = []
     for t in kept:
         s = sp["assign"][t["id"]]
@@ -226,18 +234,33 @@ def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = No
         cv2.imwrite(str(proc_dir / f"road_mask_{tid}.png"), road)
         masks = rasterize.make_masks(t["grid"], t["fc"], width_m=ROAD_WIDTH * gsd)
         Image.fromarray(masks["types"]).save(ext / f"{tid}__type_mask.png")
+        # hard negatives + ignore region. Incomplete window: only drawn positives / hard negatives are KNOWN;
+        # every other pixel is unlabeled and must be ignored by the loss (not taught as background).
+        known = cv2.dilate((road > 0).astype(np.uint8), np.ones((5, 5), np.uint8)) | cv2.dilate((t["hardneg"] > 0).astype(np.uint8), np.ones((5, 5), np.uint8))
+        ignore = np.zeros((tile, tile), np.uint8) if t["complete"] else ((known == 0).astype(np.uint8) * 255)
+        Image.fromarray(t["hardneg"]).save(ext / f"{tid}__hardneg_mask.png")
+        Image.fromarray(ignore).save(ext / f"{tid}__ignore_mask.png")
         clipped = _clip_fc(t["fc"], t["grid"])
         (ext / f"{tid}__tracks.geojson").write_text(json.dumps(clipped))
         geo = {**t["grid"].to_dict(), "bbox_wgs84": list(t["grid"].bbox_wgs84()), "gsd_m": gsd,
                "sample_id": t["sample_id"], "pixel_offset_in_sample_warp": [t["col"], t["row"]], "split": s}
         (ext / f"{tid}__geo.json").write_text(json.dumps(geo))
-        split_ids[s].append(tid)
+        (split_ids if t["kind"] == "positive" else neg_ids)[s].append(tid)
         types = sorted({f["properties"]["track_type"] for f in rasterize.centerline_features(clipped)})
-        records.append({"id": tid, "sample_id": t["sample_id"], "split": s, "types": types,
+        records.append({"id": tid, "sample_id": t["sample_id"], "split": s, "types": types, "kind": t["kind"],
+                        "complete": t["complete"],
+                        "verified_sources": sorted({f["properties"].get("proposal_source") for f in t["fc"]["features"]
+                                                    if f["properties"].get("source") == "human_verified" and f["properties"].get("proposal_source")}),
+                        "weight_hint": 2.0 if any(f["properties"].get("source") == "human_verified" and f["properties"].get("proposal_source") in
+                                                  ("desertmaps_new", "model", "ridge_filter") for f in t["fc"]["features"]) else 1.0, "ignore_fraction": round(float((ignore > 0).mean()), 4),
+                        "hardneg_categories": sorted({k for k, i in config.NEG_INDEX.items() if (t["hardneg"] == i).any()}),
                         "terrain": t["meta"].get("terrain"), "clarity": t["meta"].get("clarity"),
                         "region_cell": t["meta"]["region_cell"], "centre_wgs84": list(t["grid"].centre_lonlat()),
                         "mask_coverage": round(float((road > 0).mean()), 6), "n_nodes": len(t["adj"])})
     (root / "spacenet" / "data_split.json").write_text(json.dumps({k: sorted(v) for k, v in split_ids.items()}, indent=1))
+    # negative-only tiles (complete windows with no track / hard negatives): NOT in data_split.json because
+    # upstream SAM-Road skips empty graphs; a patched loader can read this list.
+    (root / "spacenet" / "negatives_split.json").write_text(json.dumps({k: sorted(v) for k, v in neg_ids.items()}, indent=1))
     manifest = {
         "export_version": version,
         "created_utc": _now(),
@@ -245,7 +268,7 @@ def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = No
         "target": SAM_ROAD_TARGET,
         "params": {"gsd_m": gsd, "tile_px": tile, "stride_px": stride, "road_width_px": ROAD_WIDTH,
                    "keypoint_radius_px": KEYPOINT_RADIUS, "include_fixtures": include_fixtures,
-                   "keep_empty": keep_empty, "seed": seed, "block_km": block_km, "buffer_m": buffer_m,
+                   "keep_empty": keep_empty, "only_complete": only_complete, "seed": seed, "block_km": block_km, "buffer_m": buffer_m,
                    "ratios": ratios, "crs": "per-tile UTM (see extras/*__geo.json); labels WGS84"},
         "inputs_sha256": inputs_hash,
         "licence": dict(config.LICENSE_NOTE),
@@ -253,11 +276,17 @@ def run_export(gsd: float = 1.0, tile: int = IMAGE_SIZE, stride: int | None = No
         "samples": [{"sample_id": m["sample_id"], "image_sha256": m["image_sha256"],
                      "tracks_sha256": m["annotation"]["tracks_sha256"], "fixture": m.get("fixture", False),
                      "terrain": m.get("terrain")} for m in samples],
-        "counts": {"samples": len(samples), "tiles_candidate": len(cand), "tiles_empty_dropped": len(empty),
+        "counts": {"samples": len(samples), "tiles_candidate": len(cand), "tiles_empty_dropped": len(empty), "tiles_negative_only": sum(len(v) for v in neg_ids.values()),
+                   "tiles_incomplete": sum(1 for r in records if not r["complete"]),
                    "tiles_buffer_dropped": len(sp["dropped"]), **{f"tiles_{s}": len(v) for s, v in split_ids.items()}},
         "tiles": records,
         "split_report": {"blocks": sp["blocks"], "params": sp["params"], "buffer_dropped": sp["dropped"],
                          "empty_dropped": empty, "leakage_check": leak},
+        "review": {"note": "human_verified = owner said صح on a machine proposal; weight_hint 2.0 = contains a verified NOVEL (non-OSM) track",
+                   "stats": __import__("annotator.review", fromlist=["x"]).stats()},
+        "needs_ignore_mask_loss": any(not r["complete"] for r in records),
+        "ignore_mask_note": "extras/*__ignore_mask.png (255 = unlabeled, exclude from the loss). Upstream SAM-Road does NOT read it: "
+                            "patch the loss or export with --only-complete.",
         "has_fixture_data": any(m.get("fixture") for m in samples),
     }
     (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))

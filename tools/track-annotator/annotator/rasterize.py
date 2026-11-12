@@ -64,6 +64,21 @@ def make_masks(grid: Grid, fc: dict, width_m: float = config.MASK_WIDTH_M_DEFAUL
     return {"mask": mask, "types": types, "edges": edges}
 
 
+def negative_features(fc: dict) -> list[dict]:
+    return [f for f in fc.get("features", []) if f["properties"].get("kind") == "negative"]
+
+
+def make_negative_mask(grid: Grid, fc: dict, width_m: float = config.NEGATIVE_WIDTH_M) -> np.ndarray:
+    """Class-index mask (1..8 = category) of hard negatives on ``grid`` (0 = none)."""
+    res = grid.ground_res_m()
+    shapes = []
+    for f in negative_features(fc):
+        poly = _line_polygon(f["geometry"]["coordinates"], grid, max(width_m, res))
+        if poly is not None and not poly.is_empty:
+            shapes.append((poly, config.NEG_INDEX[f["properties"]["category"]]))
+    return rasterize_polygons(grid, shapes)
+
+
 def lines_to_pixels(grid: Grid, coords) -> np.ndarray:
     lon = [c[0] for c in coords]
     lat = [c[1] for c in coords]
@@ -86,6 +101,10 @@ def render_overlay(rgb: np.ndarray, grid: Grid, fc: dict, masks: dict, max_side:
     tint.putalpha(alpha)
     out = Image.alpha_composite(base, tint)
     d = ImageDraw.Draw(out)
+    for f in negative_features(fc):
+        pts = [tuple(p) for p in lines_to_pixels(grid, f["geometry"]["coordinates"])]
+        d.line(pts, fill=(255, 255, 255, 255), width=3)
+        d.line(pts, fill=(200, 0, 0, 255), width=1)
     for f in centerline_features(fc):
         pts = [tuple(p) for p in lines_to_pixels(grid, f["geometry"]["coordinates"])]
         d.line(pts, fill=TYPE_COLORS.get(f["properties"].get("track_type"), (255, 255, 0)) + (255,), width=2)

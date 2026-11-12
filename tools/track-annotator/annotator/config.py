@@ -53,6 +53,19 @@ TERRAIN = {
     "sabkha": "سبخة",
     "mixed": "مختلط",
 }
+# "ليس درب": hard negatives (things that look like a track but must NOT be learned as one)
+NEGATIVE_CATEGORIES = {
+    "fence": "سياج/سور",
+    "pipeline": "أنبوب/خط خدمات",
+    "wadi": "مجرى وادٍ",
+    "pivot_circle": "دائرة ري محوري",
+    "boundary": "حد/عقم أرض",
+    "power_line": "خط كهرباء",
+    "plain_road": "طريق عادي لا أريده",
+    "other": "أخرى",
+}
+NEG_INDEX = {k: i + 1 for i, k in enumerate(NEGATIVE_CATEGORIES)}
+NEGATIVE_WIDTH_M = 4.0
 MASK_WIDTH_M_DEFAULT = 3.0
 LICENSE_NOTE = {
     "status": "owner-declared",
