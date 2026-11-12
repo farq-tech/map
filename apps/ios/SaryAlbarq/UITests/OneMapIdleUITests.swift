@@ -329,7 +329,7 @@ final class OutingCapabilitiesUITests: XCTestCase {
         }
     }
 
-    func testTheOutingLayersSheetHasTheExplorationRowsOnlyWithTheFlag() {
+    func testTheOutingLayersSheetKeepsItsRowsWithAndWithoutTheFlag() {
         for flag in [false, true] {
             let app = launch(oneMap: flag)
             let layers = el(app, "map.layers")
@@ -337,7 +337,7 @@ final class OutingCapabilitiesUITests: XCTestCase {
             layers.tap()
             XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10))
             XCTAssertTrue(el(app, "layer.topo").waitForExistence(timeout: 5))
-            XCTAssertEqual(el(app, "weather.layer.rain").waitForExistence(timeout: flag ? 5 : 2), flag, "flag=\(flag): weather layers in the outing's sheet")
+            XCTAssertTrue(el(app, "weather.layer.rain").waitForExistence(timeout: 5), "flag=\(flag): weather layers are in the outing's sheet either way (#239)")
             XCTAssertTrue(el(app, "explore-camp-sites").exists, "flag=\(flag): camp sites are in the outing's sheet either way (S3)")
             shot("outing-sheet-flag-\(flag ? "on" : "off")")
             app.terminate()
