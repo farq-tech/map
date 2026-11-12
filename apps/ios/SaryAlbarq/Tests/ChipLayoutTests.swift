@@ -26,6 +26,22 @@ final class ChipLayoutTests: XCTestCase {
         }
     }
 
+    /// Drive mode: names over «أنت» and the two nearest friends; the far ones are their car alone.
+    func testDriveNamesOnlyTheNearestFriends() {
+        let items = [item("me", 200, 500, me: true), item("far", 420, 100), item("near", 210, 470),
+                     item("mid", 260, 560), item("farther", 20, 900)]
+        XCTAssertEqual(ChipLayout.namedNearest(items, limit: ChipLayout.driveNamed), ["me", "near", "mid"])
+        XCTAssertEqual(ChipLayout.driveNamed, 2)
+        /* Few friends, or «أنت» off the map: everyone keeps a name. */
+        let few = [item("me", 200, 500, me: true), item("a", 10, 10), item("b", 400, 900)]
+        XCTAssertEqual(ChipLayout.namedNearest(few, limit: 2), ["me", "a", "b"])
+        let noMe = [item("a", 10, 10), item("b", 20, 20), item("c", 30, 30)]
+        XCTAssertEqual(ChipLayout.namedNearest(noMe, limit: 2), ["a", "b", "c"])
+        /* Equal distances: the id breaks the tie, so the pick never flickers. */
+        let tie = [item("me", 200, 500, me: true), item("z", 200, 400), item("y", 200, 600), item("x", 100, 500)]
+        XCTAssertEqual(ChipLayout.namedNearest(tie, limit: 2), ["me", "x", "y"])
+    }
+
     func testFarApartChipsStayOverTheirCarsWithoutLines() {
         let r = ChipLayout.solve([item("a", 100, 400), item("b", 300, 600)], opts())
         XCTAssertEqual(r.chips.count, 2)
