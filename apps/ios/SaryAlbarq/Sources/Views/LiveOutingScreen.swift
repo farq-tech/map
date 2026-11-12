@@ -308,7 +308,7 @@ struct LiveOutingScreen: View {
                         /* The hint in the middle; a small walkie-talkie stays reachable (UI-AUDIT م3). */
                         HStack(alignment: .center, spacing: theme.space(.s)) {
                             Spacer(minLength: 0)
-                            Text("اضغط على أي مكان بالخريطة عشان تشوف بريفه")
+                            Text("اضغط على أي مكان بالخريطة عشان تشوف معلوماته")
                                 .saryText(.caption, weight: .medium)
                                 .foregroundStyle(theme.palette.textSecondary)
                                 .multilineTextAlignment(.center)
@@ -1060,11 +1060,15 @@ private struct EdgeArrowLayer: View {
     var body: some View {
         let me = controller.session.view?.myId
         let all = overlay.projection.points.filter { $0.key != me }.map { (id: $0.key, point: $0.value) }.sorted { $0.id < $1.id }
+        /* This layer is drawn over the whole map, the weather legend card (a map subview) included:
+         * the arrows' edge starts past the card, as the map's own chips keep clear of it. */
+        let card = overlay.projection.weatherCard
+        let clear = ChipLayout.clear(area, of: card)
         /* At most three, alert members first then the nearest (docs/IA-REDESIGN.md §2.6). */
-        let off = all.filter { EdgeArrows.spot(id: $0.id, point: $0.point, area: area, chip: Self.chip) != nil }
+        let off = all.filter { EdgeArrows.spot(id: $0.id, point: $0.point, area: clear, chip: Self.chip) != nil }
         let keep = Set(EdgeArrows.pick(candidates: off.map { (id: $0.id, distance: parts[$0.id]?.distanceMeters) }, alerting: alerting, driving: driving))
         let pts = off.filter { keep.contains($0.id) }
-        let spots = EdgeArrows.place(points: pts, area: area, chip: Self.chip, avoid: keepOut(me: me, parts: parts))
+        let spots = EdgeArrows.place(points: pts, area: clear, chip: Self.chip, avoid: keepOut(me: me, parts: parts) + (card.map { [$0] } ?? []))
         SaryMapOverlayLayer {
             ForEach(spots, id: \.id) { s in
                 if let p = parts[s.id] {

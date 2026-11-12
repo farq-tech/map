@@ -51,6 +51,10 @@ final class WeatherOverlay {
     let legend = WeatherLegendModel()
     private var legendHost: UIHostingController<WeatherLegendCard>?
     private var flowHost: UIHostingController<CloudFlowHost>?
+    /// The legend card's frame on the map (nil while it is hidden). The host's own overlays
+    /// (the name chips, the edge arrows) keep clear of it; `onCardFrame` tells them when it changes.
+    private(set) var cardFrame: CGRect?
+    var onCardFrame: ((CGRect?) -> Void)?
 
     private struct Drawn: Equatable {
         var kind: WeatherOverlayKind
@@ -570,7 +574,7 @@ final class WeatherOverlay {
             #endif
             flow.view.isHidden = off
         }
-        guard show else { return }
+        guard show else { setCardFrame(nil); return }
         let width = min(map.bounds.width - 24, 360)
         let size = host.sizeThatFits(in: CGSize(width: width, height: 400))
         var y = request.chrome.top + 8
@@ -583,6 +587,13 @@ final class WeatherOverlay {
         } else {
             host.view.frame = CGRect(x: (map.bounds.width - width) / 2, y: y, width: width, height: size.height)
         }
+        setCardFrame(host.view.frame)
+    }
+
+    private func setCardFrame(_ f: CGRect?) {
+        guard f != cardFrame else { return }
+        cardFrame = f
+        onCardFrame?(f)
     }
 }
 

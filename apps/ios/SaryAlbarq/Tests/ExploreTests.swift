@@ -24,6 +24,11 @@ final class ExploreTests: XCTestCase {
         let p = LngLat(lng: 46.6753, lat: 24.7136)
         XCTAssertEqual(ExploreRules.coordinateText(p, .decimal), CoordinateShare.displayDecimal(p))
         XCTAssertTrue(ExploreRules.coordinateText(p, .dms).contains("°"))
+        /* On screen: the Arabic decimal separator «٫», never "." or ","; the copy stays ASCII. */
+        let shown = ExploreRules.coordinateText(LngLat(lng: 45, lat: 24.5), .decimal)
+        XCTAssertEqual(shown, "٢٤٫٥٠٠٠٠، ٤٥٫٠٠٠٠٠")
+        XCTAssertFalse(shown.contains(",") || shown.contains("."))
+        XCTAssertEqual(CoordinateShare.copyDecimal(LngLat(lng: 45, lat: 24.5)), "24.50000, 45.00000")
     }
 
     func testOfflineNotesAreHonest() {

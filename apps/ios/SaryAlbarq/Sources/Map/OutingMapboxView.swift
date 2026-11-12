@@ -236,8 +236,11 @@ struct OutingMapboxView: UIViewRepresentable {
         /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
         /* The planned destination only: a long-pressed / searched point card is not where the person is going. */
         let cloudDest = plan.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }
-        WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome,
-                                                            point: cloudDest ?? userPoint, pointIsDestination: cloudDest != nil))
+        let weather = WeatherOverlay.of(map)
+        /* The legend card is drawn over the chips: they (and the edge arrows) keep clear of it. */
+        weather.onCardFrame = { [weak c] f in c?.setWeatherCard(f) }
+        weather.update(WeatherOverlayRequest(active: explore.active, chrome: chrome,
+                                             point: cloudDest ?? userPoint, pointIsDestination: cloudDest != nil))
         QiblaMapOverlay.of(map).update(origin: qiblaOrigin)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
@@ -278,6 +281,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var lastCars: [MapMember] = []
         private var link: CADisplayLink?
         private var chrome: UIEdgeInsets = .zero
+        /// The weather legend card's frame on the map (nil while hidden), from `WeatherOverlay`.
+        private var weatherCard: CGRect?
         private var roads: [RoadSnap.RoadLine] = [] { didSet { roadsVersion &+= 1 } }
         /// Bumped with every new road set: a car's cached `RoadSnap.nearby` is valid for one version only.
         private var roadsVersion = 0
@@ -556,6 +561,15 @@ struct OutingMapboxView: UIViewRepresentable {
             if MapTerrainProbe.source === self { MapTerrainProbe.source = nil }
             cancelables.removeAll()
             visuals.detach()
+        }
+
+        /// The weather legend card moved, opened or closed: lay the chips out around it and
+        /// tell the edge arrows (through the projection).
+        func setWeatherCard(_ f: CGRect?) {
+            guard f != weatherCard else { return }
+            weatherCard = f
+            layoutChips()
+            project()
         }
 
         func setChrome(_ insets: UIEdgeInsets) {
@@ -1148,7 +1162,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             for r in recs.values { pts[r.item.id] = screen(r.shown.coordinate) }
             let rally = rallyPin.map { screen($0.point.position.coordinate) }
-            onProjection(MapProjection(points: pts, rally: rally, bearing: m.cameraState.bearing, size: map.bounds.size))
+            onProjection(MapProjection(points: pts, rally: rally, bearing: m.cameraState.bearing, size: map.bounds.size, weatherCard: weatherCard))
         }
 
         private func drawCar(_ r: Rec, on map: MapView) {
@@ -1389,7 +1403,9 @@ struct OutingMapboxView: UIViewRepresentable {
                 items.append(ChipLayout.Item(id: r.item.id, anchor: screen(r.shown.coordinate), chip: chipSize,
                                              note: folded ? nil : r.noteBox?.ideal, isMe: r.item.isMe, priority: prio))
             }
-            var opts = ChipLayout.Options(bounds: map.bounds.inset(by: UIEdgeInsets(top: chrome.top, left: 0, bottom: 0, right: 0)))
+            let clear = map.bounds.inset(by: UIEdgeInsets(top: chrome.top, left: 0, bottom: 0, right: 0))
+            /* The weather legend card is drawn over the chips: they keep off it as they keep off the top chrome. */
+            var opts = ChipLayout.Options(bounds: ChipLayout.clear(clear, of: weatherCard))
             opts.expanded = expandedGroups
             if theme.drive { opts.maxStack = 2 }
             let result = ChipLayout.solve(items, opts)
@@ -1478,7 +1494,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 startPin?.host.view.isHidden = covered
                 if !covered { taken.append(crowded ? r.icon : r.icon.union(r.label)) }
             }
-            waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken, zoom: cam.zoom)
+            if let card = weatherCard { taken.append(card) }
+            waypointPins.layout(screen: screen, bounds: clear, obstacles: taken, zoom: cam.zoom)
             CATransaction.commit()
             placeOrnaments(force: false)
         }
@@ -2241,6 +2258,8 @@ struct MapProjection: Equatable {
     var rally: CGPoint?
     var bearing: Double
     var size: CGSize
+    /// The weather legend card (map points; nil while hidden): the edge arrows keep clear of it.
+    var weatherCard: CGRect? = nil
 }
 
 /// Mapbox styles with place names in Arabic. Standard (and Outdoors) read `name_en`; we

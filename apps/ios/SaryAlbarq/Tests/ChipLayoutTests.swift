@@ -184,6 +184,32 @@ final class ChipLayoutTests: XCTestCase {
         XCTAssertEqual(SaryFormat.cars(11), "١١ سيارة")
     }
 
+    // MARK: the weather legend card
+
+    /// The device screenshot: the legend card right under the top chrome (side column included).
+    func testWideCardCutsItsBandOffTheClearArea() {
+        let area = CGRect(x: 0, y: 440, width: 440, height: 516)
+        let card = CGRect(x: 40, y: 448, width: 360, height: 170)
+        XCTAssertEqual(ChipLayout.clear(area, of: card), CGRect(x: 0, y: 622, width: 440, height: 334))
+        /* Slid up to the bottom chrome on a short screen: the band below it goes. */
+        let low = CGRect(x: 40, y: 780, width: 360, height: 150)
+        XCTAssertEqual(ChipLayout.clear(area, of: low), CGRect(x: 0, y: 440, width: 440, height: 336))
+        /* No card, a card off the area, the small restore button: nothing changes. */
+        XCTAssertEqual(ChipLayout.clear(area, of: nil), area)
+        XCTAssertEqual(ChipLayout.clear(area, of: CGRect(x: 40, y: 100, width: 360, height: 170)), area)
+        XCTAssertEqual(ChipLayout.clear(area, of: CGRect(x: 12, y: 448, width: 44, height: 44)), area)
+    }
+
+    func testChipOfACarJustUnderTheCardGoesBelowTheCar() {
+        let card = CGRect(x: 40, y: 448, width: 360, height: 170)
+        let bounds = ChipLayout.clear(CGRect(x: 0, y: 440, width: screen.width, height: screen.height - 440), of: card)
+        let r = ChipLayout.solve([item("a", 220, card.maxY + 20)], opts { $0.bounds = bounds })
+        let f = r.chips[0].frame
+        XCTAssertFalse(f.intersects(card), "the card is drawn over the chips: never under it")
+        XCTAssertGreaterThan(f.minY, card.maxY + 20)
+        XCTAssertTrue(r.chips[0].leader)
+    }
+
     // MARK: ornaments
 
     func testOrnamentsTakeTheFirstFreeSpot() {
