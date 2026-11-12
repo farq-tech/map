@@ -22,6 +22,9 @@ struct MapExplore: Equatable {
     var capabilities = false
     var tracks: [Track] = []
     var places: [Place] = []
+
+    /// The shown GPX tracks as routes for the visuals pack (the slope overlay): when exploration is on OR its capabilities are.
+    var visualRoutes: [[LngLat]] { (active || capabilities) ? tracks.map(\.points) : [] }
 }
 
 /// Draws `MapExplore` as GeoJSON layers; re-added after every style load (layer switch).

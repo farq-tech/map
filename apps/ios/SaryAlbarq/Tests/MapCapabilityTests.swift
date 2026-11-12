@@ -15,6 +15,24 @@ final class MapCapabilityTests: XCTestCase {
         XCTAssertFalse(MapCapabilityRules.unlocked(exploring: false, oneMap: true, navigating: false, following: false, moving: true), "driving keeps it")
     }
 
+    func testDrivingFromTheIdleMapTakesTheCapabilitiesAway() {
+        // The idle map is always "exploring" (no way out): starting guidance, following or moving must unlock the trip map rules.
+        for (nav, follow, move) in [(true, false, false), (false, true, false), (false, false, true)] {
+            XCTAssertFalse(MapCapabilityRules.unlocked(exploring: true, oneMap: true, navigating: nav, following: follow, moving: move),
+                           "oneMap + exploring + nav=\(nav) follow=\(follow) moving=\(move): the base layer and 3D are not forced")
+        }
+        XCTAssertTrue(MapCapabilityRules.unlocked(exploring: true, oneMap: true, navigating: false, following: false, moving: false))
+        // The switch-off path is untouched: exploration keeps its capabilities exactly as before.
+        XCTAssertTrue(MapCapabilityRules.unlocked(exploring: true, oneMap: false, navigating: true, following: true, moving: true))
+    }
+
+    func testShownTracksReachTheVisualsPackWithCapabilitiesToo() {
+        let t = MapExplore.Track(id: "t", name: "t", points: [LngLat(lng: 46, lat: 24), LngLat(lng: 46.1, lat: 24.1)])
+        XCTAssertEqual(MapExplore(active: true, tracks: [t]).visualRoutes.count, 1, "exploration, as before")
+        XCTAssertEqual(MapExplore(active: false, capabilities: true, tracks: [t]).visualRoutes.count, 1, "capabilities (sary.oneMap): the slope overlay works")
+        XCTAssertTrue(MapExplore(active: false, capabilities: false, tracks: [t]).visualRoutes.isEmpty, "neither: nothing")
+    }
+
     @MainActor
     func testTheMapDrawsCapabilitiesWithoutStoppingTheGroupCamera() {
         let location = LocationSharer()

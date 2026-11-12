@@ -8,8 +8,11 @@ import Foundation
 /// person is looking around: stopped, not guiding, not following a track, not back-tracking.
 enum MapCapabilityRules {
     static func unlocked(exploring: Bool, oneMap: Bool, navigating: Bool, following: Bool, moving: Bool) -> Bool {
-        if exploring { return true }
-        return oneMap && !navigating && !following && !moving
+        /* With the flag the idle map is always "exploring" (it has no way out of it), so driving, guidance and following
+         * must take the capabilities away themselves: the chosen base layer and 3D terrain never stay forced on the trip map.
+         * Without the flag exploration exits by itself when driving starts (`exploreDrivingCheck`), as before. */
+        if oneMap, navigating || following || moving { return false }
+        return exploring || oneMap
     }
 }
 
