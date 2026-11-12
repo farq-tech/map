@@ -846,9 +846,12 @@ struct NavBottomBar: View {
                 }
             } else {
                 v2Numbers
+                /* The total counts the off-road leg like `remainingMeters` does: without it the bar sat at 0
+                 * until the road left was shorter than that leg. */
                 if surfaces, let ahead = nav.surfaceAhead {
                     NavSurfaceAheadStrip(ui: ahead)
-                } else if let done = NavDriveLayout.progress(totalM: nav.active?.distanceM, remainingM: nav.remainingMeters) {
+                } else if let done = NavDriveLayout.progress(totalM: nav.active.map { $0.distanceM + (nav.offRoad?.distanceM ?? 0) },
+                                                             remainingM: nav.remainingMeters) {
                     progressBar(done)
                 }
             }
@@ -915,13 +918,14 @@ struct NavBottomBar: View {
         .accessibilityIdentifier("nav.banner.eta")
     }
 
-    /// The trip so far on an all-asphalt route: a thin bar, the driven part in the live colour.
+    /// The trip so far on an all-asphalt route: a thin bar, the driven part in the live colour. The track
+    /// is a faint tint of the text colour (Build 46: `sunken` on the dark bar read as an empty black bar).
     private func progressBar(_ done: Double) -> some View {
         let p = theme.palette
         return GeometryReader { g in
             ZStack(alignment: .leading) {
-                Capsule().fill(p.sunken)
-                Capsule().fill(p.liveText).frame(width: g.size.width * CGFloat(done))
+                Capsule().fill(p.textPrimary.opacity(0.16))
+                Capsule().fill(p.live).frame(width: g.size.width * CGFloat(done))
             }
         }
         .frame(height: NavDriveLayout.progressBarHeight)
