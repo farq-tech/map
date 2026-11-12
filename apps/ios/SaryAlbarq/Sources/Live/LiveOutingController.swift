@@ -196,6 +196,8 @@ final class LiveOutingController: ObservableObject {
         }
     }
     @Published var picking: (moving: Bool, active: Bool) = (false, false)
+    /// The modal whose sheet really appeared (set by the sheet content); `LiveOutingScreen.watchModal` compares it.
+    var modalShownID: String?
     @Published var modal: LiveModal? {
         didSet {
             if oldValue == .navOptions, modal != .navOptions { navOptionsClosed() }

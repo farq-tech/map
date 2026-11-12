@@ -44,6 +44,16 @@ struct LiveOutingScreen: View {
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
     @ObservedObject private var tilt = MapTiltModel.shared
+    /// The live sheet (the dock) is presented from here for the whole outing. UIKit can take it down (another
+    /// presentation, a system sheet, an alert): with a constant `true` binding it then never came back, the bottom
+    /// bar with «إنهاء الرحلة» vanished and every sheet presented from it (layers, rain, more) silently failed
+    /// (owner's Build 46 report, 2026-11-13). So the binding is real: when the dock goes it is presented again, and
+    /// meanwhile `DockFallbackBar` keeps the end button on screen.
+    @State private var dockUp = true
+    /// «إنهاء الرحلة» from the fallback bar, presented from this view (the dock is down then).
+    @State private var fallbackEnd = false
+    /// A modal that was set but whose sheet never appeared is recovered by `watchModal`.
+    @State private var modalRecoveries = 0
     /// «البوصلة» while driving: the target chosen for this outing (nil: the default, `DestinationCompass.resolve`)
     /// and its «أقرب مطر» / «أقرب ربيع» lookups, in memory only.
     @State private var compassTarget: DestinationCompass.Target?
@@ -134,7 +144,13 @@ struct LiveOutingScreen: View {
         /* A friend's SOS: full screen in its own window, over every sheet, page and dialog (UI-AUDIT 0.1). */
         .background(FriendSOSAlertHost(alert: LiveOutingPresenter.fullScreenSOS(ui.sos), theme: theme,
                                        show: { controller.showSOS($0) }, call: { controller.actions.sos.call($0) }))
-        .sheet(isPresented: .constant(true)) {
+        .overlay(alignment: .bottom) {
+            if !dockUp {
+                DockFallbackBar(guiding: controller.nav.isActive, end: { fallbackEnd = true })
+            }
+        }
+        .sheet(isPresented: Binding(get: { dockUp },
+                                    set: { up in if !up { dockWentDown() } })) {
             /* The presenter state this render already built: the sheet does not run it again. */
             LiveSheet(controller: controller, ui: ui)
                 .realisticCover($realistic)
@@ -155,6 +171,51 @@ struct LiveOutingScreen: View {
                 }
                 .saryAppearance(appearance)
                 .sarySheetPresentation(detent: $controller.sheetDetent, shape: sheetShape)
+        }
+        .sheet(isPresented: Binding(get: { fallbackEnd }, set: { if !$0 { fallbackEnd = false } })) {
+            EndChoiceSheet(state: controller.endState, choose: { a in fallbackEnd = false; controller.performEnd(a) }, close: { fallbackEnd = false })
+                .presentationDetents([.medium, .large])
+                .saryAppearance(appearance)
+        }
+        .onChange(of: controller.modal) { _, m in watchModal(m) }
+        .onChange(of: fallbackEnd) { _, on in if !on { dockUp = true } }
+        .task {
+            #if DEBUG
+            let a = ProcessInfo.processInfo.arguments
+            if let i = a.firstIndex(of: "-SaryDockDrop"), i + 1 < a.count, let sec = Double(a[i + 1]) {
+                try? await Task.sleep(nanoseconds: UInt64(sec * 1_000_000_000)); dockWentDown()
+            }
+            #endif
+        }
+    }
+
+    /// UIKit dismissed the dock: show the fallback bar now, present the dock again a moment later.
+    private func dockWentDown() {
+        guard dockUp else { return }
+        NSLog("SARY-DOCK dropped (nav %@, modal %@)", "\(controller.nav.phase)", controller.modal?.id ?? "nil")
+        dockUp = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + dockReturnDelay) { if !fallbackEnd { dockUp = true } }
+    }
+
+    /// DEBUG `-SaryDockDrop <seconds>`: take the dock down once after that many seconds and keep it down 4 s (simulator proof).
+    private var dockReturnDelay: Double {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-SaryDockDrop") { return 4 }
+        #endif
+        return 0.6
+    }
+
+    /// A sheet that was asked for must show up. If it has not appeared after 1.5 s the presentation stack is
+    /// stuck (the layers button "does nothing"): rebuild the dock, which presents the modal again from a clean state.
+    private func watchModal(_ m: LiveModal?) {
+        guard let m else { controller.modalShownID = nil; return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            guard controller.modal?.id == m.id, controller.modalShownID != m.id, dockUp, !controller.settingsOpen else { return }
+            if modalRecoveries >= 2 { modalRecoveries = 0; controller.modal = nil; controller.toast("تعذّر فتح الورقة، جرّب مرة ثانية"); return }
+            NSLog("SARY-DOCK modal %@ never appeared: rebuilding the dock", m.id)
+            modalRecoveries += 1
+            dockUp = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { dockUp = true }
         }
     }
 
@@ -596,7 +657,7 @@ struct LiveOutingScreen: View {
         case "fit": a.fitGroup()
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         case "actions": controller.modal = .actions
-        case "layers": controller.modal = .layers
+        case "layers": NSLog("SARY-DOCK layers tapped (modal %@)", controller.modal?.id ?? "nil"); controller.modal = .layers
         case "tilt": tilt.toggle(CameraTiltRules.mode(heading: controller.mapFollowMode == .heading, idle: controller.idleHome))
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
@@ -1146,4 +1207,26 @@ private struct BearingObserving<Content: View>: View {
     @ObservedObject var overlay: MapOverlayModel
     @ViewBuilder var content: (Double) -> Content
     var body: some View { content(overlay.projection.bearing) }
+}
+
+
+/// The bottom bar of last resort while the dock is down: «إنهاء الرحلة» stays on screen and tappable.
+struct DockFallbackBar: View {
+    var guiding: Bool
+    var end: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        Button(action: end) {
+            Text(guiding ? "إنهاء الرحلة" : "إنهاء الطلعة")
+                .saryText(.callout, weight: .bold)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(Capsule().fill(Color.red.opacity(0.92)))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, theme.space(.l))
+        .padding(.bottom, theme.space(.l))
+        .accessibilityIdentifier("dock.fallback.end")
+    }
 }
