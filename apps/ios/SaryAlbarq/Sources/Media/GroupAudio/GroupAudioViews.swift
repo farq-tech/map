@@ -211,9 +211,9 @@ private struct NowPlayingCard: View {
             if let item = center.nowItem {
                 HStack(spacing: theme.space(.s)) {
                     Text(item.live ? "مباشر" : "متزامن")
-                        .saryText(.caption, weight: .heavy).foregroundStyle(.white)
+                        .saryText(.caption, weight: .heavy).foregroundStyle(item.live ? p.onEmergency : .white)
                         .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(item.live ? Color.red : radioColor))
+                        .background(Capsule().fill(item.live ? p.emergency : radioColor))
                     Text(statusText).saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                         .accessibilityIdentifier("radio.status")
                 }
