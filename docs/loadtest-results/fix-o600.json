@@ -1,0 +1,1545 @@
+{
+ "label": "fix-o600",
+ "config": {
+  "outings": 600,
+  "members": [
+   3,
+   6
+  ],
+  "fixMs": 2000,
+  "chatMs": 30000,
+  "db_latency_ms": 0,
+  "pool_max": 8,
+  "durationS": 60,
+  "workers": 2
+ },
+ "series": [
+  {
+   "t": 6,
+   "server": {
+    "loop": {
+     "mean": 12.83,
+     "p50": 10.47,
+     "p99": 14.8,
+     "max": 982.5
+    },
+    "cpu_pct": 15.4,
+    "rss_mb": 150,
+    "heap_mb": 97,
+    "pool": {
+     "total": 8,
+     "idle": 0,
+     "waiting": 405,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 1.2,
+    "ack_p95": 319.3,
+    "ack_p99": 544.7,
+    "ack_n": 6824,
+    "e2e_p50": 1.1,
+    "e2e_p95": 319.6,
+    "e2e_p99": 545.1,
+    "e2e_n": 24901,
+    "sent": 7526,
+    "recv": 24901,
+    "acks": 6824,
+    "ack_fail": {},
+    "closes": {},
+    "chat_sent": 0,
+    "chat_ack_p95": 0,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 11,
+   "server": {
+    "loop": {
+     "mean": 20.11,
+     "p50": 10.67,
+     "p99": 166.46,
+     "max": 252.8
+    },
+    "cpu_pct": 21.3,
+    "rss_mb": 184,
+    "heap_mb": 100,
+    "pool": {
+     "total": 8,
+     "idle": 8,
+     "waiting": 0,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 37.3,
+    "ack_p95": 1662.1,
+    "ack_p99": 1877.9,
+    "ack_n": 7103,
+    "e2e_p50": 36.1,
+    "e2e_p95": 1675.7,
+    "e2e_p99": 1914.3,
+    "e2e_n": 23305,
+    "sent": 6401,
+    "recv": 23305,
+    "acks": 7103,
+    "ack_fail": {
+     "too_frequent": 708,
+     "out_of_order": 10
+    },
+    "closes": {},
+    "chat_sent": 0,
+    "chat_ack_p95": 0,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 16,
+   "server": {
+    "loop": {
+     "mean": 16.72,
+     "p50": 10.77,
+     "p99": 140.25,
+     "max": 226.2
+    },
+    "cpu_pct": 17.9,
+    "rss_mb": 178,
+    "heap_mb": 82,
+    "pool": {
+     "total": 8,
+     "idle": 0,
+     "waiting": 97,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 10.6,
+    "ack_p95": 332.9,
+    "ack_p99": 610.4,
+    "ack_n": 6454,
+    "e2e_p50": 10.6,
+    "e2e_p95": 332,
+    "e2e_p99": 604,
+    "e2e_n": 23644,
+    "sent": 6597,
+    "recv": 23644,
+    "acks": 6454,
+    "ack_fail": {},
+    "closes": {},
+    "chat_sent": 0,
+    "chat_ack_p95": 0,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 22,
+   "server": {
+    "loop": {
+     "mean": 12.43,
+     "p50": 10.96,
+     "p99": 45.25,
+     "max": 133
+    },
+    "cpu_pct": 14.4,
+    "rss_mb": 142,
+    "heap_mb": 108,
+    "pool": {
+     "total": 8,
+     "idle": 5,
+     "waiting": 0,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 3.7,
+    "ack_p95": 106.2,
+    "ack_p99": 218.5,
+    "ack_n": 6385,
+    "e2e_p50": 3.7,
+    "e2e_p95": 106.5,
+    "e2e_p99": 219.5,
+    "e2e_n": 23313,
+    "sent": 6262,
+    "recv": 23313,
+    "acks": 6385,
+    "ack_fail": {},
+    "closes": {},
+    "chat_sent": 0,
+    "chat_ack_p95": 0,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 27,
+   "server": {
+    "loop": {
+     "mean": 11.19,
+     "p50": 10.44,
+     "p99": 27.23,
+     "max": 44.9
+    },
+    "cpu_pct": 21.1,
+    "rss_mb": 183,
+    "heap_mb": 84,
+    "pool": {
+     "total": 8,
+     "idle": 8,
+     "waiting": 0,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 2.5,
+    "ack_p95": 26.2,
+    "ack_p99": 43.4,
+    "ack_n": 6426,
+    "e2e_p50": 2.5,
+    "e2e_p95": 26.4,
+    "e2e_p99": 42.4,
+    "e2e_n": 23505,
+    "sent": 6406,
+    "recv": 23505,
+    "acks": 6426,
+    "ack_fail": {},
+    "closes": {},
+    "chat_sent": 390,
+    "chat_ack_p95": 103,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 32,
+   "server": {
+    "loop": {
+     "mean": 20.15,
+     "p50": 10.97,
+     "p99": 108,
+     "max": 200.5
+    },
+    "cpu_pct": 17.5,
+    "rss_mb": 168,
+    "heap_mb": 127,
+    "pool": {
+     "total": 8,
+     "idle": 0,
+     "waiting": 302,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 27,
+    "ack_p95": 263.2,
+    "ack_p99": 657.6,
+    "ack_n": 6663,
+    "e2e_p50": 26.9,
+    "e2e_p95": 262.1,
+    "e2e_p99": 657.7,
+    "e2e_n": 24317,
+    "sent": 6962,
+    "recv": 24317,
+    "acks": 6663,
+    "ack_fail": {
+     "too_frequent": 13
+    },
+    "closes": {},
+    "chat_sent": 432,
+    "chat_ack_p95": 1428,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 37,
+   "server": {
+    "loop": {
+     "mean": 21.86,
+     "p50": 12.26,
+     "p99": 145.88,
+     "max": 248
+    },
+    "cpu_pct": 19.3,
+    "rss_mb": 174,
+    "heap_mb": 60,
+    "pool": {
+     "total": 8,
+     "idle": 0,
+     "waiting": 140,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 54.4,
+    "ack_p95": 1303.4,
+    "ack_p99": 3208.9,
+    "ack_n": 6551,
+    "e2e_p50": 49.6,
+    "e2e_p95": 1217.5,
+    "e2e_p99": 3264.3,
+    "e2e_n": 22250,
+    "sent": 6324,
+    "recv": 22250,
+    "acks": 6551,
+    "ack_fail": {
+     "too_frequent": 271,
+     "out_of_order": 183
+    },
+    "closes": {},
+    "chat_sent": 467,
+    "chat_ack_p95": 3937,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 43,
+   "server": {
+    "loop": {
+     "mean": 12.69,
+     "p50": 10.49,
+     "p99": 39.85,
+     "max": 270
+    },
+    "cpu_pct": 17,
+    "rss_mb": 189,
+    "heap_mb": 56,
+    "pool": {
+     "total": 8,
+     "idle": 0,
+     "waiting": 787,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 3.4,
+    "ack_p95": 2331,
+    "ack_p99": 3589.3,
+    "ack_n": 5651,
+    "e2e_p50": 2.7,
+    "e2e_p95": 2357.9,
+    "e2e_p99": 3589.3,
+    "e2e_n": 19330,
+    "sent": 6581,
+    "recv": 19330,
+    "acks": 5651,
+    "ack_fail": {
+     "too_frequent": 89,
+     "out_of_order": 304
+    },
+    "closes": {},
+    "chat_sent": 403,
+    "chat_ack_p95": 5441.9,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 48,
+   "server": {
+    "loop": {
+     "mean": 12.71,
+     "p50": 10.67,
+     "p99": 46.79,
+     "max": 66.2
+    },
+    "cpu_pct": 28.2,
+    "rss_mb": 172,
+    "heap_mb": 101,
+    "pool": {
+     "total": 8,
+     "idle": 8,
+     "waiting": 0,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 9.9,
+    "ack_p95": 2408.6,
+    "ack_p99": 4630.5,
+    "ack_n": 7284,
+    "e2e_p50": 8.9,
+    "e2e_p95": 1864.1,
+    "e2e_p99": 4809.7,
+    "e2e_n": 23378,
+    "sent": 6384,
+    "recv": 23378,
+    "acks": 7284,
+    "ack_fail": {
+     "too_frequent": 527,
+     "out_of_order": 363
+    },
+    "closes": {},
+    "chat_sent": 460,
+    "chat_ack_p95": 5600.6,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 53,
+   "server": {
+    "loop": {
+     "mean": 13.88,
+     "p50": 10.72,
+     "p99": 79.17,
+     "max": 133.6
+    },
+    "cpu_pct": 19,
+    "rss_mb": 166,
+    "heap_mb": 78,
+    "pool": {
+     "total": 8,
+     "idle": 4,
+     "waiting": 0,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 4.1,
+    "ack_p95": 89.4,
+    "ack_p99": 158.5,
+    "ack_n": 6474,
+    "e2e_p50": 4.2,
+    "e2e_p95": 89.7,
+    "e2e_p99": 158.4,
+    "e2e_n": 23685,
+    "sent": 6467,
+    "recv": 23685,
+    "acks": 6474,
+    "ack_fail": {},
+    "closes": {},
+    "chat_sent": 393,
+    "chat_ack_p95": 501,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 58,
+   "server": {
+    "loop": {
+     "mean": 13.33,
+     "p50": 10.47,
+     "p99": 34.96,
+     "max": 744.5
+    },
+    "cpu_pct": 16.7,
+    "rss_mb": 172,
+    "heap_mb": 83,
+    "pool": {
+     "total": 8,
+     "idle": 0,
+     "waiting": 379,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 2.4,
+    "ack_p95": 345.4,
+    "ack_p99": 700.2,
+    "ack_n": 6329,
+    "e2e_p50": 2.4,
+    "e2e_p95": 354.7,
+    "e2e_p99": 732.3,
+    "e2e_n": 23131,
+    "sent": 6625,
+    "recv": 23131,
+    "acks": 6329,
+    "ack_fail": {},
+    "closes": {},
+    "chat_sent": 222,
+    "chat_ack_p95": 970.3,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  },
+  {
+   "t": 63,
+   "server": {
+    "loop": {
+     "mean": 28.46,
+     "p50": 11.6,
+     "p99": 310.12,
+     "max": 554.7
+    },
+    "cpu_pct": 16,
+    "rss_mb": 172,
+    "heap_mb": 80,
+    "pool": {
+     "total": 8,
+     "idle": 0,
+     "waiting": 277,
+     "max": 8
+    },
+    "hub": {
+     "rooms": 583,
+     "sockets": 2503,
+     "slow_dropped": 0,
+     "slow_killed": 0
+    }
+   },
+   "clients": {
+    "ack_p50": 113,
+    "ack_p95": 904.5,
+    "ack_p99": 1577.4,
+    "ack_n": 6271,
+    "e2e_p50": 115.7,
+    "e2e_p95": 904.2,
+    "e2e_p99": 1567.4,
+    "e2e_n": 22562,
+    "sent": 6482,
+    "recv": 22562,
+    "acks": 6271,
+    "ack_fail": {
+     "too_frequent": 97
+    },
+    "closes": {},
+    "chat_sent": 208,
+    "chat_ack_p95": 1841.6,
+    "errors": 0,
+    "socket_errors": 0,
+    "open_fail": 0
+   }
+  }
+ ],
+ "setup": {
+  "ms": 8881,
+  "workers": [
+   {
+    "ms": 8161.162125,
+    "outings": 300,
+    "phones": 1337
+   },
+   {
+    "ms": 8126.467209,
+    "outings": 300,
+    "phones": 1325
+   }
+  ],
+  "http": [
+   {
+    "POST /me": {
+     "n": 1337,
+     "p50": 18.2,
+     "p95": 187.2,
+     "p99": 553.6,
+     "bad": 0
+    },
+    "POST /": {
+     "n": 300,
+     "p50": 43.3,
+     "p95": 384.5,
+     "p99": 493.7,
+     "bad": 0
+    },
+    "POST /invites/join": {
+     "n": 1037,
+     "p50": 44.7,
+     "p95": 277.3,
+     "p99": 613.6,
+     "bad": 0
+    },
+    "POST /:id/status": {
+     "n": 300,
+     "p50": 35.6,
+     "p95": 223.3,
+     "p99": 484.4,
+     "bad": 0
+    }
+   },
+   {
+    "POST /me": {
+     "n": 1325,
+     "p50": 18.3,
+     "p95": 160.8,
+     "p99": 866.2,
+     "bad": 0
+    },
+    "POST /": {
+     "n": 300,
+     "p50": 45.1,
+     "p95": 451.1,
+     "p99": 614.1,
+     "bad": 0
+    },
+    "POST /invites/join": {
+     "n": 1025,
+     "p50": 43,
+     "p95": 279.3,
+     "p99": 592.6,
+     "bad": 0
+    },
+    "POST /:id/status": {
+     "n": 300,
+     "p50": 37.2,
+     "p95": 222.2,
+     "p99": 410.8,
+     "bad": 0
+    }
+   }
+  ]
+ },
+ "setup_server": {
+  "seq": 3,
+  "loop": {
+   "mean": 14.16,
+   "p50": 10.59,
+   "p99": 113.18,
+   "max": 181.5
+  },
+  "cpu_pct": 32.2,
+  "cpu_ms_total": 3219,
+  "rss_mb": 120,
+  "heap_mb": 31,
+  "pool": {
+   "total": 8,
+   "idle": 0,
+   "waiting": 292,
+   "max": 8
+  },
+  "queries": {
+   "INSERT sary.users": {
+    "n": 5287,
+    "avg_ms": 18.03,
+    "p50": 1.02,
+    "p95": 61.37,
+    "p99": 341.96,
+    "max": 550.3
+   },
+   "UPDATE sary.users": {
+    "n": 5304,
+    "avg_ms": 17.56,
+    "p50": 0.58,
+    "p95": 63.9,
+    "p99": 220.37,
+    "max": 555.8
+   },
+   "POOLWAIT POOLWAIT connect": {
+    "n": 3262,
+    "avg_ms": 26.28,
+    "p50": 12.49,
+    "p95": 81.3,
+    "p99": 290.31,
+    "max": 554.9
+   },
+   "BEGIN BEGIN": {
+    "n": 3262,
+    "avg_ms": 1.54,
+    "p50": 0.56,
+    "p95": 4.78,
+    "p99": 12.2,
+    "max": 255.7
+   },
+   "INSERT sary.outings": {
+    "n": 600,
+    "avg_ms": 2.14,
+    "p50": 0.98,
+    "p95": 6.98,
+    "p99": 28.18,
+    "max": 83.1
+   },
+   "INSERT sary.outing_members": {
+    "n": 2662,
+    "avg_ms": 2.4,
+    "p50": 0.75,
+    "p95": 5.62,
+    "p99": 22.64,
+    "max": 419.2
+   },
+   "INSERT sary.outing_invites": {
+    "n": 600,
+    "avg_ms": 1.94,
+    "p50": 0.96,
+    "p95": 6.61,
+    "p99": 13.83,
+    "max": 104.6
+   },
+   "COMMIT COMMIT": {
+    "n": 3262,
+    "avg_ms": 1.57,
+    "p50": 0.56,
+    "p95": 4.33,
+    "p99": 12.67,
+    "max": 222.6
+   },
+   "SELECT sary.outing_invites": {
+    "n": 2330,
+    "avg_ms": 4.2,
+    "p50": 0.83,
+    "p95": 31.55,
+    "p99": 65.37,
+    "max": 250.7
+   },
+   "SELECT sary.outing_members": {
+    "n": 4724,
+    "avg_ms": 4.3,
+    "p50": 0.69,
+    "p95": 37.31,
+    "p99": 65.84,
+    "max": 414.1
+   },
+   "UPDATE sary.outing_invites": {
+    "n": 2062,
+    "avg_ms": 1.65,
+    "p50": 0.69,
+    "p95": 4.84,
+    "p99": 12.72,
+    "max": 148.7
+   },
+   "UPDATE sary.outings": {
+    "n": 3262,
+    "avg_ms": 3.55,
+    "p50": 0.71,
+    "p95": 22.59,
+    "p99": 27.15,
+    "max": 134.5
+   },
+   "SELECT sary.outings": {
+    "n": 4033,
+    "avg_ms": 12.36,
+    "p50": 0.4,
+    "p95": 40.89,
+    "p99": 65.61,
+    "max": 555.2
+   },
+   "SELECT sary.member_positions": {
+    "n": 600,
+    "avg_ms": 22.03,
+    "p50": 20.27,
+    "p95": 66.55,
+    "p99": 68.27,
+    "max": 68.6
+   },
+   "WITH sary.chat_messages": {
+    "n": 7,
+    "avg_ms": 0.02,
+    "p50": 0.01,
+    "p95": 0.05,
+    "p99": 0.05,
+    "max": 0.1
+   }
+  },
+  "hub": {
+   "rooms": 70,
+   "sockets": 300,
+   "slow_dropped": 0,
+   "slow_killed": 0
+  },
+  "ws": {
+   "opened": 300,
+   "ready": 0,
+   "refused": 0,
+   "short_lived": 0,
+   "closes": {},
+   "ptt": {
+    "granted": 0,
+    "denied": 0,
+    "relayed": 0,
+    "dropped": 0,
+    "pushed": 0,
+    "switched": 0,
+    "kicked": 0
+   },
+   "voice_notes": {
+    "uploaded": 0,
+    "duplicates": 0,
+    "socket": 0,
+    "compat": 0,
+    "ptt_pushed": 0,
+    "alerted": 0,
+    "fetched": 0,
+    "swept": 0
+   }
+  }
+ },
+ "connect": {
+  "ms": 2723,
+  "summaries": [
+   {
+    "ack": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "e2e": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "ready": {
+     "n": 1245,
+     "p50": 293.3,
+     "p95": 635.7,
+     "p99": 653.9,
+     "max": 702
+    },
+    "chat": {
+     "sent": 0,
+     "ack_p95": null
+    },
+    "http": {},
+    "closes": {
+     "1006": 80
+    },
+    "sent": 0,
+    "acks": 0,
+    "ack_fail": {},
+    "recv": 0,
+    "open_fail": 0,
+    "errors": 0,
+    "socket_errors": 80,
+    "total": {
+     "opened": 1245,
+     "ready": 1245,
+     "closed": 80,
+     "connected": 1245
+    }
+   },
+   {
+    "ack": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "e2e": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "ready": {
+     "n": 1258,
+     "p50": 283.6,
+     "p95": 643,
+     "p99": 669.4,
+     "max": 712
+    },
+    "chat": {
+     "sent": 0,
+     "ack_p95": null
+    },
+    "http": {},
+    "closes": {
+     "1006": 79
+    },
+    "sent": 0,
+    "acks": 0,
+    "ack_fail": {},
+    "recv": 0,
+    "open_fail": 0,
+    "errors": 0,
+    "socket_errors": 79,
+    "total": {
+     "opened": 1258,
+     "ready": 1258,
+     "closed": 79,
+     "connected": 1258
+    }
+   }
+  ],
+  "server": {
+   "seq": 4,
+   "loop": {
+    "mean": 10.65,
+    "p50": 10.08,
+    "p99": 16.7,
+    "max": 48.3
+   },
+   "cpu_pct": 67.2,
+   "cpu_ms_total": 5077,
+   "rss_mb": 190,
+   "heap_mb": 42,
+   "pool": {
+    "total": 8,
+    "idle": 8,
+    "waiting": 0,
+    "max": 8
+   },
+   "queries": {
+    "INSERT sary.users": {
+     "n": 5287,
+     "avg_ms": 18.03,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 550.3
+    },
+    "UPDATE sary.users": {
+     "n": 5304,
+     "avg_ms": 17.56,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 555.8
+    },
+    "POOLWAIT POOLWAIT connect": {
+     "n": 3262,
+     "avg_ms": 26.28,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 554.9
+    },
+    "BEGIN BEGIN": {
+     "n": 3262,
+     "avg_ms": 1.54,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 255.7
+    },
+    "INSERT sary.outings": {
+     "n": 600,
+     "avg_ms": 2.14,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 83.1
+    },
+    "INSERT sary.outing_members": {
+     "n": 2662,
+     "avg_ms": 2.4,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 419.2
+    },
+    "INSERT sary.outing_invites": {
+     "n": 600,
+     "avg_ms": 1.94,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 104.6
+    },
+    "COMMIT COMMIT": {
+     "n": 3262,
+     "avg_ms": 1.57,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 222.6
+    },
+    "SELECT sary.outing_invites": {
+     "n": 4322,
+     "avg_ms": 10.89,
+     "p50": 2.1,
+     "p95": 83.66,
+     "p99": 127.11,
+     "max": 250.7
+    },
+    "SELECT sary.outing_members": {
+     "n": 9130,
+     "avg_ms": 11.28,
+     "p50": 4.52,
+     "p95": 98.2,
+     "p99": 127.43,
+     "max": 414.1
+    },
+    "UPDATE sary.outing_invites": {
+     "n": 2062,
+     "avg_ms": 1.65,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 148.7
+    },
+    "UPDATE sary.outings": {
+     "n": 7560,
+     "avg_ms": 12.21,
+     "p50": 3.83,
+     "p95": 64.97,
+     "p99": 129.9,
+     "max": 189.1
+    },
+    "SELECT sary.outings": {
+     "n": 26122,
+     "avg_ms": 16.72,
+     "p50": 2.3,
+     "p95": 33,
+     "p99": 44.35,
+     "max": 555.2
+    },
+    "SELECT sary.member_positions": {
+     "n": 5006,
+     "avg_ms": 19.19,
+     "p50": 0.3,
+     "p95": 98.07,
+     "p99": 127.67,
+     "max": 132.5
+    },
+    "WITH sary.chat_messages": {
+     "n": 5006,
+     "avg_ms": 21.61,
+     "p50": 2.27,
+     "p95": 86.39,
+     "p99": 200.33,
+     "max": 206.7
+    },
+    "SELECT sary.group_audio": {
+     "n": 4424,
+     "avg_ms": 19.35,
+     "p50": 1.08,
+     "p95": 70.83,
+     "p99": 143.8,
+     "max": 154.1
+    }
+   },
+   "hub": {
+    "rooms": 583,
+    "sockets": 2503,
+    "slow_dropped": 0,
+    "slow_killed": 0
+   },
+   "ws": {
+    "opened": 2503,
+    "ready": 2503,
+    "refused": 0,
+    "short_lived": 0,
+    "closes": {},
+    "ptt": {
+     "granted": 0,
+     "denied": 0,
+     "relayed": 0,
+     "dropped": 0,
+     "pushed": 0,
+     "switched": 0,
+     "kicked": 0
+    },
+    "voice_notes": {
+     "uploaded": 0,
+     "duplicates": 0,
+     "socket": 0,
+     "compat": 0,
+     "ptt_pushed": 0,
+     "alerted": 0,
+     "fetched": 0,
+     "swept": 0
+    }
+   }
+  }
+ },
+ "final_server": {
+  "seq": 18,
+  "loop": {
+   "mean": 47.9,
+   "p50": 12.47,
+   "p99": 127.47,
+   "max": 127.5
+  },
+  "cpu_pct": 21.1,
+  "cpu_ms_total": 17867,
+  "rss_mb": 178,
+  "heap_mb": 91,
+  "pool": {
+   "total": 8,
+   "idle": 0,
+   "waiting": 356,
+   "max": 8
+  },
+  "queries": {
+   "INSERT sary.member_positions": {
+    "n": 5088,
+    "avg_ms": 33.19,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": 3823.5
+   },
+   "UPDATE sary.outings": {
+    "n": 4021,
+    "avg_ms": 5.92,
+    "p50": 6.62,
+    "p95": 228.61,
+    "p99": 228.61,
+    "max": 228.6
+   },
+   "SELECT sary.outings": {
+    "n": 32747,
+    "avg_ms": 163.26,
+    "p50": 1419.89,
+    "p95": 1419.89,
+    "p99": 1419.89,
+    "max": 3875.5
+   },
+   "SELECT sary.outing_members": {
+    "n": 2332,
+    "avg_ms": 2.66,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": 527.3
+   },
+   "SELECT sary.member_positions": {
+    "n": 2334,
+    "avg_ms": 3.88,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": 2480.3
+   },
+   "SELECT sary.chat_messages": {
+    "n": 11427,
+    "avg_ms": 102.16,
+    "p50": 0.03,
+    "p95": 1600.63,
+    "p99": 1600.63,
+    "max": 3875.4
+   },
+   "POOLWAIT POOLWAIT connect": {
+    "n": 2856,
+    "avg_ms": 198.02,
+    "p50": 1595.01,
+    "p95": 1601.93,
+    "p99": 1601.93,
+    "max": 3868.8
+   },
+   "BEGIN BEGIN": {
+    "n": 2855,
+    "avg_ms": 3.08,
+    "p50": 6.62,
+    "p95": 127.23,
+    "p99": 127.23,
+    "max": 267
+   },
+   "INSERT sary.chat_messages": {
+    "n": 2855,
+    "avg_ms": 11.01,
+    "p50": 4.01,
+    "p95": 100.88,
+    "p99": 100.88,
+    "max": 3528.3
+   },
+   "INSERT sary.chat_reads": {
+    "n": 2852,
+    "avg_ms": 5.64,
+    "p50": 9.33,
+    "p95": 127.01,
+    "p99": 127.01,
+    "max": 3489.1
+   },
+   "COMMIT COMMIT": {
+    "n": 2852,
+    "avg_ms": 2.34,
+    "p50": 3.89,
+    "p95": 42.41,
+    "p99": 42.41,
+    "max": 143.4
+   },
+   "SELECT sary.user_blocks": {
+    "n": 5678,
+    "avg_ms": 66.81,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": 3875.5
+   },
+   "SELECT sary.return_timers": {
+    "n": 2,
+    "avg_ms": 1245.4,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": 2490.8
+   }
+  },
+  "hub": {
+   "rooms": 583,
+   "sockets": 2503,
+   "slow_dropped": 0,
+   "slow_killed": 0
+  },
+  "ws": {
+   "opened": 2503,
+   "ready": 2503,
+   "refused": 0,
+   "short_lived": 0,
+   "closes": {},
+   "ptt": {
+    "granted": 0,
+    "denied": 0,
+    "relayed": 0,
+    "dropped": 0,
+    "pushed": 0,
+    "switched": 0,
+    "kicked": 0
+   },
+   "voice_notes": {
+    "uploaded": 0,
+    "duplicates": 0,
+    "socket": 0,
+    "compat": 0,
+    "ptt_pushed": 0,
+    "alerted": 0,
+    "fetched": 0,
+    "swept": 0
+   }
+  }
+ },
+ "storm": {
+  "ms": 6473,
+  "peak_loop_max_ms": 234,
+  "peak_pool_waiting": 3616,
+  "summaries": [
+   {
+    "ack": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "e2e": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "ready": {
+     "n": 1135,
+     "p50": 5467.6,
+     "p95": 5780.4,
+     "p99": 5856.1,
+     "max": 5859
+    },
+    "chat": {
+     "sent": 0,
+     "ack_p95": null
+    },
+    "http": {},
+    "closes": {
+     "1006": 1435
+    },
+    "sent": 0,
+    "acks": 0,
+    "ack_fail": {},
+    "recv": 0,
+    "open_fail": 0,
+    "errors": 0,
+    "socket_errors": 190,
+    "total": {
+     "opened": 2380,
+     "ready": 2380,
+     "closed": 1515,
+     "connected": 2380
+    }
+   },
+   {
+    "ack": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "e2e": {
+     "n": 0,
+     "p50": null,
+     "p95": null,
+     "p99": null
+    },
+    "ready": {
+     "n": 1163,
+     "p50": 5249.3,
+     "p95": 5645.2,
+     "p99": 5869,
+     "max": 5875
+    },
+    "chat": {
+     "sent": 0,
+     "ack_p95": null
+    },
+    "http": {},
+    "closes": {
+     "1006": 1432
+    },
+    "sent": 0,
+    "acks": 0,
+    "ack_fail": {},
+    "recv": 0,
+    "open_fail": 0,
+    "errors": 0,
+    "socket_errors": 174,
+    "total": {
+     "opened": 2421,
+     "ready": 2421,
+     "closed": 1511,
+     "connected": 2421
+    }
+   }
+  ],
+  "server": {
+   "seq": 26,
+   "loop": {
+    "mean": 12.04,
+    "p50": 10.23,
+    "p99": 13.86,
+    "max": 13.9
+   },
+   "cpu_pct": 8.3,
+   "cpu_ms_total": 19604,
+   "rss_mb": 258,
+   "heap_mb": 67,
+   "pool": {
+    "total": 8,
+    "idle": 8,
+    "waiting": 0,
+    "max": 8
+   },
+   "queries": {
+    "INSERT sary.member_positions": {
+     "n": 5092,
+     "avg_ms": 33.35,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 3823.5
+    },
+    "UPDATE sary.outings": {
+     "n": 4253,
+     "avg_ms": 20.96,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 1760.7
+    },
+    "SELECT sary.outings": {
+     "n": 51860,
+     "avg_ms": 200.37,
+     "p50": 7.06,
+     "p95": 12.12,
+     "p99": 12.12,
+     "max": 3875.5
+    },
+    "SELECT sary.outing_members": {
+     "n": 6952,
+     "avg_ms": 349.5,
+     "p50": 1.13,
+     "p95": 55.1,
+     "p99": 55.1,
+     "max": 2211.3
+    },
+    "SELECT sary.member_positions": {
+     "n": 6954,
+     "avg_ms": 349.89,
+     "p50": 3.38,
+     "p95": 12.72,
+     "p99": 12.72,
+     "max": 2480.3
+    },
+    "SELECT sary.chat_messages": {
+     "n": 11916,
+     "avg_ms": 108.21,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 3875.4
+    },
+    "POOLWAIT POOLWAIT connect": {
+     "n": 2979,
+     "avg_ms": 204.6,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 3868.8
+    },
+    "BEGIN BEGIN": {
+     "n": 2979,
+     "avg_ms": 3.4,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 505.2
+    },
+    "INSERT sary.chat_messages": {
+     "n": 2979,
+     "avg_ms": 11.21,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 3528.3
+    },
+    "INSERT sary.chat_reads": {
+     "n": 2979,
+     "avg_ms": 5.68,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 3489.1
+    },
+    "COMMIT COMMIT": {
+     "n": 2979,
+     "avg_ms": 2.73,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 505.7
+    },
+    "SELECT sary.user_blocks": {
+     "n": 5958,
+     "avg_ms": 75.72,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 3875.5
+    },
+    "SELECT sary.return_timers": {
+     "n": 2,
+     "avg_ms": 1245.4,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 2490.8
+    },
+    "UPDATE sary.users": {
+     "n": 4596,
+     "avg_ms": 151.43,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 449.5
+    },
+    "SELECT sary.outing_invites": {
+     "n": 2068,
+     "avg_ms": 600.2,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 2209.8
+    },
+    "WITH sary.chat_messages": {
+     "n": 4596,
+     "avg_ms": 246.55,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 643.3
+    },
+    "SELECT sary.group_audio": {
+     "n": 88,
+     "avg_ms": 4.44,
+     "p50": null,
+     "p95": null,
+     "p99": null,
+     "max": 10.7
+    }
+   },
+   "hub": {
+    "rooms": 521,
+    "sockets": 2298,
+    "slow_dropped": 0,
+    "slow_killed": 0
+   },
+   "ws": {
+    "opened": 4801,
+    "ready": 4801,
+    "refused": 0,
+    "short_lived": 0,
+    "closes": {
+     "1006": 2503
+    },
+    "ptt": {
+     "granted": 0,
+     "denied": 0,
+     "relayed": 0,
+     "dropped": 0,
+     "pushed": 0,
+     "switched": 0,
+     "kicked": 0
+    },
+    "voice_notes": {
+     "uploaded": 0,
+     "duplicates": 0,
+     "socket": 0,
+     "compat": 0,
+     "ptt_pushed": 0,
+     "alerted": 0,
+     "fetched": 0,
+     "swept": 0
+    }
+   }
+  }
+ }
+}

@@ -17,6 +17,7 @@ const { createOutingsService, OutingError, canLead } = require('./service');
 const { createLegs } = require('./legs');
 const { createHub } = require('./hub');
 const { attachOutingsSocket } = require('./ws');
+const { createGuardedInterval } = require('./interval');
 const { createPttRelay } = require('./ptt');
 const { createPttChannels } = require('./ptt-channels');
 const { createVoiceNotes } = require('./voice-notes');
@@ -151,26 +152,20 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
     attach(server) {
       if (!service) return;
       socket = attachOutingsSocket(server, { service, hub, ptt });
-      sweepTimer = setInterval(() => {
-        trackTask(service.sweep().catch((e) => console.warn('[outings] sweep:', e.code || e.message)));
-        if (voiceNotes) trackTask(voiceNotes.sweep().catch((e) => console.warn('[outings] voice notes sweep:', e.code || e.message)));
-      }, 10 * 60_000);
-      sweepTimer.unref?.();
+      /* One run of each sweep at a time: a sweep that takes longer than its interval (a slow database,
+       * thousands of outings watched) used to be started again on top of itself, each run adding its
+       * own queries to the pile. A tick that finds the previous run still going is skipped. */
+      const every = (ms, name, work) => createGuardedInterval(ms, name, work, { track: trackTask }).timer;
+      sweepTimer = every(10 * 60_000, 'sweep', async () => {
+        await service.sweep().catch((e) => console.warn('[outings] sweep:', e.code || e.message));
+        if (voiceNotes) await voiceNotes.sweep().catch((e) => console.warn('[outings] voice notes sweep:', e.code || e.message));
+      });
       /* Return timers: armed + past due → overdue, snapshot, pushes. Every minute. */
-      timerSweep = setInterval(() => {
-        trackTask(service.sweepReturnTimers().catch((e) => console.warn('[outings] timer sweep:', e.code || e.message)));
-      }, 60_000);
-      timerSweep.unref?.();
+      timerSweep = every(60_000, 'timer sweep', () => service.sweepReturnTimers());
       /* «انقطع الإرسال»: sharing on, no fix for 10 / 30 min → alert the others once each. Every minute. */
-      silenceSweep = setInterval(() => {
-        trackTask(service.sweepSilence().catch((e) => console.warn('[outings] silence sweep:', e.code || e.message)));
-      }, 60_000);
-      silenceSweep.unref?.();
+      silenceSweep = every(60_000, 'silence sweep', () => service.sweepSilence());
       /* «مباشر / متأخر / منقطع» + reason: re-judged every 30 s for outings someone watches. */
-      presenceSweep = setInterval(() => {
-        trackTask(service.sweepPresence().catch((e) => console.warn('[outings] presence sweep:', e.code || e.message)));
-      }, 30_000);
-      presenceSweep.unref?.();
+      presenceSweep = every(30_000, 'presence sweep', () => service.sweepPresence());
     },
     async close() {
       ptt?.close(); // release any held floor while sockets can still hear it

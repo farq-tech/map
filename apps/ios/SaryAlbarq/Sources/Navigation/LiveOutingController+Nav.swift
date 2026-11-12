@@ -394,6 +394,8 @@ extension LiveOutingController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                     guard let self else { return }
                     if let st = arg("-SaryNavState") { self.navFreeze(st) } else { self.startNav() }
+                    /* `-SaryNavCycle`: reroute / off-route / back, every 3 s (the owner's Build 46 sequence). */
+                    if args.contains("-SaryNavCycle") { self.navCycle(["offroad", "reroute", "guiding"], 0) }
                 }
             }
             }
@@ -411,9 +413,17 @@ extension LiveOutingController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.navWhenRoutesIn(tries: tries - 1, go) }
     }
 
-    private func navFreeze(_ st: String) {
+    private func navCycle(_ states: [String], _ i: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self else { return }
+            if self.nav.phase != .arrived { self.navFreeze(states[i % states.count], clearing: false) }
+            self.navCycle(states, i + 1)
+        }
+    }
+
+    private func navFreeze(_ st: String, clearing: Bool = true) {
         guard let t = nav.target, let r = nav.routes.first else { return }
-        modal = nil
+        if clearing { modal = nil }
         /* At the start of the route (the line begins at my car), the first turn ahead. */
         let first = r.steps.first?.distanceM ?? 480
         let p = NavProgress(stepIndex: 1, distanceToManeuverM: first, distanceRemainingM: r.distanceM, durationRemainingS: r.durationS, speedLimitKmh: 80)
@@ -434,7 +444,7 @@ extension LiveOutingController {
                 self?.navCameraKey += 1
             }
         }
-        sheetDetent = .peek
+        if clearing { sheetDetent = .peek }
         if ProcessInfo.processInfo.arguments.contains("-SaryNavSteps") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.modal = .navSteps }
         }

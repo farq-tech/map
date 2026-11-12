@@ -11,6 +11,13 @@
  */
 
 const OPEN = 1;
+/* A phone that cannot keep up (tunnel, weak signal) lets frames pile up in the server's send buffer, per
+ * socket, until the TCP connection dies minutes later. Above DROP the frames that the next one supersedes
+ * (a position, a link ping, a presence flip) are skipped; above KILL the socket is dropped and the app
+ * reconnects with a fresh snapshot. Everything else (chat, SOS, closed…) always goes out until KILL. */
+const DROP_ABOVE_BYTES = Number(process.env.OUTING_WS_DROP_ABOVE_BYTES || 256 * 1024);
+const KILL_ABOVE_BYTES = Number(process.env.OUTING_WS_KILL_ABOVE_BYTES || 8 * 1024 * 1024);
+const SUPERSEDED = new Set(['position', 'member_link', 'member_presence', 'presence']);
 
 function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
   const rooms = new Map(); // outingId -> Set<conn>
@@ -48,8 +55,26 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     return new Map(links.get(outingId) || []);
   }
 
-  function send(conn, msg) {
+  const slow = { dropped: 0, killed: 0 };
+
+  function send(conn, msg, type) {
     if (conn.ws.readyState !== OPEN) return;
+    const buffered = conn.ws.bufferedAmount || 0;
+    if (buffered > DROP_ABOVE_BYTES) {
+      if (buffered > KILL_ABOVE_BYTES) {
+        slow.killed += 1;
+        try {
+          conn.ws.terminate();
+        } catch {
+          /* already gone */
+        }
+        return;
+      }
+      if (SUPERSEDED.has(type || (typeof msg === 'string' ? '' : msg?.type))) {
+        slow.dropped += 1;
+        return;
+      }
+    }
     try {
       conn.ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } catch {
@@ -76,7 +101,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
       if (skip && c.userId === skip) continue;
       /* «احظر»: people who blocked the sender (chat only — never used for SOS). */
       if (exceptUsers && exceptUsers.has(c.userId)) continue;
-      send(c, payload);
+      send(c, payload, event.type);
       n += 1;
     }
     return n;
@@ -213,7 +238,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
   function stats() {
     let sockets = 0;
     for (const r of rooms.values()) sockets += r.size;
-    return { rooms: rooms.size, sockets };
+    return { rooms: rooms.size, sockets, slow_dropped: slow.dropped, slow_killed: slow.killed };
   }
 
   return { roomIds, join, leave, emit, connectionsOf, roomOf, touch, heartbeat, batteryOut, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };

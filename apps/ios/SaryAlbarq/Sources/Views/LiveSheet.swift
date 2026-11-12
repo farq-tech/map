@@ -56,6 +56,8 @@ struct LiveSheet: View {
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
+                .onAppear { controller.modalShownID = m.id }
+                .onDisappear { if controller.modalShownID == m.id { controller.modalShownID = nil } }
         }
         .fullScreenCover(isPresented: Binding(get: { controller.settingsOpen }, set: { if !$0 { controller.closeSettings() } })) {
             SettingsPushHost { close in LiveSettingsPage(controller: controller, close: close) }
