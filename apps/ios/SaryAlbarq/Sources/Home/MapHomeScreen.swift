@@ -70,6 +70,9 @@ struct MapHomeScreen: View {
     /// S6: the base map the person chose in «الطبقات» (the same stored choice the outing map uses; satellite on a first launch).
     @State private var baseLayer: MapLayer = MapLayer.saved
     @State private var layersOpen = false
+    /// New Home (`NewUI`): my weather for the card's first line, and the card's measured height.
+    @StateObject private var homeBrief = PlaceBriefModel()
+    @State private var cardHeight: CGFloat = 0
     /// «دروب البر» opened from here: drawn on this map while its sheet is open.
     @ObservedObject private var desertRoutes = DesertRoutesHub.shared
 
@@ -96,25 +99,30 @@ struct MapHomeScreen: View {
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin", desert: true)) },
                             desert: desertOverlay,
                             onDesertTap: { id in pinTapped(id) },
-                            baseLayer: baseLayer)
+                            baseLayer: baseLayer,
+                            ornamentBottomInset: newHome ? (showsNewChrome ? cardHeight : sheetH) : 0)
                     .ignoresSafeArea()
                     .accessibilityIdentifier("home.map")
-                VStack(spacing: theme.space(.s)) {
-                    if selected == nil { categoryChips }
-                    HStack {
-                        Spacer()
-                        VStack(spacing: theme.space(.s)) {
-                            layersMapButton
-                            MapTiltButton()
-                            locateButton
+                if showsNewChrome {
+                    newHomeChrome(g)
+                } else {
+                    VStack(spacing: theme.space(.s)) {
+                        if selected == nil { categoryChips }
+                        HStack {
+                            Spacer()
+                            VStack(spacing: theme.space(.s)) {
+                                layersMapButton
+                                MapTiltButton()
+                                locateButton
+                            }
                         }
+                        .padding(.horizontal, theme.space(.l))
+                        Spacer()
                     }
-                    .padding(.horizontal, theme.space(.l))
-                    Spacer()
+                    .padding(.top, theme.space(.s))
+                    .padding(.bottom, sheetH)
+                    sheet(height: sheetH, screen: screen)
                 }
-                .padding(.top, theme.space(.s))
-                .padding(.bottom, sheetH)
-                sheet(height: sheetH, screen: screen)
             }
             .ignoresSafeArea(edges: .bottom)
         }
@@ -125,6 +133,7 @@ struct MapHomeScreen: View {
             baseLayer = MapLayer.saved
             locator.request()
             if camera == nil { recenter(zoom: 12) }
+            if newHome, let me = myPoint { homeBrief.load(me, knownName: "موقعي") }
             if autoFocusSearch {
                 setExpanded(true)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
@@ -133,7 +142,10 @@ struct MapHomeScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .saryRecentPlacesChanged)) { _ in
             recent = RecentPlaces.load()
         }
-        .onChange(of: locator.fix) { old, fix in if old == nil, fix != nil, selected == nil { recenter(zoom: 12) } }
+        .onChange(of: locator.fix) { old, fix in
+            if old == nil, fix != nil, selected == nil { recenter(zoom: 12) }
+            if newHome, let me = myPoint { homeBrief.load(me, knownName: "موقعي") }
+        }
         .onChange(of: voice.text) { _, t in if !t.isEmpty { query = t } }
         .onChange(of: query) { _, q in schedule(q) }
         .sheet(isPresented: $layersOpen, onDismiss: { baseLayer = MapLayer.saved }) {
@@ -173,6 +185,65 @@ struct MapHomeScreen: View {
                         .saryPresented(appearance)
                 }
             }
+        }
+    }
+
+    // MARK: new home (NewUI)
+
+    /// The new Home replaces the idle chrome only; picking a point, searching and the in-trip picker keep the existing sheet.
+    private var newHome: Bool { NewUI.enabled && destinationPicker == nil }
+    private var showsNewChrome: Bool { newHome && selected == nil && !expanded && !showingResults }
+
+    @ViewBuilder
+    private func newHomeChrome(_ g: GeometryProxy) -> some View {
+        let me = model.identity?.user
+        let screenH = g.size.height + g.safeAreaInsets.top + g.safeAreaInsets.bottom
+        VStack(spacing: theme.space(.s)) {
+            HomeTopPill(avatarName: me?.display_name ?? "؟", avatarPhoto: AvatarCodec.image(from: me?.avatar),
+                        listening: voice.isListening,
+                        onSearch: {
+                            setExpanded(true)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
+                        },
+                        onMic: { voice.toggle() },
+                        onProfile: { profileOpen = true })
+                .padding(.horizontal, theme.space(.l))
+            HStack {
+                Spacer()
+                HomeMapCapsule(onLayers: { layersOpen = true }, onLocate: { recenter(zoom: 14) })
+            }
+            .padding(.horizontal, theme.space(.l))
+            Spacer()
+        }
+        .padding(.top, theme.space(.s))
+        .padding(.bottom, cardHeight)
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            HomeBottomCard(weather: HomeChromeRules.weatherLine(homeWeatherHour),
+                           maghrib: myPoint.flatMap { HomeChromeRules.maghribLine(now: Date(), lat: $0.lat, lng: $0.lng) },
+                           last: HomeChromeRules.isCompact(screenHeight: Double(screenH)) ? nil : HomeChromeRules.lastOuting(model.history),
+                           onHandle: { setExpanded(true) },
+                           onStart: { creating = true },
+                           onTile: { openHomeTile($0) },
+                           onLast: { if let o = HomeChromeRules.lastOuting(model.history) { model.open(o.id) } },
+                           bottomInset: g.safeAreaInsets.bottom)
+                .frame(maxHeight: g.size.height * 0.62, alignment: .bottom)
+        }
+        .onPreferenceChange(HomeCardHeightKey.self) { cardHeight = $0 }
+    }
+
+    private var homeWeatherHour: WeatherHour? {
+        homeBrief.weather.flatMap { WeatherRules.nowValue($0.report, now: Date())?.hour }
+    }
+
+    private func openHomeTile(_ t: HomeTile) {
+        switch t {
+        case .camp: openTool(.camp)
+        case .qibla: openTool(.qibla)
+        case .weather:
+            if let w = HomeDesertTools.weatherPoint(me: myPoint) { openTool(.weather(w)) } else { openTool(.menu) }
+        /* «دروب البر» needs a destination first: the tools sheet explains it (a direct entry is a follow-up). */
+        case .routes: openTool(.menu)
         }
     }
 
