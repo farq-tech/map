@@ -33,6 +33,9 @@ struct PlanMapView: UIViewRepresentable {
     var onDesertTap: (String) -> Void = { _ in }
     /// The base map (S6): the home map follows the person's choice in the layers sheet; every other use stays satellite.
     var baseLayer: MapLayer = .satellite
+    /// New Home (`NewUI`): the Mapbox logo and the «i» attribution button sit this far above the bottom edge
+    /// (the card height), so the attribution stays visible above the card. 0 keeps Mapbox's defaults.
+    var ornamentBottomInset: CGFloat = 0
 
     /// More vertices than this are not drawn as handles (an imported track); the line still is.
     static let maxHandles = 150
@@ -83,6 +86,7 @@ struct PlanMapView: UIViewRepresentable {
         private var lastCamera = -1
         /// The base layer the map is showing (or loading).
         var appliedLayer: MapLayer = .satellite
+        private var appliedOrnamentInset: CGFloat = 0
         /// Asked before the map had a size or a style: done once it has.
         private var pendingCamera: PlanCamera?
         private var dragging = false
@@ -182,6 +186,13 @@ struct PlanMapView: UIViewRepresentable {
             parent = p
             guard let map else { return }
             if p.baseLayer != appliedLayer { setBase(p.baseLayer, on: map) }
+            if p.ornamentBottomInset > 0, abs(p.ornamentBottomInset - appliedOrnamentInset) > 0.5 {
+                appliedOrnamentInset = p.ornamentBottomInset
+                map.ornaments.options.logo.position = .bottomLeft
+                map.ornaments.options.attributionButton.position = .bottomLeft
+                map.ornaments.options.logo.margins = CGPoint(x: 8, y: p.ornamentBottomInset + 6)
+                map.ornaments.options.attributionButton.margins = CGPoint(x: 92, y: p.ornamentBottomInset + 6)
+            }
             if styleReady, let m = map.mapboxMap, !dragging, drawnRoute != p.route {
                 PlanMapStyle.update(m, route: p.route)
                 drawnRoute = p.route
