@@ -885,7 +885,114 @@ final class NavSurfaceStyleTests: XCTestCase {
             XCTAssertTrue(NavMapDrawer.layerIds.contains(id), id)
         }
         XCTAssertEqual(NavMapDrawer.SurfaceStyle.dirt, "#D6A15A")
-        XCTAssertNotEqual(NavMapDrawer.SurfaceStyle.dirt, NavMapDrawer.SurfaceStyle.terrain)
-        XCTAssertNotEqual(NavMapDrawer.SurfaceStyle.terrain, NavMapDrawer.SurfaceStyle.rough)
+        /* Three families, three colours: asphalt blue, dirt sand, off-road fuchsia (open terrain and rough
+         * ground share the off-road colour and differ in pattern); unknown is neutral grey, none is the blue. */
+        XCTAssertNotEqual(NavMapDrawer.SurfaceStyle.dirt, NavMapDrawer.SurfaceStyle.offRoad)
+        XCTAssertEqual(NavMapDrawer.SurfaceStyle.terrain, NavMapDrawer.SurfaceStyle.offRoad)
+        XCTAssertEqual(NavMapDrawer.SurfaceStyle.rough, NavMapDrawer.SurfaceStyle.offRoad)
+        XCTAssertTrue(NavMapDrawer.layerIds.contains("sary-nav-unknown"))
+        let fills = [NavMapDrawer.routeBlue, NavMapDrawer.SurfaceStyle.dirt, NavMapDrawer.SurfaceStyle.offRoad, NavMapDrawer.SurfaceStyle.unknown]
+        XCTAssertEqual(Set(fills).count, 4, "asphalt, dirt, off-road, unknown: four different colours")
+    }
+
+    /// Hue distance between the three families the owner reads on the map (not just different hex strings).
+    func testFamilyColoursAreFarApart() {
+        func hsv(_ rgb: UInt32) -> (h: Double, s: Double) {
+            let r = Double((rgb >> 16) & 255) / 255, g = Double((rgb >> 8) & 255) / 255, b = Double(rgb & 255) / 255
+            let mx = max(r, g, b), mn = min(r, g, b), d = mx - mn
+            var h = 0.0
+            if d > 0 {
+                if mx == r { h = (g - b) / d + (g < b ? 6 : 0) } else if mx == g { h = (b - r) / d + 2 } else { h = (r - g) / d + 4 }
+            }
+            return (h * 60, mx == 0 ? 0 : d / mx)
+        }
+        let blue = hsv(SaryPalette.navBlueDay).h, dirt = hsv(NavMapDrawer.SurfaceStyle.dirtRGB).h, off = hsv(NavMapDrawer.SurfaceStyle.offRoadRGB).h
+        func gap(_ a: Double, _ b: Double) -> Double { let d = abs(a - b); return min(d, 360 - d) }
+        XCTAssertGreaterThan(gap(blue, dirt), 100)
+        XCTAssertGreaterThan(gap(dirt, off), 60)
+        XCTAssertGreaterThan(gap(blue, off), 40)
+    }
+
+    // MARK: km per surface (NavSurfaceKm)
+
+    private func line(_ km: Double, lat: Double = 24.7) -> [LngLat] { [LngLat(lng: 46.6, lat: lat), LngLat(lng: 46.6, lat: lat + km / 111.19)] }
+
+    func testKmPerFamilyGroupsKindsAndNeverCountsGapsAsAsphalt() {
+        let runs = [NavSurfaceRun(kind: .paved, coordinates: line(23.4)), NavSurfaceRun(kind: .unpaved, coordinates: line(8.1)),
+                    NavSurfaceRun(kind: .terrain, coordinates: line(2.0)), NavSurfaceRun(kind: .rough, coordinates: line(1.0)),
+                    NavSurfaceRun(kind: .gridSnap, coordinates: line(0.02))]
+        let k = NavSurfaceKm.of(runs)
+        XCTAssertEqual(k.paved / 1000, 23.4, accuracy: 0.05)
+        XCTAssertEqual(k.unpaved / 1000, 8.1, accuracy: 0.05)
+        XCTAssertEqual(k.offRoad / 1000, 3.0, accuracy: 0.05, "open terrain + rough ground are one family")
+        XCTAssertEqual(k.unknown / 1000, 0.02, accuracy: 0.005, "the approximate join is unknown")
+        XCTAssertTrue(k.showsSplit)
+        /* The route is longer than the runs: the uncovered part is unknown, never asphalt. */
+        let withGap = NavSurfaceKm.of(runs, routeM: 40_000)
+        XCTAssertEqual(withGap.paved, k.paved)
+        XCTAssertEqual(withGap.unknown / 1000, 40 - k.covered / 1000 + 0.02, accuracy: 0.1)
+        /* No runs at all: everything is unknown and nothing is claimed about the surface. */
+        let none = NavSurfaceKm.of([], routeM: 12_000)
+        XCTAssertEqual(none.paved, 0); XCTAssertEqual(none.unknown, 12_000, accuracy: 0.1)
+        XCTAssertFalse(none.showsSplit)
+        /* A few percent of measuring difference is not a gap. */
+        XCTAssertEqual(NavSurfaceKm.of([NavSurfaceRun(kind: .paved, coordinates: line(10))], routeM: 10_200).unknown, 0)
+        XCTAssertFalse(NavSurfaceKm.of([NavSurfaceRun(kind: .paved, coordinates: line(10))]).showsSplit)
+    }
+
+    func testRemainingKmShrinksAsTheCarProgresses() {
+        /* 10 km asphalt, then 5 km dirt, then 3 km off-road, one straight line north. */
+        let a = line(10), b = line(5, lat: 24.7 + 10 / 111.19), c = line(3, lat: 24.7 + 15 / 111.19)
+        let runs = [NavSurfaceRun(kind: .paved, coordinates: a), NavSurfaceRun(kind: .unpaved, coordinates: b), NavSurfaceRun(kind: .terrain, coordinates: c)]
+        let cum = NavRouteMetrics.surfaceCumulative(runs)
+        let start = NavSurfaceKm.remaining(runs, from: 0, cum: cum)
+        XCTAssertEqual(start.paved / 1000, 10, accuracy: 0.05)
+        let mid = NavSurfaceKm.remaining(runs, from: 4_000, cum: cum)
+        XCTAssertEqual(mid.paved / 1000, 6, accuracy: 0.05)
+        XCTAssertEqual(mid.unpaved / 1000, 5, accuracy: 0.05)
+        let inDirt = NavSurfaceKm.remaining(runs, from: 12_000, cum: cum)
+        XCTAssertEqual(inDirt.paved, 0)
+        XCTAssertEqual(inDirt.unpaved / 1000, 3, accuracy: 0.05)
+        XCTAssertEqual(inDirt.offRoad / 1000, 3, accuracy: 0.05)
+        XCTAssertEqual(NavSurfaceKm.remaining(runs, from: 12_000).unpaved, inDirt.unpaved, accuracy: 0.001, "same result without the cached table")
+        let end = NavSurfaceKm.remaining(runs, from: 18_500, cum: cum)
+        XCTAssertFalse(end.showsSplit, "past all the dirt: no split to show")
+    }
+
+    func testKmLineIsArabicWithOneDecimalInOwnerFormat() {
+        let k = NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 10)
+        XCTAssertEqual(NavSurfaceKmStrip.line(k), "أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم", "specks under 50 m are not listed")
+        XCTAssertEqual(NavSurfaceKmStrip.items(NavSurfaceKm(paved: 5_000, unknown: 2_000)).map(\.family), [.paved, .unknown])
+        let r = NavRoute(id: "r", coordinates: line(10), distanceM: 10_000, durationS: 600, steps: [])
+        XCTAssertNil(NavSurfaceKmStrip.km(for: r), "no surface data: no claim")
+    }
+
+    /// Mapbox/Valhalla steps: the shape is cut where the outlet road class changes, not whole-step.
+    func testStepIsCutWhereTheRoadClassChanges() {
+        let pts = (0...10).map { LngLat(lng: 46.6, lat: 24.7 + Double($0) * 0.001) }
+        let marks: [(at: LngLat, unpaved: Bool)] = [(pts[0], false), (pts[4], true), (pts[7], false), (pts[10], true)]
+        let runs = MapboxNavRoutingProvider.stepSurfaceRuns(shape: pts, marks: marks)
+        XCTAssertEqual(runs.map(\.kind), [.paved, .unpaved, .paved], "the last intersection's road belongs to the next step")
+        XCTAssertEqual(runs[0].coordinates.count, 5)
+        XCTAssertEqual(runs[1].coordinates.first, pts[4]); XCTAssertEqual(runs[1].coordinates.last, pts[7])
+        XCTAssertEqual(runs[2].coordinates.last, pts[10])
+        /* One intersection: the whole step takes its class. */
+        XCTAssertEqual(MapboxNavRoutingProvider.stepSurfaceRuns(shape: pts, marks: [(pts[0], true)]).map(\.kind), [.unpaved])
+        XCTAssertTrue(MapboxNavRoutingProvider.stepSurfaceRuns(shape: [pts[0]], marks: []).isEmpty)
+        /* Neighbouring steps of one kind join. */
+        let merged = MapboxNavRoutingProvider.mergedRuns([NavSurfaceRun(kind: .unpaved, coordinates: Array(pts[0...3])),
+                                                          NavSurfaceRun(kind: .unpaved, coordinates: Array(pts[3...6])),
+                                                          NavSurfaceRun(kind: .paved, coordinates: Array(pts[6...9]))])
+        XCTAssertEqual(merged.map(\.kind), [.unpaved, .paved])
+        XCTAssertEqual(merged[0].coordinates.count, 7)
+    }
+
+    func testSurfaceSplitIsDrawnOnlyWhenSomethingIsOffAsphalt() {
+        let a = line(1)
+        XCTAssertFalse(NavSurface.hasOffAsphalt([]))
+        XCTAssertFalse(NavSurface.hasOffAsphalt([NavSurfaceRun(kind: .paved, coordinates: a)]))
+        XCTAssertTrue(NavSurface.hasOffAsphalt([NavSurfaceRun(kind: .paved, coordinates: a), NavSurfaceRun(kind: .unknown, coordinates: a)]))
+        XCTAssertEqual(NavSurfaceKm.family(.unknown), .unknown)
+        XCTAssertEqual(NavSurfaceLegend.label(.unknown), "غير معروف")
     }
 }

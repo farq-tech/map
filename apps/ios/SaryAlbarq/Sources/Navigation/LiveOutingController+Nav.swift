@@ -211,7 +211,7 @@ extension LiveOutingController {
         switch nav.phase {
         case .planning:
             let sel = nav.selectedId ?? nav.routes.first?.id
-            d.routes = nav.routes.map { .init(id: $0.id, coordinates: $0.coordinates, selected: $0.id == sel) }
+            d.routes = nav.routes.map { .init(id: $0.id, coordinates: $0.coordinates, selected: $0.id == sel, surfaces: $0.surfaceRuns) }
             /* The first options on the map draw on (`NavRouteReveal`); picking another one does not. */
             d.revealKey = nav.routes.first { $0.id == sel }?.geometryRevision.uuidString
             if let best = nav.routes.first {
@@ -235,8 +235,9 @@ extension LiveOutingController {
                  * metres come from `NavRouteMetrics` (once per geometry), not a fresh pass each time. */
                 let metrics = NavRouteMetrics.tables(r)
                 let traffic = NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done, cum: metrics.cum)
-                /* Surfaces are drawn only without traffic colours; like traffic, only what is left. */
-                let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done, cum: metrics.surfaceCum)
+                /* Surfaces: only what is left, like traffic. Dirt / off-road runs win over the traffic tint
+                 * on the map (`drawRoutes`); an all-asphalt route keeps its traffic colours. */
+                let surfaces = NavSurface.remaining(r.surfaceRuns, from: done, cum: metrics.surfaceCum)
                 d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.shownProgress), selected: true,
                                   traffic: traffic, surfaces: surfaces)]
                 /* A new geometry while guiding is a reroute: a quick fade-in and a brief halo on the map. */

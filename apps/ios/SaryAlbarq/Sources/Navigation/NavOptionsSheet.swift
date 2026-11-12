@@ -145,6 +145,8 @@ struct NavOptionsSheet: View {
                         if let t = NavSurfaceLegend.badge(for: r) { tag(t, p.warningText) }
                         if r.hasTolls { tag("رسوم", p.warningText) }
                     }
+                    /* «أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم», swatches in the map's colours. */
+                    if let km = NavSurfaceKmStrip.km(for: r) { NavSurfaceKmStrip(km: km) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -280,6 +282,7 @@ struct NavSurfaceLegend: View {
         case .terrain: return "بر مفتوح"
         case .rough: return "وعر"
         case .gridSnap: return "وصلة تقريبية"
+        case .unknown: return "غير معروف"
         }
     }
 
@@ -358,11 +361,19 @@ struct NavSurfaceLegend: View {
         .accessibilityIdentifier("nav.surfaceLegend")
     }
 
-    /// A short sample of each line style, drawn like the map (casing + fill + pattern).
-    @ViewBuilder private func swatch(_ k: NavSurfaceKind) -> some View {
+    private func swatch(_ k: NavSurfaceKind) -> some View { NavSurfaceSwatch(kind: k) }
+}
+
+
+/// A short sample of one line style, drawn like the map (casing + fill + pattern): the same colours
+/// as `NavMapDrawer.SurfaceStyle`, and a pattern each, so it reads without colour too.
+struct NavSurfaceSwatch: View {
+    var kind: NavSurfaceKind
+
+    var body: some View {
         let w: CGFloat = 34, h: CGFloat = 8
         ZStack {
-            switch k {
+            switch kind {
             case .paved:
                 Capsule().fill(Color.white).frame(width: w, height: h + 4)
                 Capsule().fill(Color(rgb: SaryPalette.navBlueDay)).frame(width: w - 4, height: h)
@@ -376,11 +387,95 @@ struct NavSurfaceLegend: View {
             case .rough:
                 Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.roughEdgeRGB)).frame(width: w, height: h + 3)
                 HStack(spacing: 2) { ForEach(0..<4, id: \.self) { _ in Rectangle().fill(Color(rgb: NavMapDrawer.SurfaceStyle.roughRGB)).frame(width: 6, height: h) } }
+            case .unknown:
+                HStack(spacing: 3) { ForEach(0..<3, id: \.self) { _ in Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.unknownRGB)).frame(width: 9, height: 5) } }
             case .gridSnap:
                 EmptyView()
             }
         }
         .frame(width: w, height: h + 4)
         .accessibilityHidden(true)
+    }
+}
+
+/// The km split in one line: «أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم», each number beside a swatch
+/// in the map's colour. Used by the route card (whole route) and the guidance bar (what is left).
+/// One row when it fits the width, else one row per surface, so it never overlaps on a small phone.
+struct NavSurfaceKmStrip: View {
+    var km: NavSurfaceKm
+    @Environment(\.sary) private var theme
+
+    /// What the strip lists, in route order of importance: asphalt first, then dirt, off-road, unknown.
+    struct Item: Equatable, Identifiable {
+        var family: NavSurfaceKm.Family
+        var meters: Double
+        var id: String { family.rawValue }
+    }
+
+    static func label(_ f: NavSurfaceKm.Family) -> String {
+        switch f {
+        case .paved: return "أسفلت"
+        case .unpaved: return "ترابي"
+        case .offRoad: return "خارج الطريق"
+        case .unknown: return "غير معروف"
+        }
+    }
+
+    /// The swatch kind that stands for a family (off-road: the dotted open-terrain line).
+    static func swatchKind(_ f: NavSurfaceKm.Family) -> NavSurfaceKind {
+        switch f {
+        case .paved: return .paved
+        case .unpaved: return .unpaved
+        case .offRoad: return .terrain
+        case .unknown: return .unknown
+        }
+    }
+
+    /// Kilometres with one decimal, Arabic digits («٣٫٠ كم»); in miles when the phone is set to miles.
+    static func kmText(_ meters: Double) -> String {
+        if DistanceUnits.miles { return SaryFormat.distance(meters: meters) }
+        return "\(SaryFormat.digits(String(format: "%.1f", max(0, meters) / 1000))) كم"
+    }
+
+    static func items(_ km: NavSurfaceKm) -> [Item] {
+        NavSurfaceKm.Family.allCases.compactMap { f in
+            let m = km[f]
+            return m >= NavSurfaceKm.minShownM ? Item(family: f, meters: m) : nil
+        }
+    }
+
+    /// «أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم»
+    static func line(_ km: NavSurfaceKm) -> String {
+        items(km).map { "\(label($0.family)) \(kmText($0.meters))" }.joined(separator: " · ")
+    }
+
+    /// The split worth showing for a whole route: nil when the route has no dirt / off-road in it
+    /// (all asphalt, or no surface data: nothing is claimed then).
+    static func km(for r: NavRoute) -> NavSurfaceKm? {
+        guard !r.surfaceRuns.isEmpty else { return nil }
+        let k = NavSurfaceKm.of(r.surfaceRuns, routeM: r.distanceM)
+        return k.showsSplit ? k : nil
+    }
+
+    var body: some View {
+        let list = Self.items(km)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: theme.space(.m)) { ForEach(list) { cell($0) } }
+            VStack(alignment: .leading, spacing: 2) { ForEach(list) { cell($0) } }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(Self.line(km)))
+        .accessibilityIdentifier("nav.surfaceKm")
+    }
+
+    private func cell(_ i: Item) -> some View {
+        let p = theme.palette
+        return HStack(spacing: 4) {
+            NavSurfaceSwatch(kind: Self.swatchKind(i.family)).scaleEffect(0.6).frame(width: 22, height: 8)
+            Text(Self.label(i.family)).saryText(.caption, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1)
+            Text(Self.kmText(i.meters)).saryNumber(.caption, weight: .bold).foregroundStyle(p.textSecondary).lineLimit(1)
+        }
+        .fixedSize()
+        .accessibilityIdentifier("nav.surfaceKm.\(i.family.rawValue)")
     }
 }

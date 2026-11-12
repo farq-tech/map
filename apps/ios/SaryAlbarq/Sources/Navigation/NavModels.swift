@@ -154,6 +154,8 @@ enum NavSurfaceKind: String, Equatable {
     /// Short, approximate join from an exact provider coordinate to a cost-grid cell center.
     /// Drawn dashed so it is never mistaken for a mapped road or verified trail.
     case gridSnap
+    /// The provider could not say what the ground is. Drawn neutral (grey, long dashes), never as asphalt.
+    case unknown
 }
 
 struct NavSurfaceRun: Equatable {
@@ -402,7 +404,88 @@ enum NavTraffic {
     }
 }
 
+/// Kilometres of a route per surface family, from its surface runs (pure, unit-tested).
+/// Families are what the driver sees on the map and in the summary: asphalt, dirt track («ترابي»),
+/// off-road («خارج الطريق»: a predicted path over open terrain or rough ground) and unknown.
+/// The approximate grid join counts as unknown; so does any part of the route no run covers
+/// (a router that gave no surface for it is never read as asphalt).
+struct NavSurfaceKm: Equatable {
+    var paved = 0.0
+    var unpaved = 0.0
+    var offRoad = 0.0
+    var unknown = 0.0
+
+    enum Family: String, CaseIterable, Equatable { case paved, unpaved, offRoad, unknown }
+
+    static func family(_ k: NavSurfaceKind) -> Family {
+        switch k {
+        case .paved: return .paved
+        case .unpaved: return .unpaved
+        case .terrain, .rough: return .offRoad
+        case .gridSnap, .unknown: return .unknown
+        }
+    }
+
+    /// Metres (the name is kept short at call sites; divide by 1000 for km).
+    subscript(f: Family) -> Double {
+        get {
+            switch f {
+            case .paved: return paved
+            case .unpaved: return unpaved
+            case .offRoad: return offRoad
+            case .unknown: return unknown
+            }
+        }
+        set {
+            switch f {
+            case .paved: paved = newValue
+            case .unpaved: unpaved = newValue
+            case .offRoad: offRoad = newValue
+            case .unknown: unknown = newValue
+            }
+        }
+    }
+
+    var covered: Double { paved + unpaved + offRoad + unknown }
+    /// Something other than asphalt is on the way (worth showing the split).
+    var hasOffAsphalt: Bool { unpaved + offRoad + unknown >= Self.minShownM }
+    /// Parts shorter than this are noise (a driveway, a cell-centre join); they are not listed.
+    static let minShownM = 50.0
+    /// Dirt or off-road is on the way: the split is worth showing. Unknown alone is not (no data is not news).
+    var showsSplit: Bool { unpaved + offRoad >= Self.minShownM }
+
+    /// Whole route. `routeM`: the route's length, when known: whatever the runs do not cover is `unknown`.
+    static func of(_ runs: [NavSurfaceRun], routeM: Double? = nil) -> NavSurfaceKm {
+        var out = NavSurfaceKm()
+        for run in runs where run.coordinates.count >= 2 {
+            let m = zip(run.coordinates, run.coordinates.dropFirst()).reduce(0.0) { $0 + Vehicle.distanceMeters($1.0, $1.1) }
+            out[family(run.kind)] += m
+        }
+        return out.fillingUnknown(routeM)
+    }
+
+    /// What is left after `done` metres (runs follow the route in order, `NavSurface.remaining`).
+    /// `routeM`: the length still ahead, when known (the uncovered rest is `unknown`).
+    static func remaining(_ runs: [NavSurfaceRun], from done: Double, cum: [[Double]]? = nil, routeM: Double? = nil) -> NavSurfaceKm {
+        of(NavSurface.remaining(runs, from: done, cum: cum)).fillingUnknown(routeM)
+    }
+
+    private func fillingUnknown(_ routeM: Double?) -> NavSurfaceKm {
+        guard let routeM else { return self }
+        var out = self
+        let gap = routeM - covered
+        /* A few percent is the difference between the router's length and our own measuring. */
+        if gap > max(Self.minShownM, routeM * 0.03) { out.unknown += gap }
+        return out
+    }
+}
+
 enum NavSurface {
+    /// True when the runs have anything but asphalt (the map then draws the surface split).
+    static func hasOffAsphalt(_ runs: [NavSurfaceRun]) -> Bool {
+        runs.contains { $0.kind != .paved && $0.coordinates.count >= 2 }
+    }
+
     /// The surface runs from `done` metres along the route on (runs follow the route in order):
     /// the travelled part is dropped and the run under the car is cut where it is, as
     /// `NavTraffic.runs` does for traffic.

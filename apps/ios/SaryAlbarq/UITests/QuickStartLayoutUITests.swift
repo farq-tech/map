@@ -93,3 +93,56 @@ final class QuickStartLayoutUITests: XCTestCase {
     func testQuickStartDoesNotOverlap() { check(largeText: false) }
     func testQuickStartDoesNotOverlapAtLargeText() { check(largeText: true) }
 }
+
+/// The km split under a route («أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم»): the swatch, the word and the
+/// number of each surface sit side by side or one under the other, never on top of each other, on a small phone
+/// and with accessibility text sizes. Owner's request (Build 43 route all blue).
+final class SurfaceKmLayoutUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    private func open(largeText: Bool) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "route-km", "-SaryScheme", "light"]
+        if largeText { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXL"] }
+        app.launch()
+        return app
+    }
+
+    private func el(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
+
+    private func shot(_ name: String) {
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
+        if let dir = ProcessInfo.processInfo.environment["SARY_SHOTS"] {
+            try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(name).png"))
+        }
+    }
+
+    private func check(largeText: Bool) {
+        let app = open(largeText: largeText)
+        let ids = ["paved", "unpaved", "offRoad"].map { "nav.surfaceKm.\($0)" }
+        for id in ids { XCTAssertTrue(el(app, id).waitForExistence(timeout: 20), id) }
+        let screen = app.windows.firstMatch.frame
+        let frames = ids.map { ($0, el(app, $0).frame) }
+        for (id, f) in frames {
+            XCTAssertGreaterThan(f.width, 20, "\(id) has a size")
+            XCTAssertGreaterThanOrEqual(f.minX, screen.minX - 1, "\(id) inside the screen (left)")
+            XCTAssertLessThanOrEqual(f.maxX, screen.maxX + 1, "\(id) inside the screen (right)")
+        }
+        for i in 0..<frames.count {
+            for j in (i + 1)..<frames.count {
+                let x = frames[i].1.intersection(frames[j].1)
+                XCTAssertFalse(x.width > 1 && x.height > 1, "\(frames[i].0) overlaps \(frames[j].0)")
+            }
+        }
+        /* Owner's words and digits: Arabic, in the accessibility label of the strip. */
+        let label = app.descendants(matching: .any).matching(identifier: "nav.surfaceKm").firstMatch.label
+        XCTAssertEqual(label, "أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم")
+        shot(largeText ? "surface-km-large" : "surface-km-normal")
+    }
+
+    func testKmStripDoesNotOverlap() { check(largeText: false) }
+    func testKmStripDoesNotOverlapAtLargeText() { check(largeText: true) }
+}

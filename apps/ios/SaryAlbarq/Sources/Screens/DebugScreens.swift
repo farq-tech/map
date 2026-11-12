@@ -81,6 +81,14 @@ struct DebugScreen: View {
                 NavSurfaceLegend(runs: [NavSurfaceRun(kind: .paved, coordinates: km(71.4)), NavSurfaceRun(kind: .unpaved, coordinates: km(1.1)),
                                         NavSurfaceRun(kind: .terrain, coordinates: km(0.4))])
             }
+        case "route-km":
+            /* The km split of a route crossing asphalt, dirt and off-road (owner's example), no network. */
+            SaryPage(title: "المسافات") {
+                NavSurfaceKmStrip(km: NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 0))
+                    .padding(12).sarySurface(radius: SaryRadius.m)
+                NavSurfaceKmStrip(km: NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 1_200))
+                    .padding(12).sarySurface(radius: SaryRadius.m)
+            }
         #endif
         case "plan-details": HomeView(initial: [.details("demo-new")])
         case "plan-editor", "plan-editor-draw":
