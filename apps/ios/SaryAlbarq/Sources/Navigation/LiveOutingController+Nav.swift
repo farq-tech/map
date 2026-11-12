@@ -425,6 +425,11 @@ extension LiveOutingController {
         if ProcessInfo.processInfo.arguments.contains("-SaryNavOverview") {
             nav.camera = .overview
             navCameraKey += 1
+            /* The map's follow camera can claim the frame first: ask again once it is up. */
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.nav.camera = .overview
+                self?.navCameraKey += 1
+            }
         }
         sheetDetent = .peek
         if ProcessInfo.processInfo.arguments.contains("-SaryNavSteps") {
@@ -436,6 +441,21 @@ extension LiveOutingController {
 /// Screenshots / UI tests without network: a real-shaped route in Riyadh.
 final class DemoNavProvider: NavRoutingProvider {
     let name = "Demo"
+
+    /// Fixture surfaces along `c`: 0–45 % asphalt, 45–62 % dirt, 62–78 % open terrain, 78–90 % rough, the rest unknown.
+    static func demoSurfaces(_ c: [LngLat]) -> [NavSurfaceRun] {
+        let n = c.count - 1
+        guard n >= 5 else { return [] }
+        let kinds: [(Double, NavSurfaceKind)] = [(0.45, .paved), (0.62, .unpaved), (0.78, .terrain), (0.90, .rough), (1.0, .unknown)]
+        var runs: [NavSurfaceRun] = []
+        var from = 0
+        for (f, k) in kinds {
+            let to = min(n, Int((Double(n) * f).rounded()))
+            if to > from { runs.append(NavSurfaceRun(kind: k, coordinates: Array(c[from...to]))) }
+            from = to
+        }
+        return runs
+    }
 
     /// `-SaryNavOfflineFor <s>`: no network for the first s seconds (`-SaryNavOffline`: never).
     private static let launched = Date()
@@ -482,8 +502,14 @@ final class DemoNavProvider: NavRoutingProvider {
                     }
                 }
             }
-            return NavRoute(id: id, coordinates: c, distanceM: d1 + d2, durationS: (d1 / 14 + d2 / 16) * factor, steps: steps,
+            var route = NavRoute(id: id, coordinates: c, distanceM: d1 + d2, durationS: (d1 / 14 + d2 / 16) * factor, steps: steps,
                             hasUnpaved: endsShort, hasTolls: false, via: first, congestion: jam)
+            /* `-SaryNavSurfaces`: asphalt, then dirt track, open terrain, rough ground (screenshots of the surface colours). */
+            if args.contains("-SaryNavSurfaces") {
+                route.hasUnpaved = true
+                route.surfaceRuns = Self.demoSurfaces(c)
+            }
+            return route
         }
         return NavRoutePlan(routes: [route("demo-a", k1, first: "طريق الملك فهد", second: "طريق مكة المكرمة", factor: 1),
                                      route("demo-b", k2, first: "طريق العليا", second: "طريق الملك عبدالله", factor: 1.18)])
