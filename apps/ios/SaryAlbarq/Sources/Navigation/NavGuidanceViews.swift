@@ -206,14 +206,26 @@ enum NavDriveLayout {
         card ? 48 : (driving ? 60 : 52)
     }
 
-    /// The bar's peek: the numbers row, the surfaces strip (or the thin progress bar), the footer.
+    /// The bar's peek, summed from its real rows (`v2Body`): the sheet's top inset, the numbers row,
+    /// the surfaces strip (or the thin progress bar), the footer row. Nothing under the footer: the
+    /// system adds the home indicator's safe area under a `.height` detent itself. Build 46 had a
+    /// 164/150 pt guess here, ~40 pt taller than the rows, so the bar showed a blank band under its footer.
     static func peekHeight(drive: Bool, surfaces: Bool) -> CGFloat {
-        let base: CGFloat = drive ? 164 : 150
-        return base + (surfaces ? SheetDetentUI.surfacesExtra(drive: drive) : progressExtra)
+        sheetTopInset + numbersRowHeight(drive: drive) + barSpacing + footerControl(drive: drive)
+            + (surfaces ? SheetDetentUI.surfacesExtra(drive: drive) : progressExtra)
     }
 
-    /// The thin progress bar's row on an all-asphalt route.
-    static let progressExtra: CGFloat = 12
+    /// `LiveSheet`'s top padding over the bar (`theme.space(.s)` at the regular density).
+    static let sheetTopInset: CGFloat = 8
+    /// The bar's rows' spacing (`v2Body`).
+    static let barSpacing: CGFloat = 8
+    /// The numbers row at the default text size: the time left in `.display` (34 pt, +15 % driving)
+    /// beside the trip line (`.headline`) over the destination (`.subhead`). Measured on Build 46: 42 pt.
+    static func numbersRowHeight(drive: Bool) -> CGFloat { drive ? 48 : 42 }
+    /// The thin progress bar.
+    static let progressBarHeight: CGFloat = 5
+    /// The thin progress bar's row on an all-asphalt route, with the spacing above it.
+    static let progressExtra: CGFloat = progressBarHeight + barSpacing
 
     /// Share of the trip already driven (0…1), for the thin bar on a route without dirt.
     static func progress(totalM: Double?, remainingM: Double?) -> Double? {
@@ -825,7 +837,7 @@ struct NavBottomBar: View {
     private var v2Body: some View {
         let arrived = nav.phase == .arrived
         let items = NavDriveLayout.footer(friends: friends != nil, friendCount: friends == nil ? 0 : 1, talk: talk != nil, arrived: arrived)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: NavDriveLayout.barSpacing) {
             if arrived {
                 HStack(spacing: theme.space(.m)) {
                     Text(nav.auto ? "وصلتوا إلى \(nav.target?.name ?? "وجهتكم")" : "وصلت إلى \(nav.target?.name ?? "وجهتك")")
@@ -912,7 +924,7 @@ struct NavBottomBar: View {
                 Capsule().fill(p.liveText).frame(width: g.size.width * CGFloat(done))
             }
         }
-        .frame(height: 5)
+        .frame(height: NavDriveLayout.progressBarHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("قطعت \(SaryFormat.number(Int((done * 100).rounded())))٪ من الطريق"))
         .accessibilityIdentifier("nav.progress")

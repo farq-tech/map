@@ -1226,6 +1226,18 @@ final class NavDriveLayoutTests: XCTestCase {
         XCTAssertGreaterThan(NavDriveLayout.peekHeight(drive: true, surfaces: false), NavDriveLayout.peekHeight(drive: false, surfaces: false))
     }
 
+    func testPeekIsTheRowsAndNoBlankBand() {
+        /* Build 46: the 150 + 12 pt guess left ~40 pt blank under the footer (plus the home indicator's inset). */
+        XCTAssertEqual(NavDriveLayout.progressExtra, 13, "the 5 pt bar and the 8 pt spacing above it")
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: false, surfaces: false), 8 + 42 + 8 + 52 + 13)
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: true, surfaces: false), 8 + 48 + 8 + 56 + 13)
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: false, surfaces: true), 8 + 42 + 8 + 52 + 30)
+        XCTAssertEqual(NavDriveLayout.peekHeight(drive: true, surfaces: true), 8 + 48 + 8 + 56 + 34)
+        for drive in [true, false] {
+            XCTAssertLessThan(NavDriveLayout.peekHeight(drive: drive, surfaces: false), drive ? 164 + 12 : 150 + 12, "shorter than the old guess")
+        }
+    }
+
     func testProgressIsClamped() {
         XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 2_500) ?? -1, 0.75, accuracy: 0.0001)
         XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 12_000), 0, "a reroute longer than the route")
