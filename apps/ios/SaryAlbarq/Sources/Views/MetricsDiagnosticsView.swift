@@ -9,21 +9,23 @@ struct MetricsEntryRow: View {
 
     var body: some View {
         Button { open = true } label: {
-            HStack {
+            HStack(spacing: theme.space(.m)) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("أداء التطبيق").font(.sary(14, .medium)).foregroundStyle(theme.palette.textPrimary)
-                    Text("سرعة الفتح، التعليق، البطارية، والانهيارات من iOS").font(.sary(12, .regular))
+                    Text("أداء التطبيق").saryText(.subhead, weight: .medium).foregroundStyle(theme.palette.textPrimary)
+                    Text("سرعة الفتح، التعليق، البطارية، والانهيارات من iOS").saryText(.caption, weight: .regular)
                         .foregroundStyle(theme.palette.textSecondary)
                 }
-                Spacer()
-                Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(theme.palette.textSecondary)
+                Spacer(minLength: 0)
+                Image(systemName: SaryIcon.disclosure).saryGlyph(13, weight: .bold, relativeTo: .footnote)
+                    .foregroundStyle(theme.palette.textTertiary)
+                    .accessibilityHidden(true)
             }
+            .frame(minHeight: theme.minTarget)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .buttonStyle(SaryRowPressStyle())
+        .padding(.horizontal, theme.space(.l))
+        .padding(.vertical, theme.space(.xs))
         .sheet(isPresented: $open) { MetricsDiagnosticsView() }
     }
 }
@@ -36,33 +38,34 @@ struct MetricsDiagnosticsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button("تم") { dismiss() }.font(.sary(15, .medium))
-                Text("أداء التطبيق").font(.sary(18, .bold)).foregroundStyle(theme.palette.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
-                Button {
+            /* The app's one sheet header (was a text «تم» and a hand-sized title). */
+            SarySheetHeader(title: "أداء التطبيق", close: { dismiss() }, trailing: {
+                SaryIconButton(systemImage: SaryIcon.share, label: "شارك التقرير", id: "metrics.share") {
                     MetricsCollector.shared.exportFile { url in DispatchQueue.main.async { file = url } }
-                } label: {
-                    Label("شارك التقرير", systemImage: "square.and.arrow.up").font(.sary(14, .medium))
                 }
                 .disabled(items?.isEmpty ?? true)
-            }
-            .padding(16)
+            })
+            .padding(.horizontal, theme.space(.l))
+            .padding(.top, theme.space(.m))
+            .padding(.bottom, theme.space(.s))
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(MetricsLabels.footer).font(.sary(12, .regular)).foregroundStyle(theme.palette.textSecondary)
+                VStack(alignment: .leading, spacing: theme.space(.m)) {
+                    Text(MetricsLabels.footer).saryText(.caption, weight: .regular).foregroundStyle(theme.palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let items {
                         if items.isEmpty {
-                            Text("ما وصل تقرير للحين.").font(.sary(14, .medium)).foregroundStyle(theme.palette.textPrimary)
+                            SaryStateView(kind: .empty(title: "ما وصل تقرير للحين",
+                                                       message: "iOS يرسل تقرير الأداء مرة باليوم تقريبًا. استخدم التطبيق وارجع بكرة.",
+                                                       systemImage: "chart.bar.doc.horizontal"))
                         }
                         ForEach(Array(items.reversed().enumerated()), id: \.offset) { _, s in card(s) }
                     } else {
-                        ProgressView().frame(maxWidth: .infinity)
+                        SarySkeletonRow()
+                        SarySkeletonRow()
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 40)
+                .padding(.horizontal, theme.space(.l))
+                .padding(.bottom, theme.space(.xxxl))
             }
         }
         .background(theme.palette.background.ignoresSafeArea())
@@ -75,11 +78,11 @@ struct MetricsDiagnosticsView: View {
     }
 
     private func card(_ s: MetricsSummary) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(MetricsLabels.title(s)).font(.sary(15, .bold)).foregroundStyle(theme.palette.textPrimary)
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            Text(MetricsLabels.title(s)).saryText(.callout, weight: .bold).foregroundStyle(theme.palette.textPrimary)
             ForEach(Array(MetricsLabels.lines(s).enumerated()), id: \.offset) { _, line in
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(line.label).font(.sary(12, .medium)).foregroundStyle(theme.palette.textSecondary)
+                    Text(line.label).saryText(.caption, weight: .medium).foregroundStyle(theme.palette.textSecondary)
                     Text(line.value).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .environment(\.layoutDirection, .leftToRight)
@@ -87,8 +90,8 @@ struct MetricsDiagnosticsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(theme.palette.surface))
+        .padding(theme.space(.m))
+        .sarySurface(radius: SaryRadius.s)
     }
 }
 
