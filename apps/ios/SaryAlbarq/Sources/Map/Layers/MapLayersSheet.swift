@@ -122,6 +122,13 @@ struct MapLayersSheet: View {
     private func singleSelect(_ section: MapLayerSection) -> some View {
         let p = theme.palette
         return VStack(spacing: 0) {
+            /* «بدون» first, as in the old sheet. */
+            if let off = section.off {
+                optionRow(title: off.title, detail: off.detail, systemImage: off.systemImage, on: off.isSelected, id: off.testID) {
+                    if let current = section.rows.first(where: { $0.isOn }) { toggle(current.id, false) }
+                }
+            }
+            if section.off != nil { SaryDivider() }
             ForEach(Array(section.rows.enumerated()), id: \.element.id) { i, r in
                 optionRow(title: r.title, detail: r.detail, systemImage: r.systemImage, on: r.isOn, id: r.testID) { toggle(r.id, true) }
                 if MapLayerCatalog.weatherKind(r.id) == .rain && r.isOn {
@@ -129,12 +136,7 @@ struct MapLayersSheet: View {
                                   label: { WeatherLayers.daysLabel($0) }, optionID: { "weather.rain.days.\($0)" })
                         .padding(.bottom, theme.space(.s))
                 }
-                if i < section.rows.count - 1 || section.off != nil { SaryDivider() }
-            }
-            if let off = section.off {
-                optionRow(title: off.title, detail: off.detail, systemImage: off.systemImage, on: off.isSelected, id: off.testID) {
-                    if let current = section.rows.first(where: { $0.isOn }) { toggle(current.id, false) }
-                }
+                if i < section.rows.count - 1 { SaryDivider() }
             }
         }
         .padding(.horizontal, theme.space(.m))
