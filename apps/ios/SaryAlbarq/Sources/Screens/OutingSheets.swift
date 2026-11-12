@@ -179,11 +179,13 @@ struct InviteJoinSheet: View {
                     HStack(spacing: theme.space(.s)) {
                         Image(systemName: SaryIcon.crown).foregroundStyle(p.accentText)
                         Text("دعاك \(inv.inviterName)").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                            .lineLimit(1).minimumScaleFactor(0.85)
                             .accessibilityIdentifier("invite.inviter")
                         Spacer()
                         SaryOutingStatusPill(status: status(inv.status))
                     }
                     Text(inv.outingName).saryText(.display, weight: .bold).foregroundStyle(p.textPrimary)
+                        .lineLimit(3).minimumScaleFactor(0.85)
                         .accessibilityIdentifier("invite.name")
                     if let dest = inv.destinationName {
                         Label {
@@ -208,7 +210,7 @@ struct InviteJoinSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .sarySurface(radius: SaryRadius.l)
                 if inv.status == .ended {
-                    SaryBanner(text: "انتهت هذه الطلعة، فلا يمكن الانضمام لها.", tone: .warning)
+                    SaryBanner(text: "انتهت هالطلعة، فما تقدر تنضم لها.", tone: .warning)
                 } else {
                     if needsTypedName(inv) {
                         /* An open link and no identity yet: the only thing we cannot know is your name. */
@@ -243,7 +245,7 @@ struct InviteJoinSheet: View {
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.invalid")
             case .error(let m):
-                SaryStateView(kind: model.online ? .error(title: "تعذّر قراءة الدعوة", message: m) : .offline(message: "نقرأ الدعوة أول ما يرجع الاتصال."),
+                SaryStateView(kind: model.online ? .error(title: "ما قدرنا نقرأ الدعوة", message: m) : .offline(message: "نقرأ الدعوة أول ما يرجع الاتصال."),
                               actionTitle: "حاول مرة ثانية", actionID: "invite.retry") { Task { await load() } }
             }
         }
@@ -358,7 +360,7 @@ struct InviteJoinSheet: View {
                     OnboardingProgress.done = true
                     send(.identityReady)
                 } else {
-                    let m = model.errorText ?? "تعذّر الحفظ. أعد المحاولة."
+                    let m = model.errorText ?? "ما قدرنا نحفظ. جرّب مرة ثانية."
                     model.errorText = nil
                     send(.identityFailed(m))
                 }
@@ -411,7 +413,7 @@ struct InviteJoinSheet: View {
                     phase = .taken
                     return
                 }
-                let m = model.errorText ?? "تعذّر الانضمام."
+                let m = model.errorText ?? "ما قدرنا ننضم. جرّب مرة ثانية."
                 model.errorText = nil
                 releaseJoinGPS()
                 send(.joinFailed(m))
@@ -540,6 +542,7 @@ struct NotifyExplainerSheet: View {
         SaryFitColumn {
             VStack(spacing: theme.space(.l)) {
                 Image(systemName: "bell.badge.fill").font(.system(size: 52, weight: .semibold)).foregroundStyle(p.accentText)
+                    .accessibilityHidden(true)
                     /* The bell rings once as the sheet settles (bounded; nothing under Reduce Motion). */
                     .symbolEffect(.bounce, value: ring)
                     .onAppear {
@@ -552,7 +555,7 @@ struct NotifyExplainerSheet: View {
                 VStack(alignment: .leading, spacing: theme.space(.m)) {
                     line(SaryIcon.sos, p.emergency, "طوارئ من أحد في طلعتك — تنبيه عاجل بصوت.")
                     line(SaryIcon.note, nil, "رسالة قصيرة أو مقطع صوتي من الأصدقاء، بهدوء.")
-                    line("lock.fill", nil, "لا إعلانات، ولا شيء خارج طلعاتك. توقفها من الإعدادات متى شئت.")
+                    line("lock.fill", nil, "بلا إعلانات، ولا شي برّا طلعاتك. توقفها من الإعدادات متى ما بغيت.")
                 }
                 .padding(theme.space(.l))
                 .sarySurface(radius: SaryRadius.l)

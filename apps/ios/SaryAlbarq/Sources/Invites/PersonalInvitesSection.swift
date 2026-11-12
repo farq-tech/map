@@ -86,7 +86,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                             titleVisibility: .visible) {
             Button("ألغِ الدعوة", role: .destructive) { if let i = confirmRevoke { Task { await model.revoke(i) } } }
             Button("إلغاء", role: .cancel) {}
-        } message: { Text("الرابط يتوقف فورًا. تقدر ترسل له دعوة جديدة متى شئت.") }
+        } message: { Text("الرابط يتوقف فورًا. تقدر ترسل له دعوة جديدة متى ما بغيت.") }
         .task { await model.load() }
     }
 
