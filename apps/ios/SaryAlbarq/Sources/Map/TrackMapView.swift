@@ -130,7 +130,7 @@ struct TrackMapView: UIViewRepresentable {
             props = p
             guard ready, let map else { return }
             let m: MapboxMap = map.mapboxMap
-            drawer.update(m, line: p.line, style: TrackLineStyle(width: TrackLineStyle.width + 0.5, glow: p.highlight),
+            drawer.update(m, line: p.line, style: .gpsTrack,
                           below: m.layerExists(withId: "\(Self.approachSource)-line") ? "\(Self.approachSource)-line" : nil)
             if drawnApproach != p.approach {
                 drawnApproach = p.approach
@@ -146,7 +146,7 @@ struct TrackMapView: UIViewRepresentable {
                 fittedKey = p.fitKey
                 userMoved = false
                 fit(p)
-            } else if p.followMe, !userMoved, let me = p.me {
+            } else if p.followMe, !userMoved, let me = p.me, Self.debugCamera == nil {
                 map.camera.ease(to: CameraOptions(center: me.coordinate, padding: p.padding, zoom: max(m.cameraState.zoom, 16)),
                                 duration: MapCameraMotion.recenter.duration(reduceMotion: MapCameraMotion.reduceMotionNow))
             }
@@ -167,6 +167,23 @@ struct TrackMapView: UIViewRepresentable {
             guard let cam = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(bearing: 0, pitch: p.interactive ? MapTiltModel.shared.pitch(.overview) : 0), coordinatesPadding: pad,
                                                       maxZoom: SatelliteLabels.trackMaxZoom, offset: nil) else { return }
             map.mapboxMap.setCamera(to: cam)
+            #if DEBUG
+            if let d = Self.debugCamera {
+                map.mapboxMap.setCamera(to: CameraOptions(center: p.line.points[p.line.points.count / 2].coordinate, zoom: d.zoom, pitch: d.pitch))
+            }
+            #endif
+        }
+
+        /// Screenshots only (`-SaryTrackZoom 15 [-SaryTrackPitch 50]`): a fixed zoom on me / the track's centre.
+        static var debugCamera: (zoom: Double, pitch: Double)? {
+            #if DEBUG
+            let a = ProcessInfo.processInfo.arguments
+            guard let i = a.firstIndex(of: "-SaryTrackZoom"), i + 1 < a.count, let z = Double(a[i + 1]) else { return nil }
+            let pitch = a.firstIndex(of: "-SaryTrackPitch").flatMap { $0 + 1 < a.count ? Double(a[$0 + 1]) : nil } ?? 0
+            return (z, pitch)
+            #else
+            return nil
+            #endif
         }
     }
 }

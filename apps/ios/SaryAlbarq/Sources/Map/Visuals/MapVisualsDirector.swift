@@ -90,8 +90,7 @@ final class MapVisualsDirector: NSObject {
     /// Line layers that get the glow, and the layer that means "already glowing" (skip then).
     static let glowTargets: [(id: String, skipIf: String?)] = [
         ("sary-track-mine-line", "sary-track-mine-glow"),
-        ("sary-track-follow-line", "sary-track-follow-glow"),
-        ("sary-explore-tracks-line", nil),
+        /* GPS tracks («أثري (GPS)», `GPSTrackStyle`) never glow: thin, nothing wide over the streets. */
         ("sary-nav-main", nil),
         ("sary-plan-line", nil),
     ]

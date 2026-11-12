@@ -251,6 +251,7 @@
 		674015A74F17F89D9901294F /* IdleMapHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C44D7760B9BAAD789B62DC /* IdleMapHost.swift */; };
 		67FF0CF1B0D3EF48690636BD /* SuvExpedition.glb in Resources */ = {isa = PBXBuildFile; fileRef = D1D3DF15F79ACEB372C40B53 /* SuvExpedition.glb */; };
 		684D7791FEA2712123A0A9A1 /* SaryParticipant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */; };
+		68A80D9A1013F453BB938A54 /* GPSTrackStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D0F39B53727909B5269813D /* GPSTrackStyle.swift */; };
 		69109575453AC49CFD200211 /* SandGrade.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5773419818C7E07E41853ADC /* SandGrade.swift */; };
 		69118051628BDACB89F99869 /* TrailMatchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C83ADF7C9A34186A5C79EF8 /* TrailMatchCoordinator.swift */; };
 		6926772C5B8062B6EC32C62F /* VoiceNoteRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C68B24A52A45C11A5F7F025A /* VoiceNoteRecorder.swift */; };
@@ -417,6 +418,7 @@
 		B1CC39862DF6CFB43ADE1C2C /* GroupAudioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96C332A0106FE4F16F9025D3 /* GroupAudioUITests.swift */; };
 		B20BBCBCD2257C003224C512 /* Speed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C1A5D2B4ACEC01517DF4A4 /* Speed.swift */; };
 		B218EFAC678490A0F8767132 /* MotionFX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A05AE2BDFDC55031112972 /* MotionFX.swift */; };
+		B25423066BA7211C84CDE6C3 /* GPSTrackStyleUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F513008F72C2476C7722EAEB /* GPSTrackStyleUITests.swift */; };
 		B2877977C80C610B31A0A697 /* HiResSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46E9A24AE0838E89CB099C32 /* HiResSettings.swift */; };
 		B288FBFFC5810122AB5BA1A8 /* LiveOutingController+ConvoyIntel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A0683BF6D99692E0262DAD /* LiveOutingController+ConvoyIntel.swift */; };
 		B29C88F7A8B6FCB7586F71E6 /* routes-thumamah.bin in Resources */ = {isa = PBXBuildFile; fileRef = 8EA3F3C84146459306D287C3 /* routes-thumamah.bin */; };
@@ -510,6 +512,7 @@
 		DC763B08A7C5AC8F28E4B605 /* SavedPlaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58250556213761F8F38682DD /* SavedPlaces.swift */; };
 		DC950834B6D4E1C0519F0240 /* LiveOutingController+Safety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1C6A1552B0808A1601D114 /* LiveOutingController+Safety.swift */; };
 		DC981AD177A8D7D9BACA5F37 /* CloudOutlook.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0A1829B8D7F5303C46DB28 /* CloudOutlook.swift */; };
+		DD23CE975296FDC26F287F63 /* GPSTrackStyleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D998DCE9A2DE04CD27E5A26 /* GPSTrackStyleTests.swift */; };
 		DEC66099729F242776FABAB2 /* InviteeArrivalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E13088CF35C895F05E83FD95 /* InviteeArrivalTests.swift */; };
 		DECB2C60519D02E59632BF87 /* SuvModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D00282D218E5D04013AD73 /* SuvModel.swift */; };
 		E06B690ADB34C21AA47D89AC /* MemberSilence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC0B3A7948BE2867645CB90 /* MemberSilence.swift */; };
@@ -683,6 +686,7 @@
 		1A91F12AC639CDC2FA15190B /* CreateFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateFlow.swift; sourceTree = "<group>"; };
 		1B0A08B6928C14FD3B79AB09 /* OutingWalkieTalkie.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingWalkieTalkie.swift; sourceTree = "<group>"; };
 		1C83ADF7C9A34186A5C79EF8 /* TrailMatchCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailMatchCoordinator.swift; sourceTree = "<group>"; };
+		1D998DCE9A2DE04CD27E5A26 /* GPSTrackStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPSTrackStyleTests.swift; sourceTree = "<group>"; };
 		1E7F1086C5EA7B6CA1C8FA43 /* CarIcon-15191c.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-15191c.png"; sourceTree = "<group>"; };
 		1ECDC19382CB3316DC07F394 /* RouteFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteFile.swift; sourceTree = "<group>"; };
 		1F06B3290E213A7B0DAAA501 /* DeclutterShotsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeclutterShotsUITests.swift; sourceTree = "<group>"; };
@@ -909,6 +913,7 @@
 		7A9CE38AC34666A5BD969B27 /* WeatherProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherProvider.swift; sourceTree = "<group>"; };
 		7B0D1E5F0D1A288C3E1D4AD1 /* PlanSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanSections.swift; sourceTree = "<group>"; };
 		7B144DF4193F2C776801B1F1 /* GroupAudioViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupAudioViews.swift; sourceTree = "<group>"; };
+		7D0F39B53727909B5269813D /* GPSTrackStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPSTrackStyle.swift; sourceTree = "<group>"; };
 		7D7ADBD60F02350E3147E870 /* openmeteo-forecast-riyadh.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "openmeteo-forecast-riyadh.json"; sourceTree = "<group>"; };
 		7D8E70F4903CDF5CAAA727D8 /* DebugScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugScreens.swift; sourceTree = "<group>"; };
 		7DF8235E8B2B0DB268D32902 /* AlertLaneUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertLaneUITests.swift; sourceTree = "<group>"; };
@@ -1180,6 +1185,7 @@
 		F3EF7F39CA6E3501597E6C4F /* DesertRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesertRouterTests.swift; sourceTree = "<group>"; };
 		F45499396B401FE5E2BB4632 /* TrackMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackMapView.swift; sourceTree = "<group>"; };
 		F46BC26B3EA93ED2F2925DFC /* SaryCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryCards.swift; sourceTree = "<group>"; };
+		F513008F72C2476C7722EAEB /* GPSTrackStyleUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPSTrackStyleUITests.swift; sourceTree = "<group>"; };
 		F5DA379111C6D7352FFB06E6 /* ShowcaseBlocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowcaseBlocks.swift; sourceTree = "<group>"; };
 		F70543C38944AC802EC15DD6 /* CoordinateShare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateShare.swift; sourceTree = "<group>"; };
 		F7C44D7760B9BAAD789B62DC /* IdleMapHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleMapHost.swift; sourceTree = "<group>"; };
@@ -1264,6 +1270,7 @@
 				9C3B037894673EFCBDD08445 /* FarqTiles.swift */,
 				EF9179EAC5E03FE4F5FD0A9C /* FollowCamera.swift */,
 				529C52FC8F4C7CD9A8281E0D /* FollowCompass.swift */,
+				7D0F39B53727909B5269813D /* GPSTrackStyle.swift */,
 				28DFD7E5844714C62593D80B /* MapTilt.swift */,
 				F1338061A444CBC2D438FE17 /* OfflineMaps.swift */,
 				572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */,
@@ -1611,6 +1618,7 @@
 				000E017C0BA01219E91C2926 /* FeatureFlowTests.swift */,
 				092715A1A8B404DE61FFB43B /* FollowCameraTests.swift */,
 				35CF24611C2342C90DFCFEAA /* GpsQualityTests.swift */,
+				1D998DCE9A2DE04CD27E5A26 /* GPSTrackStyleTests.swift */,
 				6AD20F0B17D2F48318175D2C /* GroupAudioTests.swift */,
 				A901129423D2E1B5EDB67C24 /* HideLocationTests.swift */,
 				C347C7656CA76BEA0F9F22B6 /* HiResImageryTests.swift */,
@@ -1968,6 +1976,7 @@
 				2CCC91C98DF0E4D15B63D3EC /* EnjadUITests.swift */,
 				2C20F3D96CC034D11B618E01 /* ExploreUITests.swift */,
 				377E7121059C982DAAABD4CF /* FollowCameraUITests.swift */,
+				F513008F72C2476C7722EAEB /* GPSTrackStyleUITests.swift */,
 				96C332A0106FE4F16F9025D3 /* GroupAudioUITests.swift */,
 				B96E3B534452C1D2A5BABD3F /* HiResImageryUITests.swift */,
 				488DFDCA01410744F1EC659E /* HomeFlowUITests.swift */,
@@ -2554,6 +2563,7 @@
 				F48816F0B0F704770F052455 /* EnjadUITests.swift in Sources */,
 				B0F63AD4963228B6CE716916 /* ExploreUITests.swift in Sources */,
 				838A4B2A305EBA4D66C0ADE1 /* FollowCameraUITests.swift in Sources */,
+				B25423066BA7211C84CDE6C3 /* GPSTrackStyleUITests.swift in Sources */,
 				B1CC39862DF6CFB43ADE1C2C /* GroupAudioUITests.swift in Sources */,
 				AB34CD5D53607F7565277ED7 /* HiResImageryUITests.swift in Sources */,
 				EB4FF40AC252BCF8F3688A93 /* HomeFlowUITests.swift in Sources */,
@@ -2625,6 +2635,7 @@
 				ED6D175FC9CA16C2A063A563 /* ExploreTests.swift in Sources */,
 				39CC01C91732CCC0F6BA2526 /* FeatureFlowTests.swift in Sources */,
 				CC6ECCCF436D90DE5E65BDFC /* FollowCameraTests.swift in Sources */,
+				DD23CE975296FDC26F287F63 /* GPSTrackStyleTests.swift in Sources */,
 				B5BCF28590556D4F51A6FC46 /* GpsQualityTests.swift in Sources */,
 				98E8B367F23FE491A422BF50 /* GroupAudioTests.swift in Sources */,
 				4A2F0CA38711696A90802E92 /* HiResImageryTests.swift in Sources */,
@@ -2777,6 +2788,7 @@
 				F9A265D3F3C4F03650F6EECE /* FeatureViews.swift in Sources */,
 				5D47FD9F0E325C878CCEF4FA /* FollowCamera.swift in Sources */,
 				CA45BCED479F9D5B0BDD3B84 /* FollowCompass.swift in Sources */,
+				68A80D9A1013F453BB938A54 /* GPSTrackStyle.swift in Sources */,
 				3F5D8972F95D58E523289BB5 /* GpsQuality.swift in Sources */,
 				37C4A2EE25E1119A8C65AE66 /* GpsQualityView.swift in Sources */,
 				9DF39B4AE32146FCCF2C0CCA /* GroupAudioBackend.swift in Sources */,
