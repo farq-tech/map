@@ -54,7 +54,7 @@ final class LayersShotsUITests: XCTestCase {
             let app = launch(["-SaryCampFrom", "24.7113,46.6744"])
             sleep(8)
             save("map-\(name)-0-before")
-            el(app, "explore-layers").tap()
+            el(app, "map.layers").tap()
             XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10))
             let page = app.scrollViews.firstMatch
             let target = isSwitch ? app.switches[id].firstMatch : app.buttons[id].firstMatch

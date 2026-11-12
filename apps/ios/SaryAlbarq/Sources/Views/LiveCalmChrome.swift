@@ -17,6 +17,12 @@ enum LiveCalmRules {
         return parts.joined(separator: " · ")
     }
 
+    /// The layers button leads the side column in EVERY mode (stopped, driving, exploring, guiding, after the end);
+    /// it never counts toward the two-button limit below. Pure: a duplicate is dropped, order of the rest kept.
+    static func withLayers(_ items: [SaryMapControlItem], layers: SaryMapControlItem) -> [SaryMapControlItem] {
+        [layers] + items.filter { $0.id != layers.id }
+    }
+
     /// The round buttons on the map's side (stopped): «تتبعني» and «أدوات» only, plus «طريق العودة»
     /// when it fits the moment; after the end, the camera alone. Driving: none.
     static func sideItems(camera: SaryMapControlItem, backTrack: SaryMapControlItem?, plusBadge: Int?,

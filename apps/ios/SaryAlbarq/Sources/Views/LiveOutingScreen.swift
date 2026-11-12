@@ -244,18 +244,20 @@ struct LiveOutingScreen: View {
         let ended = controller.tripEnded
         /* Guiding (v2): up to four round buttons on the right, my speed and the limit bottom-left. */
         let guidingHUD = controller.nav.phase == .guiding && !exploring && !ended
-        let side = exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended))
+        let side = LiveCalmRules.withLayers(exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended)),
+                                            layers: .layers(active: controller.terrain3D))
         /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
         let showSide = controller.sheetDetent == .peek && !side.isEmpty && (!ended || !exploring)
             && LiveFit.sideWithAlertList(bellOpen: controller.bellOpen, screenHeight: full.height)
         /* iPhone SE (667 pt): the side captions drop out so the column stays above the dock (`LiveFit`). */
-        let sideCaptions = LiveFit.sideCaptions(guiding: guidingHUD, screenHeight: full.height)
+        /* Driving: bare round buttons (the name is spoken by VoiceOver), at the drive size. */
+        let sideCaptions = LiveFit.sideCaptions(guiding: guidingHUD, screenHeight: full.height) && !driving
         ZStack {
             /* TOP (Lovable): the header (or the guidance header, or the end card), then the one alert
              * with SOS on its left, then «تتبعني» / «أدوات» on the right. */
             VStack(spacing: theme.space(.s)) {
                 if exploring {
-                    ExploreTopBar(controller: controller, layers: { controller.modal = .layers }, exit: { controller.exitExplore() })
+                    ExploreTopBar(controller: controller, exit: { controller.exitExplore() })
                         .transition(SaryTransition.banner(theme))
                 }
                 if ended {

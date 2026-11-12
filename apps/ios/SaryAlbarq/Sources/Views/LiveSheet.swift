@@ -237,7 +237,7 @@ struct LiveSheet: View {
                 .presentationDragIndicator(.visible)
         case .layers:
             Group {
-                if MapLayersSheetFlag.useLegacy { ExploreLayersSheet(controller: controller) } else { MapLayersSheet(controller: controller) }
+                if MapLayersSheetFlag.useLegacy { ExploreLayersSheet(controller: controller) } else { MapLayersSheet(controller: controller, mode: MapLayersSheetModel.mode(exploring: controller.exploreActive, navigating: controller.nav.phase == .guiding || controller.nav.phase == .offRoad)) }
             }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)

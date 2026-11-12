@@ -152,10 +152,10 @@ final class ReachabilityUITests: XCTestCase {
     func testExplorationToolsWithinTwoTaps() {
         let app = launch()
         XCTAssertTrue(app.openTool("outing-explore"))
-        for id in ["explore-layers", "explore-places", "explore-save", "explore-copy", "explore-coord-format", "explore-exit"] {
+        for id in ["map.layers", "explore-places", "explore-save", "explore-copy", "explore-coord-format", "explore-exit"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id): two taps from the trip map")
         }
-        app.buttons["explore-layers"].tap()
+        app.buttons["map.layers"].tap()
         for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-terrain3d", "explore-realistic", "explore-offline",
                    "explore-desert-route", "explore-camp-suggest"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in «الطبقات»")

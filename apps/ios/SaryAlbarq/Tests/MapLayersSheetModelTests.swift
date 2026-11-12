@@ -50,4 +50,21 @@ final class MapLayersSheetModelTests: XCTestCase {
         XCTAssertEqual(section?.rows.map(\.id), ["overlay.test"], "an unknown overlay gets its own section with no sheet change")
         XCTAssertEqual(MapLayersSheetModel.baseRows(registry: r, mode: .home, areas: 0, topoAreas: 0).count, 3)
     }
+
+    func testLiveMapSheetModeAndRowsPerMode() {
+        XCTAssertEqual(MapLayersSheetModel.mode(exploring: true, navigating: false), .explore)
+        XCTAssertEqual(MapLayersSheetModel.mode(exploring: true, navigating: true), .explore)
+        XCTAssertEqual(MapLayersSheetModel.mode(exploring: false, navigating: true), .navigate)
+        XCTAssertEqual(MapLayersSheetModel.mode(exploring: false, navigating: false), .outing)
+        let r = MapLayerRegistry(defaults: suite)
+        for m in [MapLayerMode.outing, .navigate] {
+            XCTAssertEqual(MapLayersSheetModel.baseRows(registry: r, mode: m, areas: 0, topoAreas: 0).count, 3, "base layer choice in \(m)")
+            XCTAssertFalse(MapLayersSheetModel.sections(registry: r, mode: m).isEmpty, "data layers in \(m)")
+        }
+    }
+
+    func testSOSReserveCoversTheDiscAndItsMargins() {
+        XCTAssertEqual(MapLayersSheetModel.sosReserve(disc: 64, small: 8), 88)
+        XCTAssertGreaterThan(MapLayersSheetModel.sosReserve(disc: 76, small: 8), 76 + 16, "more than the disc's own box")
+    }
 }
