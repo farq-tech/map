@@ -76,6 +76,8 @@ struct SaryScreenScaffold<Content: View, Bottom: View>: View {
             }
         }
         .background(theme.palette.background.ignoresSafeArea())
+        /* A container id set by a screen (e.g. «enjad.sheet») must not replace the ✕ / primary ids inside. */
+        .accessibilityElement(children: .contain)
     }
 }
 

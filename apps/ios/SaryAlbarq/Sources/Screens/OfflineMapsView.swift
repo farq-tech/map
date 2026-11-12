@@ -22,7 +22,7 @@ struct OfflineMapsView: View {
                 SaryScreenScaffold(title: "الخرائط بلا إنترنت", subtitle: "للبر حيث لا تغطية", closeID: "offline.close", onClose: back) {
                     VStack(alignment: .leading, spacing: SarySpace.l.rawValue) { sections(addInline: false) }
                 } bottom: {
-                    addButton
+                    addButton(newUI: true)
                 }
             } else {
                 SaryPage(title: "الخرائط بلا إنترنت", subtitle: "للبر حيث لا تغطية", back: back) {
@@ -42,11 +42,18 @@ struct OfflineMapsView: View {
         }
     }
 
-    private var addButton: some View {
-        Button { picking = true } label: { SaryButtonLabel(title: "حمّل منطقة", systemImage: "square.dashed") }
-            .buttonStyle(.sary(.primary))
-            .disabled({ if case .downloading = store.job { return true }; return false }())
-            .accessibilityIdentifier("offline.add")
+    @ViewBuilder
+    private func addButton(newUI: Bool) -> some View {
+        let b = Button { picking = true } label: { SaryButtonLabel(title: "حمّل منطقة", systemImage: "square.dashed") }
+        if newUI {
+            b.buttonStyle(SaryFoundationButtonStyle(kind: .primary))
+                .disabled({ if case .downloading = store.job { return true }; return false }())
+                .accessibilityIdentifier("offline.add")
+        } else {
+            b.buttonStyle(.sary(.primary))
+                .disabled({ if case .downloading = store.job { return true }; return false }())
+                .accessibilityIdentifier("offline.add")
+        }
     }
 
     @ViewBuilder
@@ -73,7 +80,7 @@ struct OfflineMapsView: View {
                 SaryBanner(text: "«\(name)» جاهزة بلا إنترنت (\(SaryFormat.bytes(bytes))).", tone: .success, systemImage: SaryIcon.checkCircle)
                     .accessibilityIdentifier("offline.finished")
             }
-            if addInline { addButton }
+            if addInline { addButton(newUI: false) }
             if store.loaded && store.areas.isEmpty {
                 SaryStateView(kind: .empty(title: "ما حفظت مناطق بعد", message: "قبل الطلعة، وأنت على إنترنت، احفظ منطقتها: الخريطة والطرق والتضاريس تشتغل بعدها بدون تغطية.", systemImage: "map"))
                     .sarySurface(radius: SaryRadius.l)

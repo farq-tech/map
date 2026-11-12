@@ -484,7 +484,7 @@ Group {
                 SaryButtonLabel(title: safety.localOnly ? "اضبط المنبّه" : "اضبط وأرسل الرابط",
                                 systemImage: safety.localOnly ? SafetyIcon.timer : SaryIcon.share, busy: safety.timerBusy, busyTitle: "جارٍ الضبط…")
             }
-            .buttonStyle(.sary(.primary))
+            .buttonStyle(SaryFoundationButtonStyle(kind: .primary))
             .disabled((!safety.localOnly && ReturnTimerLogic.cleanContact(contact) == nil) || safety.timerBusy)
             .accessibilityIdentifier("timer-save")
         }
