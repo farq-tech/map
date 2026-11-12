@@ -52,12 +52,13 @@ final class LayersButtonUITests: XCTestCase {
             button.tap()
             XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10), "\(mode): the shared layers sheet opens")
             for id in ["layer.satellite", "layer.standard", "layer.topo"] { XCTAssertTrue(el(app, id).waitForExistence(timeout: 5), "\(mode): \(id)") }
-            // The mode decides the data rows: weather only where its overlay is drawn (exploration).
+            // Weather is offered in every outing state, not only exploration (owner's Build 44 report, PR #239): the quick chips and the section.
+            for k in ["clouds", "rain", "wind"] { XCTAssertTrue(el(app, "weather.quick.\(k)").waitForExistence(timeout: 5), "\(mode): quick weather chip \(k)") }
             let rain = el(app, "weather.layer.rain")
             var found = rain.exists
             let page = app.scrollViews.firstMatch
             for _ in 0..<4 where !found { page.swipeUp(velocity: .slow); found = rain.exists }
-            XCTAssertEqual(found, mode == .exploring, "\(mode): weather rows only in exploration")
+            XCTAssertTrue(found, "\(mode): weather rows are offered in every outing state")
             app.terminate()
         }
     }
@@ -130,5 +131,77 @@ final class LayersButtonUITests: XCTestCase {
             shot("sheet-sos-\(tag)")
             app.terminate()
         }
+    }
+
+    // MARK: Owner's Build 44 report: «خلال الطلعة لا يمكنني الضغط على الطبقات»
+
+    private func tapOpensSheet(_ app: XCUIApplication, _ label: String) {
+        let button = el(app, "map.layers")
+        XCTAssertTrue(button.waitForExistence(timeout: 30), "\(label): the layers button is on the map")
+        sleep(2)
+        XCTAssertGreaterThanOrEqual(button.frame.width, 44, "\(label): hit area width")
+        XCTAssertGreaterThanOrEqual(button.frame.height, 44, "\(label): hit area height")
+        XCTAssertTrue(button.isHittable, "\(label): nothing covers it")
+        button.tap()
+        XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10), "\(label): the tap opened the layers sheet")
+        shot("tap-\(label)")
+    }
+
+    func testTapOpensTheSheetStanding() { tapOpensSheet(launch(.stopped), "standing") }
+
+    func testTapOpensTheSheetDriving() { tapOpensSheet(launch(.driving), "driving") }
+
+    func testTapOpensTheSheetWhileGuiding() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryNavDemo", "-SaryNavTo", "24.7220,46.6650,حطين", "-SaryNavDelay", "3", "-SaryNavStart",
+                               "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryScheme", "light", "-SaryDrive", "0"]
+        app.launch(); app.allowLocationIfAsked()
+        XCTAssertTrue(el(app, "nav.bottomBar").waitForExistence(timeout: 75), "guiding")
+        tapOpensSheet(app, "guiding")
+        // Weather is one tap away here: the quick chip turns the clouds on and the legend card appears.
+        XCTAssertTrue(el(app, "weather.quick.clouds").waitForExistence(timeout: 5), "quick weather chips lead the sheet")
+        XCTAssertTrue(el(app, "weather.layer.clouds").exists || el(app, "weather.quick.clouds").exists)
+        el(app, "weather.quick.clouds").tap()
+        XCTAssertTrue(el(app, "weather.quick.clouds").isSelected, "the chip shows the layer is on")
+    }
+
+    func testTapOpensTheSheetAfterTheEnd() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryScheme", "light", "-SaryDrive", "0",
+                               "-SaryContext", "stopped", "-SaryTrip", "arrived", "-SarySheetHalf"]
+        app.launch(); app.allowLocationIfAsked()
+        XCTAssertTrue(app.buttons["outing-actions"].waitForExistence(timeout: 45))
+        XCTAssertTrue(app.endOutingFromMore(), "ended by the owner")
+        XCTAssertTrue(app.buttons["trip.return"].waitForExistence(timeout: 15))
+        let summary = el(app, "outing-sheet-summary")
+        if summary.waitForExistence(timeout: 5) { summary.tap() }
+        tapOpensSheet(app, "after-end")
+    }
+
+    /// The second tap, and the tap after another sheet was opened and closed, must work as well as the first.
+    func testTapWorksAgainAfterASheetWasOpenedAndClosed() {
+        let app = launch(.stopped)
+        let button = el(app, "map.layers")
+        XCTAssertTrue(button.waitForExistence(timeout: 30))
+        for round in 1...2 {
+            button.tap()
+            XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10), "round \(round): layers sheet opens")
+            el(app, "explore.layers.sheet").swipeDown(velocity: .fast)
+            XCTAssertTrue(el(app, "explore.layers.sheet").waitForNonExistence(timeout: 10), "round \(round): closed")
+        }
+        app.buttons["outing-actions"].tap()
+        XCTAssertTrue(el(app, "outing-actions-sheet").waitForExistence(timeout: 10))
+        el(app, "outing-actions-close").tap()
+        XCTAssertTrue(el(app, "outing-actions-sheet").waitForNonExistence(timeout: 10))
+        sleep(1)
+        button.tap()
+        XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10), "layers opens after «المزيد» was closed")
+        shot("tap-after-more")
+    }
+
+    /// Owner's Build 44 report: with the sheet raised to half (members, «المزيد» row) the button was gone.
+    func testTapOpensTheSheetWithTheSheetHalfOpen() {
+        let app = launch(.stopped, extra: ["-SaryLiveSheet", "half"])
+        tapOpensSheet(app, "half-sheet")
     }
 }

@@ -15,9 +15,12 @@ struct SaryMapControlItem: Identifiable, Equatable {
     var hint: String? = nil
     /// VoiceOver value / UI-test state (e.g. the camera mode).
     var value: String? = nil
+    /// Short text drawn instead of the symbol (the camera-angle button's «٣د» / «٢د»).
+    var glyph: String? = nil
 
     static func == (a: Self, b: Self) -> Bool {
         a.id == b.id && a.systemImage == b.systemImage && a.isActive == b.isActive && a.badge == b.badge && a.label == b.label && a.value == b.value
+            && a.glyph == b.glyph
     }
 }
 
@@ -62,10 +65,18 @@ struct SaryMapControlFace: View {
     var body: some View {
         let size = theme.mapButton
         VStack(spacing: 1) {
-            Image(systemName: item.systemImage)
-                .font(.system(size: theme.drive ? 24 : 18, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .contentTransition(.symbolEffect(.replace))
+            if let glyph = item.glyph {
+                Text(glyph)
+                    .font(.system(size: theme.drive ? 22 : 17, weight: .heavy))
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
+            } else {
+                Image(systemName: item.systemImage)
+                    .font(.system(size: theme.drive ? 24 : 18, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .contentTransition(.symbolEffect(.replace))
+            }
             if showsLabel {
                 /* 12 pt (was 11): it fits under the glyph in the 48 pt disc; long labels still shrink. */
                 Text(item.label)

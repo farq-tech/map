@@ -33,18 +33,6 @@ final class QiblaTests: XCTestCase {
         XCTAssertEqual(Qibla.distanceKm(from: Qibla.kaaba), 0, accuracy: 1e-6)
     }
 
-    func testMapRayUsesGreatCircleAndEndsAtKaaba() {
-        let origin = c(24.7136, 46.6753)
-        let points = Qibla.greatCirclePoints(from: origin)
-        XCTAssertEqual(points.count, 49)
-        XCTAssertEqual(points.first?.latitude ?? 0, origin.latitude, accuracy: 1e-9)
-        XCTAssertEqual(points.first?.longitude ?? 0, origin.longitude, accuracy: 1e-9)
-        XCTAssertEqual(points.last?.latitude ?? 0, Qibla.kaaba.latitude, accuracy: 1e-9)
-        XCTAssertEqual(points.last?.longitude ?? 0, Qibla.kaaba.longitude, accuracy: 1e-9)
-        let firstSegmentBearing = Qibla.bearing(from: points[0], to: points[1])
-        XCTAssertEqual(firstSegmentBearing, Qibla.bearing(from: origin), accuracy: 0.1)
-    }
-
     func testTurnAndHints() {
         XCTAssertEqual(Qibla.turn(qibla: 244, heading: 240), 4, accuracy: 1e-9)
         XCTAssertEqual(Qibla.turn(qibla: 10, heading: 350), 20, accuracy: 1e-9)
@@ -136,13 +124,5 @@ final class QiblaTests: XCTestCase {
         XCTAssertTrue(c.isRunning, "a new start runs again")
         c.stop()
         XCTAssertFalse(c.isRunning, "begin-location is guarded by this flag")
-    }
-
-    /// Riyadh→Makkah: the qibla line lies on the road and looked like a second route, so guidance hides it.
-    func testQiblaLineIsHiddenWhileNavigatingOnly() {
-        XCTAssertTrue(QiblaMapOverlay.shows(userChoice: true, navigating: false))
-        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: true, navigating: true), "turn-by-turn: no second dashed line")
-        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: false, navigating: false), "the user's own off switch still wins")
-        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: false, navigating: true))
     }
 }

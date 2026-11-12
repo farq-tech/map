@@ -21,7 +21,7 @@ final class MapLayerDataTests: XCTestCase {
 
     func testCatalogStaysConsistentWithDataLayers() {
         XCTAssertEqual(MapLayerCatalogCheck.issues(MapLayerCatalog.all), [])
-        XCTAssertEqual(MapLayerCatalog.all.count, 3 + 4 + 3 + 2 + 3, "3 base + 4 weather + camp/osm/qibla + hires/terrain + 3 image colours")
+        XCTAssertEqual(MapLayerCatalog.all.count, 3 + 4 + 2 + 2 + 3, "3 base + 4 weather + camp/osm + hires/terrain + 3 image colours (the Qibla ray was removed, 2026-11-13)")
     }
 
     func testEveryDataDescriptorHasIDTitleIconCategoryAndDefault() {
@@ -29,7 +29,6 @@ final class MapLayerDataTests: XCTestCase {
             ("weather.clouds", "السحاب الآن", .overlay, false), ("weather.rain", "وين نزل مطر", .overlay, false),
             ("weather.wind", "اتجاه الرياح", .overlay, false), ("weather.green", "وين ربّع", .overlay, false),
             ("data.camp", "أماكن مقترحة للكشتة", .data, false), ("data.osmTracks", "مسارات البر (OSM)", .data, true),
-            ("data.qibla", "اتجاه القبلة", .data, true),
             ("imagery.hires", "صور عالية الوضوح", .terrain, true), ("terrain.3d", "عرض ثلاثي الأبعاد", .terrain, false),
         ]
         let r = registry()
@@ -50,26 +49,29 @@ final class MapLayerDataTests: XCTestCase {
         XCTAssertEqual(MapLayerCatalog.campSitesKey, CampSitesHub.layerKey)
         XCTAssertEqual(MapLayerCatalog.osmTracksKey, DrivingRealismPrefs.osmKey)
         XCTAssertEqual(MapLayerCatalog.hiResKey, HiResSettings.userKey)
-        XCTAssertEqual(MapLayerCatalog.qiblaVisibleKey, "sary.map.qibla.visible.v1", "the key every old install stored")
+        XCTAssertEqual(MapLayerCatalog.qiblaVisibleKey, "sary.map.qibla.visible.v1", "legacy key, kept only so it is recognised and cleared; nothing reads it")
         let r = registry()
         for k in MapLayerCatalog.weatherKinds {
             XCTAssertEqual(r.descriptor(MapLayerCatalog.weatherID(k))?.persistence, .optionalChoice(key: "sary.map.weather.v1", value: k.rawValue, off: "none"))
         }
         XCTAssertEqual(MapLayerCatalog.camp.persistence, .flag(key: "sary.map.campSites.v1"))
         XCTAssertEqual(MapLayerCatalog.osmTracks.persistence, .flag(key: "sary.map.osmTracks.v1"))
-        XCTAssertEqual(MapLayerCatalog.qibla.persistence, .flag(key: "sary.map.qibla.visible.v1"))
         XCTAssertEqual(MapLayerCatalog.hiRes.persistence, .flag(key: "sary.hires.user.v1"))
     }
 
-    func testQiblaIsOneRegistrationNotThree() {
-        XCTAssertEqual(MapLayerCatalog.all.filter { $0.storageKey == MapLayerCatalog.qiblaVisibleKey }.count, 1)
+    func testTheQiblaRayIsNoLongerALayerAndAStoredOnCannotBringItBack() {
+        XCTAssertFalse(MapLayerCatalog.all.contains { $0.id == "data.qibla" || $0.storageKey == MapLayerCatalog.qiblaVisibleKey }, "removed by the owner, 2026-11-13")
+        suite.set(true, forKey: MapLayerCatalog.qiblaVisibleKey)   // what an old install stored
+        let r = registry()
+        XCTAssertNil(r.descriptor("data.qibla"))
+        for mode in MapLayerMode.allCases {
+            XCTAssertFalse(MapLayersSheetModel.sections(registry: r, mode: mode).flatMap(\.rows).contains { $0.id == "data.qibla" }, "no Qibla row in \(mode)")
+        }
     }
 
     func testAvailabilityMatchesWhereTheLayerIsDrawn() {
         let r = registry()
-        XCTAssertEqual(r.descriptor("weather.rain")?.availableIn, [.explore], "the weather overlay is drawn by the exploration map")
-        XCTAssertTrue(MapLayerCatalog.qibla.availableIn.contains(.home), "the home map draws the Qibla ray")
-        XCTAssertFalse(MapLayerCatalog.qibla.availableIn.contains(.navigate), "the ray hides during guidance")
+        XCTAssertEqual(r.descriptor("weather.rain")?.availableIn, [.explore, .outing, .navigate], "the weather overlay is drawn on the live map in every mode, guidance included")
         XCTAssertTrue(MapLayerCatalog.camp.availableIn.contains(.outing))
         XCTAssertFalse(r.layers(in: .home).contains { $0.id == "terrain.3d" || $0.id == "weather.rain" })
     }
@@ -157,16 +159,6 @@ final class MapLayerDataTests: XCTestCase {
         XCTAssertFalse(registry().isActive("imagery.hires"))
     }
 
-    func testQiblaFlagMatchesTheStoredBool() {
-        let r = registry()
-        XCTAssertTrue(r.isActive("data.qibla"), "shown by default, as the three views had it")
-        r.setActive("data.qibla", false)
-        XCTAssertEqual(suite.object(forKey: "sary.map.qibla.visible.v1") as? Bool, false)
-        // What an old install had stored (written through @AppStorage) is read back unchanged.
-        suite.set(true, forKey: "sary.map.qibla.visible.v1")
-        XCTAssertTrue(registry().isActive("data.qibla"))
-    }
-
     func testWrongTypeInAFlagKeyFallsBackToTheDefault() {
         suite.set("yes", forKey: MapLayerCatalog.campSitesKey)
         suite.set("no", forKey: MapLayerCatalog.osmTracksKey)
@@ -217,7 +209,7 @@ final class MapLayerDataTests: XCTestCase {
         XCTAssertEqual(explore[0].off?.isSelected, true, "no weather layer: «بدون» is the selected row")
         XCTAssertEqual(explore[1].rows.map(\.testID), ["imagery.grade.natural", "imagery.grade.warm", "imagery.grade.strong"])
         XCTAssertEqual(explore[1].rows.filter(\.isOn).map(\.testID), ["imagery.grade.natural"], "طبيعي by default")
-        XCTAssertEqual(explore[2].rows.map(\.testID), ["explore-camp-sites", "explore-osm-tracks", "explore-qibla"])
+        XCTAssertEqual(explore[2].rows.map(\.testID), ["explore-camp-sites", "explore-osm-tracks"])
         XCTAssertEqual(explore[3].rows.map(\.testID), ["explore-hires", "explore-terrain3d"])
 
         r.setActive("weather.rain")
@@ -225,9 +217,13 @@ final class MapLayerDataTests: XCTestCase {
         XCTAssertEqual(again[0].rows.filter(\.isOn).map(\.testID), ["weather.layer.rain"])
         XCTAssertEqual(again[0].off?.isSelected, false)
 
-        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).map(\.id), ["group.ألوان الصور", "category.data"], "home offers only what its map draws (it draws the graded satellite)")
-        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home)[1].rows.map(\.id), ["data.qibla"])
-        XCTAssertFalse(MapLayersSheetModel.sections(registry: r, mode: .outing).contains { $0.id == "group.الطقس" })
+        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).map(\.id), ["group.ألوان الصور"], "home offers only what its map draws (it draws the graded satellite)")
+        for m in [MapLayerMode.outing, .navigate] {
+            let sections = MapLayersSheetModel.sections(registry: r, mode: m)
+            XCTAssertEqual(sections.first?.id, "group.الطقس", "\(m): the weather is the first section, right after the base maps")
+            XCTAssertEqual(MapLayersSheetModel.quickWeather(registry: r, mode: m).map(\.testID), ["weather.quick.clouds", "weather.quick.rain", "weather.quick.wind"], "\(m): quick chips")
+        }
+        XCTAssertTrue(MapLayersSheetModel.quickWeather(registry: r, mode: .home).isEmpty, "home draws no weather")
     }
 
     func testEveryDescriptorAppearsInSomeSheet() {

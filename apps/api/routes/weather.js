@@ -22,6 +22,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const clouds = require('../lib/weather/clouds');
+const { withDeadline } = require('../lib/weather/fetcher');
 const cloudOutlook = require('../lib/weather/cloud-outlook');
 const rain = require('../lib/weather/rain');
 const rainMotion = require('../lib/weather/rain-motion');
@@ -47,15 +48,35 @@ function sendTile(res, r, maxAge) {
 }
 
 const int = (v) => (/^\d+$/.test(String(v)) ? Number(v) : NaN);
+/* A person is waiting: answer within this budget or say so (503 `timeout`), never hang. The work
+ * behind it keeps running and fills the caches, so the next request is served from them. */
+const ROUTE_DEADLINE_MS = Number(process.env.WEATHER_ROUTE_DEADLINE_MS) || 11_000;
+const TIMEOUT_AR = 'السحاب تأخّر الحين، جرّب بعد شوي.';
+const deadline = (p) => withDeadline(p, ROUTE_DEADLINE_MS, 'ROUTE_TIMEOUT');
+function timeout503(res, e) {
+  if (e && e.code === 'ROUTE_TIMEOUT' && !res.headersSent) {
+    console.warn(`[clouds] route deadline ${ROUTE_DEADLINE_MS} ms exceeded`);
+    res.set('Cache-Control', 'no-store');
+    res.set('Retry-After', '15');
+    return res.status(503).json({ ok: false, error: 'timeout', message_ar: TIMEOUT_AR });
+  }
+  throw e;
+}
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 
 function createWeatherRouter() {
   const router = express.Router();
 
   router.get('/weather/clouds/tiles', wrap(async (req, res) => {
-    const body = await clouds.framesPayload();
+    let body;
+    try {
+      body = await deadline(clouds.framesPayload());
+    } catch (e) {
+      return timeout503(res, e);
+    }
     if (!body.ok) return res.status(503).json({ ...body, message_ar: 'صور السحاب ما وصلت الحين، جرّب بعد شوي.' });
-    return sendJson(req, res, body, 120);
+    /* A stale list must not sit in a shared cache for long: let the app ask again soon. */
+    return sendJson(req, res, body, body.stale ? 30 : 120);
   }));
 
   router.get('/weather/clouds/tile/:id/:z/:x/:y.png', wrap(async (req, res) => {
@@ -67,7 +88,12 @@ function createWeatherRouter() {
   router.get('/weather/clouds/outlook', wrap(async (req, res) => {
     const pt = parseNear(`${req.query.lat},${req.query.lng}`);
     if (!pt || !inKsa(pt.lng, pt.lat)) return res.status(400).json({ ok: false, error: 'bad_point', message_ar: 'الموقع خارج المملكة أو غير مقروء.' });
-    const body = await cloudOutlook.outlook(pt.lat, pt.lng);
+    let body;
+    try {
+      body = await deadline(cloudOutlook.outlook(pt.lat, pt.lng));
+    } catch (e) {
+      return timeout503(res, e);
+    }
     if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نقدّر حركة السحاب الحين.' });
     /* Time-sensitive (age, ETA count from now): never served from a shared cache. */
     res.set('Cache-Control', 'no-store');

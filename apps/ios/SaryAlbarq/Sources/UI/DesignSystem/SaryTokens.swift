@@ -6,7 +6,7 @@ import UIKit
 
 /// ITF Huwiya Arabic (bundled from Farq) registered at runtime.
 enum SaryFonts {
-    static let files = ["itfHuwiyaArabic-Regular", "itfHuwiyaArabic-Medium", "itfHuwiyaArabic-Bold", "itfHuwiyaArabic-Black"]
+    static let files = ["itfHuwiyaArabic-Light", "itfHuwiyaArabic-Regular", "itfHuwiyaArabic-Medium", "itfHuwiyaArabic-Bold", "itfHuwiyaArabic-Black"]
 
     private static let registered: Bool = {
         for name in files {
@@ -23,10 +23,11 @@ enum SaryFonts {
 }
 
 enum SaryWeight: CaseIterable {
-    case regular, medium, bold, heavy
+    case light, regular, medium, bold, heavy
 
     var postScript: String {
         switch self {
+        case .light: return "itfHuwiyaArabic-Light"
         case .regular: return "itfHuwiyaArabic-Regular"
         case .medium: return "itfHuwiyaArabic-Medium"
         case .bold: return "itfHuwiyaArabic-Bold"
@@ -36,6 +37,7 @@ enum SaryWeight: CaseIterable {
 
     var system: Font.Weight {
         switch self {
+        case .light: return .light
         case .regular: return .regular
         case .medium: return .medium
         case .bold: return .semibold
@@ -307,8 +309,13 @@ struct SaryFlowLayout: Layout {
 // MARK: - Spacing / radius / sizes
 
 /// 4-pt spacing scale. `SaryTheme.space(_:)` applies the density setting.
+/// Build 46 (designer prompt): screens use only 4 / 8 / 12 / 16 / 24 =
+/// `.xs .s .m .l .xxl` (`SarySpace.designScale`); `.xxs/.xl/.xxxl` are legacy.
 enum SarySpace: CGFloat, CaseIterable {
     case xxs = 2, xs = 4, s = 8, m = 12, l = 16, xl = 20, xxl = 24, xxxl = 32
+
+    /// The five steps of the Build 46 design scale.
+    static let designScale: [SarySpace] = [.xs, .s, .m, .l, .xxl]
 }
 
 enum SaryRadius {
@@ -319,6 +326,10 @@ enum SaryRadius {
     static let xl: CGFloat = 28
     /// Sheet top corners.
     static let sheet: CGFloat = 30
+    /// Build 46 names for the designer's 18 / 24 / 28 / 30 set (buttons and tiles, cards, bars, sheet top).
+    static let control: CGFloat = 18
+    static let card: CGFloat = 24
+    static let bar: CGFloat = 28
 }
 
 /// Elevation tokens. Glass surfaces carry their own depth on iOS 26; these

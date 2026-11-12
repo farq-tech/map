@@ -31,8 +31,6 @@ struct PlanMapView: UIViewRepresentable {
     var desert: DesertOverlay? = nil
     /// A desert marker tapped (its id).
     var onDesertTap: (String) -> Void = { _ in }
-    /// Fresh location for the optional always-visible Qibla ray (used on the home map).
-    var qiblaOrigin: LngLat? = nil
     /// The base map (S6): the home map follows the person's choice in the layers sheet; every other use stays satellite.
     var baseLayer: MapLayer = .satellite
 
@@ -55,6 +53,11 @@ struct PlanMapView: UIViewRepresentable {
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
         if !interactive { map.isUserInteractionEnabled = false }
+        /* Owner (Build 45): no tilting by touch; the «٣د / ٢د» button does it. Pan, pinch zoom and rotation stay. */
+        map.gestures.options.pitchEnabled = false
+        #if DEBUG
+        map.accessibilityValue = "pitchEnabled=\(map.gestures.options.pitchEnabled)"
+        #endif
         context.coordinator.attach(map, parent: self)
         return map
     }
@@ -83,6 +86,7 @@ struct PlanMapView: UIViewRepresentable {
         /// Asked before the map had a size or a style: done once it has.
         private var pendingCamera: PlanCamera?
         private var dragging = false
+        private var tiltBinding: MapTiltBinding?
         private let destination = PinSlot<PlanDestinationPin>()
         private let picked = PinSlot<PlanPickedPin>()
         private let user = PinSlot<PlanUserLocationPin>()
@@ -114,6 +118,7 @@ struct PlanMapView: UIViewRepresentable {
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &bag)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.reportCenter() }.store(in: &bag)
             guard parent.interactive else { return }
+            tiltBinding = MapTiltBinding(map: map, mode: { .overview })
             map.gestures.onLayerTap(DesertGazetteerMapLayer.marker) { [weak self] feature, _ in
                 guard let v = feature.feature.properties?["id"], case let .string(id)? = v else { return false }
                 self?.parent?.onDesertTap(id)
@@ -177,7 +182,6 @@ struct PlanMapView: UIViewRepresentable {
             parent = p
             guard let map else { return }
             if p.baseLayer != appliedLayer { setBase(p.baseLayer, on: map) }
-            QiblaMapOverlay.of(map).update(origin: p.qiblaOrigin)
             if styleReady, let m = map.mapboxMap, !dragging, drawnRoute != p.route {
                 PlanMapStyle.update(m, route: p.route)
                 drawnRoute = p.route

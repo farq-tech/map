@@ -174,6 +174,7 @@ struct StandaloneNavScreen: View {
                 HStack(alignment: .bottom) {
                     speedReadout
                     Spacer()
+                    MapTiltButton()
                     Button { toggleCamera(me) } label: {
                         Image(systemName: followMe ? "map.fill" : "location.fill").font(.system(size: 17, weight: .bold))
                             .frame(width: 48, height: 48)

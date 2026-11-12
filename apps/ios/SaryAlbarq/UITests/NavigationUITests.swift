@@ -106,7 +106,10 @@ final class NavigationUITests: XCTestCase {
                 shot(app, "nav-steps-light")
                 app.buttons["nav.steps.close"].tap()
                 app.buttons["nav.end"].tap()
-                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«أوقف التوجيه» ends guidance")
+                /* «إنهاء الرحلة» opens the end sheet; its first row stops the guidance only. */
+                XCTAssertTrue(el(app, "end.sheet").waitForExistence(timeout: 5), "the end sheet")
+                el(app, "end.action.endTrip").tap()
+                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«إنهاء الرحلة» ends guidance")
             }
             app.terminate()
         }
@@ -157,30 +160,20 @@ final class NavigationUITests: XCTestCase {
             XCTAssertTrue(el(app, "nav.distance").exists, "the distance, big")
             let title = el(app, "nav.instruction")
             XCTAssertTrue(title.label.contains("طريق مكة المكرمة"), title.label)
-            /* The maneuver card (`NavDriveLayout`): the instruction on two lines at most, never shrunk. */
-            XCTAssertLessThan(title.frame.height, 100, "the instruction on two lines at most")
+            /* Build 37: the direction in words (big) with the road under it (one smaller line). */
+            XCTAssertLessThan(title.frame.height, 84, "the action on one line, the road on one line")
             XCTAssertFalse(el(app, "nav.banner.eta").frame.intersects(el(app, "nav.banner").frame), "the ETA left the banner")
             let remaining = el(app, "nav.remainingTime")
             XCTAssertTrue(remaining.waitForExistence(timeout: 5), "the time left")
-            XCTAssertTrue(el(app, "nav.eta").label.contains("كم"), "«١٨ كم · وصول ٥:٤٢ م»: \(el(app, "nav.eta").label)")
+            XCTAssertTrue(el(app, "nav.eta").label.contains("كم"), "«١٩ كم · ١٢:٥٦ ص»: \(el(app, "nav.eta").label)")
             let end = app.buttons["nav.end"]
-            XCTAssertTrue(end.exists && end.isHittable, "a clear «أوقف التوجيه»")
-            XCTAssertTrue(end.label.contains("أوقف التوجيه"), end.label)
-            XCTAssertGreaterThan(end.frame.minY, app.frame.height * 0.75, "«أوقف التوجيه» is in the bottom bar")
-            /* UI-AUDIT م3: «المزيد» in the guidance bar; the bar's footer has the friends and the walkie-talkie. */
+            XCTAssertTrue(end.exists && end.isHittable, "a clear «إنهاء الرحلة»")
+            XCTAssertTrue(end.label.contains("إنهاء الرحلة"), end.label)
+            XCTAssertGreaterThan(end.frame.minY, app.frame.height * 0.75, "«إنهاء الرحلة» is in the bottom bar")
+            /* UI-AUDIT م3: «المزيد» and «غيّر الوجهة» in the guidance bar too. */
             XCTAssertTrue(app.buttons["nav.more"].isHittable, "«المزيد» while guiding")
-            let bar = el(app, "nav.bottomBar").frame
-            XCTAssertTrue(el(app, "nav.friends").exists, "«… معك» in the demo group")
-            let ptt = el(app, "outing-ptt")
-            XCTAssertTrue(ptt.exists, "the walkie-talkie while guiding")
-            XCTAssertTrue(bar.contains(CGPoint(x: ptt.frame.midX, y: ptt.frame.midY)), "the walkie-talkie is in the bar's footer: \(ptt.frame) vs \(bar)")
-            XCTAssertGreaterThanOrEqual(ptt.frame.width, 44)
-            XCTAssertTrue(el(app, "nav.progress").exists || el(app, "nav.surfaceAhead").exists, "the trip's progress or its surfaces")
-            let sos = el(app, "outing-sos")
-            XCTAssertTrue(sos.exists, "SOS is never hidden while guiding")
-            XCTAssertGreaterThanOrEqual(sos.frame.width, 44, "the compact «طوارئ» is still a full target")
-            XCTAssertLessThan(sos.frame.width, 60, "compact under the maneuver card")
-            XCTAssertGreaterThan(sos.frame.minY, el(app, "nav.banner").frame.minY, "under the maneuver card")
+            XCTAssertTrue(app.buttons["nav.changeDestination"].isHittable, "«غيّر الوجهة» while guiding")
+            XCTAssertTrue(el(app, "outing-sos").exists, "SOS is never hidden while guiding")
             /* Two side circles at most: the camera and «على الطريق»; the voice and routes are in the sheet. */
             let round = ["outing-locate", "nav.search", "nav.mute", "nav.routes"].filter { el(app, $0).exists }
             XCTAssertEqual(Set(round), ["outing-locate", "nav.search"], "the round buttons: \(round)")
@@ -190,29 +183,12 @@ final class NavigationUITests: XCTestCase {
             sleep(2)
             shot(app, "nav-hud-v2-\(m)")
             openTripOptions(app)
-            /* «غيّر الوجهة» left the bar for the raised sheet (the v2 bar has its footer instead). */
-            for id in ["nav.opt.routes", "nav.opt.share", "nav.opt.voice", "nav.changeDestination"] {
+            for id in ["nav.opt.routes", "nav.opt.share", "nav.opt.voice"] {
                 XCTAssertTrue(el(app, id).exists, id)
             }
             shot(app, "nav-hud-v2-options-\(m)")
             app.terminate()
         }
-    }
-
-    /// `-SaryDriveV1` (DEBUG): the previous driving layout — the dark banner, «غيّر الوجهة» in the bar,
-    /// the walkie-talkie over the map, the 60 pt SOS.
-    func testDriveV1Fallback() {
-        let app = launch(["-SaryDriveV1", "-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode("drive"))
-        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 75), "the maneuver banner")
-        XCTAssertTrue(app.buttons["nav.changeDestination"].isHittable, "«غيّر الوجهة» in the bar, as before")
-        XCTAssertTrue(app.buttons["nav.end"].isHittable)
-        XCTAssertFalse(el(app, "nav.friends").exists, "no footer row in the previous bar")
-        let ptt = el(app, "outing-ptt")
-        if ptt.exists {
-            XCTAssertFalse(el(app, "nav.bottomBar").frame.contains(CGPoint(x: ptt.frame.midX, y: ptt.frame.midY)), "the walkie-talkie over the map")
-        }
-        shot(app, "nav-hud-v1-drive")
-        app.terminate()
     }
 
     func testRerouteOffRoadArrival() {

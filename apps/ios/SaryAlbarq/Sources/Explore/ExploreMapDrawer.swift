@@ -26,6 +26,7 @@ final class ExploreMapDrawer {
     static let tracksSource = "sary-explore-tracks"
     static let placesSource = "sary-explore-places"
     static let endsSource = "sary-explore-track-ends"
+    static let chevronLayer = "sary-explore-tracks-chevrons"
     static let layerIds = ["sary-explore-tracks-casing", "sary-explore-tracks-line", "sary-explore-track-ends", "sary-explore-places-dot", "sary-explore-places-label"]
 
     fileprivate(set) var last = MapExplore()
@@ -77,18 +78,22 @@ final class ExploreMapDrawer {
         let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
         let pos: LayerPosition? = below.map { .below($0) }
         let round: [String: Any] = ["line-join": "round", "line-cap": "round"]
-        let w = TrackLineStyle.width
-        func width(_ k: Double) -> [Any] { ["interpolate", ["exponential", 1.5], ["zoom"], 8, k * 0.45, 14, k, 18, k * 1.45, 20, k * 1.8] }
+        /* GPX tracks shown in exploration are GPS tracks: the shared thin style (`GPSTrackStyle`). */
+        GPSTrackStyle.addImages(m)
+        let k = GPSTrackStyle.coreWidth
         let layers: [[String: Any]] = [
             ["id": Self.layerIds[0], "type": "line", "source": Self.tracksSource, "layout": round,
-             "paint": ["line-color": "#140d06", "line-width": width(w + 3.5), "line-opacity": 0.9, "line-emissive-strength": 1] as [String: Any]],
+             "paint": ["line-color": GPSTrackStyle.edge, "line-width": GPSTrackStyle.width(k + GPSTrackStyle.edgeExtra),
+                       "line-opacity": GPSTrackStyle.edgeOpacity, "line-emissive-strength": 1] as [String: Any]],
             ["id": Self.layerIds[1], "type": "line", "source": Self.tracksSource, "layout": round,
-             "paint": ["line-color": "#ff9f1c", "line-width": width(w), "line-emissive-strength": 1] as [String: Any]],
+             "paint": ["line-color": GPSTrackStyle.core, "line-width": GPSTrackStyle.width(k),
+                       "line-opacity": GPSTrackStyle.coreOpacity, "line-emissive-strength": 1] as [String: Any]],
+            GPSTrackStyle.chevronLayer(id: Self.chevronLayer, source: Self.tracksSource),
             ["id": Self.layerIds[2], "type": "circle", "source": Self.endsSource,
              "paint": ["circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4, 14, 7, 18, 9],
-                       "circle-color": ["match", ["get", "k"], "s", "#ffffff", "#7a2408"],
-                       "circle-stroke-color": ["match", ["get", "k"], "s", "#140d06", "#ffffff"],
-                       "circle-stroke-width": 3, "circle-pitch-alignment": "map", "circle-emissive-strength": 1] as [String: Any]],
+                       "circle-color": ["match", ["get", "k"], "s", "#ffffff", GPSTrackStyle.core],
+                       "circle-stroke-color": GPSTrackStyle.edge,
+                       "circle-stroke-width": 2, "circle-pitch-alignment": "map", "circle-emissive-strength": 1] as [String: Any]],
             ["id": Self.layerIds[3], "type": "circle", "source": Self.placesSource,
              "paint": ["circle-radius": 7, "circle-color": "#ff3b6b", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5,
                        "circle-pitch-alignment": "map", "circle-emissive-strength": 1] as [String: Any]],

@@ -463,6 +463,7 @@ struct MapPointPicker: View {
                 }
                 .padding(theme.space(.m))
                 .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .control)
+                MapTiltButton().frame(maxWidth: .infinity, alignment: .trailing)
                 Spacer()
                 VStack(spacing: theme.space(.s)) {
                     let c = center ?? first

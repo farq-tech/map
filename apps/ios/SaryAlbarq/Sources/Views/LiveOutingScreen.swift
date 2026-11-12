@@ -41,9 +41,9 @@ struct LiveOutingScreen: View {
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
     @State private var realistic: RealisticScene?
-    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
+    @ObservedObject private var tilt = MapTiltModel.shared
     /// «البوصلة» while driving: the target chosen for this outing (nil: the default, `DestinationCompass.resolve`)
     /// and its «أقرب مطر» / «أقرب ربيع» lookups, in memory only.
     @State private var compassTarget: DestinationCompass.Target?
@@ -97,7 +97,6 @@ struct LiveOutingScreen: View {
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) },
                     hiRes: controller.hiResRequest(ui, exploring: exploring),
-                    qiblaOrigin: qiblaMapOrigin,
                     userPoint: weatherUserPoint
                 )
                 }
@@ -197,16 +196,6 @@ struct LiveOutingScreen: View {
         return max(measured, sheetShape.peekHeight)
     }
 
-    /// The qibla ray follows only a recent accepted fix; stale/low-quality GPS must not move it.
-    private var qiblaMapOrigin: LngLat? {
-        let navigating = controller.nav.phase == .guiding || controller.nav.phase == .offRoad
-        guard QiblaMapOverlay.shows(userChoice: showQiblaOnMap, navigating: navigating),
-              let fix = controller.location.lastFix else { return nil }
-        let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
-        guard ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 else { return nil }
-        return LngLat(lng: fix.lng, lat: fix.lat)
-    }
-
     /// The cloud outlook's own-position point: a fix younger than 10 min and accurate to 2 km.
     private var weatherUserPoint: LngLat? {
         guard let fix = controller.location.lastFix else { return nil }
@@ -254,10 +243,14 @@ struct LiveOutingScreen: View {
         let ended = controller.tripEnded
         /* Guiding (v2): up to four round buttons on the right, my speed and the limit bottom-left. */
         let guidingHUD = controller.nav.phase == .guiding && !exploring && !ended
-        let side = LiveCalmRules.withLayers(exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended)),
-                                            layers: .layers(active: controller.terrain3D))
+        let tiltMode = CameraTiltRules.mode(heading: controller.mapFollowMode == .heading, idle: controller.idleHome)
+        let side = LiveCalmRules.withTilt(
+            LiveCalmRules.withLayers(exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended)),
+                                     layers: .layers(active: controller.terrain3D)),
+            tilt: .cameraTilt(is3D: tilt.is3D(tiltMode), settledPitch: tilt.settledPitch))
         /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
-        let showSide = controller.sheetDetent == .peek && !side.isEmpty && (!ended || !exploring)
+        let sideShown = LiveCalmRules.sideItems(side, detent: controller.sheetDetent)
+        let showSide = !sideShown.isEmpty && (!ended || !exploring)
             && LiveFit.sideWithAlertList(bellOpen: controller.bellOpen, screenHeight: full.height)
         /* iPhone SE (667 pt): the side captions drop out so the column stays above the dock (`LiveFit`). */
         /* Driving: bare round buttons (the name is spoken by VoiceOver), at the drive size. */
@@ -285,7 +278,7 @@ struct LiveOutingScreen: View {
                              sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: sosSize, trigger: controller.actions.sos.trigger,
                                                                    countdown: controller.groupUI.serverSOS, caption: !sosCompact)),
                              /* My SOS on (focused mode): no side buttons — the strip, the walkie-talkie and the map. */
-                             side: showSide && !controller.sosFocused ? AnyView(sideView(side, exploring: exploring, captions: sideCaptions).chromeFrame("cluster")) : nil)
+                             side: showSide && !controller.sosFocused ? AnyView(sideView(sideShown, exploring: exploring, captions: sideCaptions).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
                 if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
                     /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. */
@@ -319,6 +312,8 @@ struct LiveOutingScreen: View {
                         /* The hint in the middle; a small walkie-talkie stays reachable (UI-AUDIT م3). */
                         HStack(alignment: .center, spacing: theme.space(.s)) {
                             Spacer(minLength: 0)
+                            VStack(spacing: 6) {
+                                IdleHiResHint(controller: controller, reading: controller.exploreReading, ui: ui)
                             Text("اضغط على أي مكان بالخريطة عشان تشوف معلوماته")
                                 .saryText(.caption, weight: .medium)
                                 .foregroundStyle(theme.palette.textSecondary)
@@ -327,6 +322,7 @@ struct LiveOutingScreen: View {
                                 .padding(.horizontal, 16).padding(.vertical, 8)
                                 .saryGlass(Capsule(), role: .chrome)
                                 .accessibilityIdentifier("explore.hint")
+                            }
                                 .chromeFrame("dock")
                             Spacer(minLength: 0)
                             /* A solo outing has no walkie-talkie (`LiveScreenRules.solo`). */
@@ -343,7 +339,7 @@ struct LiveOutingScreen: View {
                 } else if !ended {
                     /* «البوصلة» (owner's request): bottom-left, above the convoy line and the speed, driving or guiding at
                      * the sheet's peek. Not on the off-road leg (its own arrow card is up) nor on a short screen. */
-                    if DestinationCompass.shows(driving: driving, guiding: controller.nav.phase == .guiding, offRoad: controller.nav.phase == .offRoad,
+                    if NewUI.enabled, DestinationCompass.shows(driving: driving, guiding: controller.nav.phase == .guiding, offRoad: controller.nav.phase == .offRoad,
                                                 exploring: exploring, ended: ended, peek: controller.sheetDetent == .peek,
                                                 sosFocused: controller.sosFocused, bellOpen: controller.bellOpen, screenHeight: full.height) {
                         HStack(spacing: 0) {
@@ -530,15 +526,12 @@ struct LiveOutingScreen: View {
             .map { var i = $0; i.label = "أماكني"; return i }
     }
 
-    /// The idle map (EM3): «موقعي» and the compass, what fits, then ONE «المزيد» (`IdleSideRules`); the layers button is added in front.
+    /// The idle map (EM3): «موقعي», what fits, then ONE «المزيد» (`IdleSideRules`); the layers button is added in front.
     private var idleSide: [SaryMapControlItem] {
         IdleSideRules.items(compact: IdleSideRules.isCompact(screenHeight: Double(screenHeight))).map { item in
             switch item {
             case .locate:
                 return SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate")
-            case .qibla:
-                return SaryMapControlItem(id: "qibla", systemImage: "location.north.line.fill", label: "القبلة", accessibilityID: "idle-qibla",
-                                          isActive: showQiblaOnMap, hint: "شعاع القبلة على الخريطة")
             case .places:
                 return SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني", accessibilityID: "explore-places")
             case .more:
@@ -596,9 +589,9 @@ struct LiveOutingScreen: View {
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         case "actions": controller.modal = .actions
         case "layers": controller.modal = .layers
+        case "tilt": tilt.toggle(CameraTiltRules.mode(heading: controller.mapFollowMode == .heading, idle: controller.idleHome))
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
-        case "qibla": showQiblaOnMap.toggle()
         case "idleMore": controller.idleMoreOpen = true
         case "tracks": controller.modal = .tracks
         case "realistic": openRealistic(atMapCamera: offersCityRealistic(exploring: controller.exploreActive, driving: false))

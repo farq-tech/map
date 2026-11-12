@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// «الطبقات»: the shared layers sheet (docs/ONE-MAP-UNIFICATION.md §6). The base-map cards AND the data layers
-/// (weather, camp sites, OSM tracks, Qibla, high-res imagery, 3D terrain) are generated from `MapLayerRegistry`;
+/// (weather, camp sites, OSM tracks, high-res imagery, 3D terrain) are generated from `MapLayerRegistry`;
 /// only the action rows (camp suggestion, desert route, realistic mode, offline maps) are written by hand.
 /// Same accessibility identifiers as the old `ExploreLayersSheet`, so every existing UI test keeps working.
 struct MapLayersSheet: View {
@@ -22,6 +22,7 @@ struct MapLayersSheet: View {
         let rows = MapLayersSheetModel.baseRows(registry: registry, mode: mode, areas: offline.completeAreas, topoAreas: offline.topoAreas)
         VStack(spacing: 0) {
         SaryPage(title: "الطبقات", close: close) {
+            quickWeatherRow
             VStack(spacing: theme.space(.s)) {
                 ForEach(rows) { row in
                     Button { choose(row.id) } label: {
@@ -71,6 +72,36 @@ struct MapLayersSheet: View {
         .onReceive(MapLayerOwners.changes(controller: controller)) { MapLayerOwners.pull(registry, controller: controller) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("explore.layers.sheet")
+    }
+
+    // MARK: Quick weather
+
+    /// «السحاب» / «المطر» / «الرياح» as three chips above the base maps: one tap turns the layer on (or off), also from guidance.
+    @ViewBuilder private var quickWeatherRow: some View {
+        let chips = MapLayersSheetModel.quickWeather(registry: registry, mode: mode)
+        if !chips.isEmpty {
+            let p = theme.palette
+            HStack(spacing: theme.space(.s)) {
+                ForEach(chips) { c in
+                    Button { toggle(c.id, !c.isOn) } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: c.systemImage).font(.system(size: 18, weight: .semibold))
+                            Text(WeatherOverlayKind.quickName(MapLayerCatalog.weatherKind(c.id) ?? .none)).saryText(.footnote, weight: .bold)
+                                .lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                        .foregroundStyle(c.isOn ? p.onAccent : p.textPrimary)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(c.isOn ? p.accent : p.sunken))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(c.isOn ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityIdentifier(c.testID)
+                }
+            }
+            .padding(.bottom, theme.space(.s))
+        }
     }
 
     // MARK: Generated sections

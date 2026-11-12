@@ -23,6 +23,25 @@ enum LiveCalmRules {
         [layers] + items.filter { $0.id != layers.id }
     }
 
+    /// The side column per sheet height. Peek: everything. Half: the layers button alone (owner's Build 44 report: «خلال الطلعة لا يمكنني
+    /// الضغط على الطبقات» — with the sheet raised the whole column, layers included, was gone, so there was nothing to press).
+    /// Full: nothing (the sheet covers the map).
+    static func sideItems(_ items: [SaryMapControlItem], detent: SheetDetentUI) -> [SaryMapControlItem] {
+        switch detent {
+        case .peek: return items
+        case .half: return items.filter { $0.id == "layers" || $0.id == "tilt" }
+        default: return []
+        }
+    }
+
+    /// The camera-angle button («٣د» / «٢د») sits right after the layers button in EVERY mode (stopped, driving, exploring,
+    /// guiding, idle, after the end); like the layers button it never counts toward the two-button limit. Pure.
+    static func withTilt(_ items: [SaryMapControlItem], tilt: SaryMapControlItem) -> [SaryMapControlItem] {
+        var rest = items.filter { $0.id != tilt.id }
+        rest.insert(tilt, at: rest.first?.id == "layers" ? 1 : 0)
+        return rest
+    }
+
     /// The round buttons on the map's side (stopped): «تتبعني» and «أدوات» only, plus «طريق العودة»
     /// when it fits the moment; after the end, the camera alone. Driving: none.
     static func sideItems(camera: SaryMapControlItem, backTrack: SaryMapControlItem?, plusBadge: Int?,
@@ -128,11 +147,18 @@ struct LiveSideButtons: View {
                 VStack(spacing: 4) {
                     Button { action(item.id) } label: {
                         let turned = item.id == "locate" && !item.isActive && abs(Self.wrap(bearing)) > 3
-                        Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : (captions ? "scope" : item.systemImage)) : item.systemImage))
-                            .rotationEffect(.degrees(turned ? -bearing : 0))
-                            .font(.system(size: item.id == "actions" ? 22 : 20, weight: .semibold))
-                            .foregroundStyle(filled ? p.onAccent : p.textPrimary)
-                            .contentTransition(.symbolEffect(.replace))
+                        Group {
+                            if let glyph = item.glyph {
+                                Text(glyph).font(.system(size: theme.drive ? 22 : 18, weight: .heavy)).minimumScaleFactor(0.7).lineLimit(1)
+                                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                            } else {
+                                Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : (captions ? "scope" : item.systemImage)) : item.systemImage))
+                                    .rotationEffect(.degrees(turned ? -bearing : 0))
+                                    .font(.system(size: item.id == "actions" ? 22 : 20, weight: .semibold))
+                                    .contentTransition(.symbolEffect(.replace))
+                            }
+                        }
+                        .foregroundStyle(filled ? p.onAccent : p.textPrimary)
                             .frame(width: theme.drive ? 60 : 48, height: theme.drive ? 60 : 48)
                             .background { if filled { Circle().fill(p.accent) } }
                             .saryGlass(Circle(), role: .chrome, interactive: true)

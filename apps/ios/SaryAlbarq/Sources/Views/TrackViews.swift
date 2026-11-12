@@ -232,6 +232,7 @@ struct FollowTrackPanel: View {
                 .accessibilityLabel(Text("قطعت \(SaryFormat.percent(Int((pr * 100).rounded(.down)))) من المسار"))
                 .accessibilityIdentifier("follow.progress")
             }
+            if !arrived { GPSTrackLegend() }
             if ui.phase == .far {
                 if ui.online, let approach {
                     Button(action: approach) {

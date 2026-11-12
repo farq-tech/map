@@ -27,21 +27,29 @@ struct IdleMapHost: View {
             .task { await model.refresh() }
             .onAppear {
                 model.idleMapShown = true
+                MapTiltModel.shared.idleHome = true
                 session.open()
-                /* The navigation map's 3D look, centred on me (R02); the person can change it with two fingers. */
-                let hot = ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
-                let pitch = IdleMapRules.idlePitch(lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled, thermalHot: hot)
+                /* The navigation map's 3D look, centred on me (R02); the «٣د / ٢د» button changes it (no touch tilt). */
+                /* The remembered «٣د / ٢د» choice of this map (3D at 40° until the person flattens it). */
+                let pitch = MapTiltModel.shared.pitch(.idle)
                 #if DEBUG
                 /* `-SaryHiResCam lat,lng,zoom` puts the camera on a test spot itself: the idle map must not race it. */
                 if ProcessInfo.processInfo.arguments.contains("-SaryHiResCam") { return }
                 #endif
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    controller.ask(.me)
-                    controller.ask(.tilt(pitch))
+                Task { @MainActor in
+                    /* Wait for the first fix (up to 10 s): the opening zoom depends on where I am (open land / a city). */
+                    for _ in 0..<20 where model.location.lastFix == nil { try? await Task.sleep(nanoseconds: 500_000_000) }
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    if let f = model.location.lastFix {
+                        controller.ask(.idleOpen(zoom: IdleMapRules.openingZoom(lat: f.lat, lng: f.lng), pitch: pitch))
+                    } else {
+                        controller.ask(.tilt(pitch))
+                    }
                 }
             }
             .onDisappear {
                 model.idleMapShown = false
+                MapTiltModel.shared.idleHome = false
                 session.close()
             }
     }
@@ -136,6 +144,17 @@ struct IdleSheetContent: View {
         .sheet(isPresented: $creating) { CreateOutingWizard().saryPresented(appearance) }
         .sheet(isPresented: $joining) { JoinByLinkSheet().saryPresented(appearance) }
         .fullScreenCover(isPresented: $profileOpen) { IdleProfileFlow().saryPresented(appearance) }
+        /* Queued: shown once no other sheet of the idle map is up (`IdleMapRules.idlePresentsNotifyExplainer`). */
+        .sheet(isPresented: Binding(
+            get: {
+                IdleMapRules.idlePresentsNotifyExplainer(
+                    offer: model.offerNotifications, pendingInvite: model.pendingInvite != nil,
+                    idleSheetOpen: searchQuery != nil || toolsOpen || creating || joining || profileOpen || controller.idleMoreOpen,
+                    liveModalOpen: controller.modal != nil)
+            },
+            set: { if !$0 { model.offerNotifications = false } })) {
+            NotifyExplainerSheet(done: { model.offerNotifications = false }).saryPresented(appearance)
+        }
         .confirmationDialog("المزيد", isPresented: $controller.idleMoreOpen, titleVisibility: .visible) {
             let compact = IdleSideRules.isCompact(screenHeight: Double(UIScreen.main.bounds.height))
             ForEach(IdleSideRules.moreActions(compact: compact), id: \.rawValue) { a in
@@ -223,6 +242,34 @@ struct IdleProfileFlow: View {
                     HomeRouteDestination(route: route, path: $path)
                         .navigationBarBackButtonHidden(true)
                 }
+        }
+    }
+}
+
+/// «قرّب لصور أوضح»: high-res imagery is available and not drawn at this zoom. Tapping goes to where it starts.
+struct IdleHiResHint: View {
+    @ObservedObject var controller: LiveOutingController
+    @ObservedObject var reading: ExploreReadingModel
+    var ui: LiveOutingUIState
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        if controller.idleShowsHiResHint(ui, reading: reading.reading), let r = reading.reading {
+            Button { controller.ask(.zoom(IdleMapRules.hiResTargetZoom(lat: r.center.lat, lng: r.center.lng))) } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "photo.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.palette.accentText)
+                    Text("قرّب لصور أوضح").font(.sary(14, .bold)).foregroundStyle(theme.palette.textPrimary)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .saryGlass(Capsule(), role: .chrome, interactive: true)
+                .contentShape(Capsule())
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityIdentifier("idle.hires.hint")
+            .accessibilityValue(Text(String(format: "z%.2f", r.zoom)))
+            .accessibilityHint(Text("يقرّب الخريطة للمستوى اللي تبدأ فيه الصور عالية الوضوح"))
+            .transition(.opacity)
         }
     }
 }

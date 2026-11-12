@@ -35,6 +35,8 @@ struct TrackMapView: UIViewRepresentable {
         map.ornaments.options.logo.margins = CGPoint(x: 8, y: padding.bottom + 4)
         /* The imagery's sharp maximum: no blurry over-zoom. */
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: zoomCap))
+        /* Owner (Build 45): no tilting by touch; the «٣د / ٢د» button does it. Pan, pinch zoom and rotation stay. */
+        map.gestures.options.pitchEnabled = false
         if !interactive {
             map.gestures.options.panEnabled = false
             map.gestures.options.pinchEnabled = false
@@ -80,7 +82,9 @@ struct TrackMapView: UIViewRepresentable {
             props = p
             map.gestures.delegate = self
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
+            if p.interactive { tiltBinding = MapTiltBinding(map: map, mode: { .overview }) }
         }
+        private var tiltBinding: MapTiltBinding?
 
         func gestureManager(_ gestureManager: GestureManager, didBegin gestureType: GestureType) {
             userMoved = true
@@ -126,7 +130,7 @@ struct TrackMapView: UIViewRepresentable {
             props = p
             guard ready, let map else { return }
             let m: MapboxMap = map.mapboxMap
-            drawer.update(m, line: p.line, style: TrackLineStyle(width: TrackLineStyle.width + 0.5, glow: p.highlight),
+            drawer.update(m, line: p.line, style: .gpsTrack,
                           below: m.layerExists(withId: "\(Self.approachSource)-line") ? "\(Self.approachSource)-line" : nil)
             if drawnApproach != p.approach {
                 drawnApproach = p.approach
@@ -142,7 +146,7 @@ struct TrackMapView: UIViewRepresentable {
                 fittedKey = p.fitKey
                 userMoved = false
                 fit(p)
-            } else if p.followMe, !userMoved, let me = p.me {
+            } else if p.followMe, !userMoved, let me = p.me, Self.debugCamera == nil {
                 map.camera.ease(to: CameraOptions(center: me.coordinate, padding: p.padding, zoom: max(m.cameraState.zoom, 16)),
                                 duration: MapCameraMotion.recenter.duration(reduceMotion: MapCameraMotion.reduceMotionNow))
             }
@@ -160,9 +164,26 @@ struct TrackMapView: UIViewRepresentable {
             guard let b = GroupFraming.bounds(pts) else { return }
             let coords = [CLLocationCoordinate2D(latitude: b.south, longitude: b.west), CLLocationCoordinate2D(latitude: b.north, longitude: b.east)]
             let pad = UIEdgeInsets(top: p.padding.top + 36, left: 36, bottom: p.padding.bottom + 36, right: 36)
-            guard let cam = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(bearing: 0, pitch: 0), coordinatesPadding: pad,
+            guard let cam = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(bearing: 0, pitch: p.interactive ? MapTiltModel.shared.pitch(.overview) : 0), coordinatesPadding: pad,
                                                       maxZoom: SatelliteLabels.trackMaxZoom, offset: nil) else { return }
             map.mapboxMap.setCamera(to: cam)
+            #if DEBUG
+            if let d = Self.debugCamera {
+                map.mapboxMap.setCamera(to: CameraOptions(center: p.line.points[p.line.points.count / 2].coordinate, zoom: d.zoom, pitch: d.pitch))
+            }
+            #endif
+        }
+
+        /// Screenshots only (`-SaryTrackZoom 15 [-SaryTrackPitch 50]`): a fixed zoom on me / the track's centre.
+        static var debugCamera: (zoom: Double, pitch: Double)? {
+            #if DEBUG
+            let a = ProcessInfo.processInfo.arguments
+            guard let i = a.firstIndex(of: "-SaryTrackZoom"), i + 1 < a.count, let z = Double(a[i + 1]) else { return nil }
+            let pitch = a.firstIndex(of: "-SaryTrackPitch").flatMap { $0 + 1 < a.count ? Double(a[$0 + 1]) : nil } ?? 0
+            return (z, pitch)
+            #else
+            return nil
+            #endif
         }
     }
 }

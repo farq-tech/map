@@ -70,7 +70,6 @@ struct MapHomeScreen: View {
     /// Where I am before any trip (the live sharer only runs during one).
     @StateObject private var locator = OneShotLocator()
     @ObservedObject private var saved = SavedPlacesStore.shared
-    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// S6: the base map the person chose in «الطبقات» (the same stored choice the outing map uses; satellite on a first launch).
     @State private var baseLayer: MapLayer = MapLayer.saved
     @State private var layersOpen = false
@@ -113,7 +112,7 @@ struct MapHomeScreen: View {
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin", desert: true)) },
                             desert: desertOverlay,
                             onDesertTap: { id in pinTapped(id) },
-                            qiblaOrigin: qiblaMapOrigin, baseLayer: baseLayer)
+                            baseLayer: baseLayer)
                     .padding(.bottom, mapInset)
                     .animation(theme.animation(.smooth), value: mapInset)
                     .ignoresSafeArea()
@@ -127,8 +126,8 @@ struct MapHomeScreen: View {
                             Spacer()
                             VStack(spacing: theme.space(.s)) {
                                 layersMapButton
+                                MapTiltButton()
                                 locateButton
-                                qiblaMapButton
                             }
                         }
                         .padding(.horizontal, theme.space(.l))
@@ -267,7 +266,7 @@ struct MapHomeScreen: View {
         .accessibilityIdentifier("home.locate")
     }
 
-    /// THE layers button (`map.layers`, the same icon as on the outing map). Qibla stays its own shortcut beside it (owner decision 2).
+    /// THE layers button (`map.layers`, the same icon as on the outing map). The Qibla button and ray were removed (owner, 2026-11-13): the compass stays in «البر».
     private var layersMapButton: some View {
         Button { layersOpen = true } label: {
             Image(systemName: "square.3.layers.3d").font(.system(size: 17, weight: .semibold))
@@ -281,19 +280,6 @@ struct MapHomeScreen: View {
         .accessibilityIdentifier("map.layers")
     }
 
-    private var qiblaMapButton: some View {
-        Button { showQiblaOnMap.toggle() } label: {
-            Image(systemName: showQiblaOnMap ? "location.north.fill" : "location.north")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(showQiblaOnMap ? theme.palette.onAccent : theme.palette.accentText)
-                .frame(width: 46, height: 46)
-                .background(Circle().fill(showQiblaOnMap ? theme.palette.accent : theme.palette.elevated))
-                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
-        }
-        .buttonStyle(SaryPressStyle())
-        .accessibilityLabel(Text(showQiblaOnMap ? "إخفاء اتجاه القبلة من الخريطة" : "إظهار اتجاه القبلة على الخريطة"))
-        .accessibilityIdentifier("home.qibla.toggle")
-    }
 
     // MARK: the sheet
 
@@ -1057,20 +1043,6 @@ struct MapHomeScreen: View {
         location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) } ?? locator.fix.map { LngLat(lng: $0.lng, lat: $0.lat) }
     }
 
-    private var qiblaMapOrigin: LngLat? {
-        guard showQiblaOnMap else { return nil }
-        let nowMs = Date().timeIntervalSince1970 * 1000
-        if let fix = location.lastFix {
-            let ageMs = nowMs - fix.atMs
-            if ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 {
-                return LngLat(lng: fix.lng, lat: fix.lat)
-            }
-        }
-        guard let fix = locator.measuredLocation else { return nil }
-        let age = Date().timeIntervalSince(fix.timestamp)
-        guard age >= 0, age <= 900, fix.horizontalAccuracy >= 0, fix.horizontalAccuracy <= 3_000 else { return nil }
-        return LngLat(lng: fix.coordinate.longitude, lat: fix.coordinate.latitude)
-    }
 
     private var activeOuting: OutingSummary? { sortedCurrent.first { $0.status == .active } }
 
@@ -1379,8 +1351,12 @@ extension MapHomeScreen {
             topBar
             HStack {
                 Spacer()
-                SaryControlCluster(items: v2MapControls) { id in
-                    if id == "layers" { layersOpen = true } else { recenter(zoom: 14) }
+                VStack(spacing: theme.space(.s)) {
+                    SaryControlCluster(items: v2MapControls) { id in
+                        if id == "layers" { layersOpen = true } else { recenter(zoom: 14) }
+                    }
+                    /* The one 2D/3D button on every map (owner, Build 46). */
+                    MapTiltButton()
                 }
             }
             .padding(.horizontal, theme.space(.l))
