@@ -22,6 +22,9 @@ struct SaryPTTButton: View {
     /// The pill's minimum width when the dock is short of room (`LiveFit.dock`); nil: 200 / 178.
     /// Below the regular width the side padding tightens and the title scales down (never wraps).
     var pillMinWidth: CGFloat? = nil
+    /// The round disc's diameter (nil: the theme's big button), e.g. the guidance bar's footer
+    /// (`NavDriveLayout.footerControl`); a set size drops the 16 pt halo margin around it.
+    var discSize: CGFloat? = nil
 
     @Environment(\.sary) private var theme
     @State private var pressing = false
@@ -224,7 +227,8 @@ struct SaryPTTButton: View {
 
     @ViewBuilder
     private var discBody: some View {
-        let size = theme.bigButton
+        let size = discSize ?? theme.bigButton
+        let margin: CGFloat = discSize == nil ? 16 : 0
         VStack(spacing: theme.space(.xs)) {
             ZStack {
                 halo(size: size)
@@ -239,7 +243,7 @@ struct SaryPTTButton: View {
                         .animation(theme.animation(.snappy), value: remaining)
                 }
             }
-            .frame(width: size + 16, height: size + 16)
+            .frame(width: size + margin, height: size + margin)
             .contentShape(Circle())
             .gesture(pressGesture)
             .accessibilityElement(children: .ignore)
