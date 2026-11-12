@@ -133,7 +133,7 @@ final class NavMapDrawer {
                            "sary-nav-dirt-casing", "sary-nav-dirt", "sary-nav-dirt-ruts",
                            "sary-nav-terrain-casing", "sary-nav-terrain",
                            "sary-nav-rough-casing", "sary-nav-rough", "sary-nav-rough-ticks",
-                           "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off",
+                           "sary-nav-unknown-casing", "sary-nav-unknown", "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off",
                            "sary-nav-maneuver-casing", "sary-nav-maneuver", "sary-nav-maneuver-head"]
 
     /// One faded paint property and the value it rests at (the same values as in `addLayers`).
@@ -191,8 +191,15 @@ final class NavMapDrawer {
     /// pale wheel-rut dashes; open terrain = amber dots; rough ground = red-ochre dashes with ticks.
     enum SurfaceStyle {
         static let dirtRGB: UInt32 = 0xD6A15A, dirtEdgeRGB: UInt32 = 0x5B3A1C, dirtRutsRGB: UInt32 = 0xF6E2B8
-        static let terrainRGB: UInt32 = 0xF2C14E, terrainEdgeRGB: UInt32 = 0x3A2913
-        static let roughRGB: UInt32 = 0xD9502F, roughEdgeRGB: UInt32 = 0x2A0E07, roughTicksRGB: UInt32 = 0xFFD9C9
+        /* Off-road («خارج الطريق») is ONE colour, fuchsia, for open terrain and rough ground alike (they differ
+         * in pattern only): far from the sand of the dirt track and from the blue of asphalt, also on sand imagery. */
+        static let offRoadRGB: UInt32 = 0xC026D3
+        static let terrainRGB: UInt32 = offRoadRGB, terrainEdgeRGB: UInt32 = 0x2E0A33
+        static let roughRGB: UInt32 = offRoadRGB, roughEdgeRGB: UInt32 = 0x2E0A33, roughTicksRGB: UInt32 = 0xF8D4FA
+        /* Unknown ground: neutral grey, long dashes. Never the asphalt blue. */
+        static let unknownRGB: UInt32 = 0x8E99A6, unknownEdgeRGB: UInt32 = 0x1F2933
+        static let unknown = hex(unknownRGB), unknownEdge = hex(unknownEdgeRGB)
+        static let offRoad = hex(offRoadRGB)
         static func hex(_ rgb: UInt32) -> String { String(format: "#%06X", rgb) }
         static let dirt = hex(dirtRGB), dirtEdge = hex(dirtEdgeRGB), dirtRuts = hex(dirtRutsRGB)
         static let terrain = hex(terrainRGB), terrainEdge = hex(terrainEdgeRGB)
@@ -293,6 +300,13 @@ final class NavMapDrawer {
             ["id": "sary-nav-rough-ticks", "type": "line", "source": Self.source, "filter": kind(.rough), "layout": ["line-cap": "butt"],
              "paint": ["line-color": SurfaceStyle.roughTicks, "line-width": width(7), "line-dasharray": [0.12, 1.1],
                        "line-opacity": 0.9, "line-emissive-strength": 1] as [String: Any]],
+            /* Unknown ground («غير معروف»): grey long dashes, never mistaken for asphalt. */
+            ["id": "sary-nav-unknown-casing", "type": "line", "source": Self.source, "filter": kind(.unknown), "layout": round,
+             "paint": ["line-color": SurfaceStyle.unknownEdge, "line-width": width(9), "line-opacity": 0.7,
+                       "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-unknown", "type": "line", "source": Self.source, "filter": kind(.unknown), "layout": ["line-cap": "butt", "line-join": "round"],
+             "paint": ["line-color": SurfaceStyle.unknown, "line-width": width(6),
+                       "line-dasharray": [3.2, 1.6], "line-emissive-strength": 1] as [String: Any]],
             /* The road-to-grid cell-center join is approximate by definition, never a solid road. */
             ["id": "sary-nav-grid-snap-casing", "type": "line", "source": Self.source, "filter": gridSnap, "layout": round,
              "paint": ["line-color": "#21180d", "line-width": width(7), "line-opacity": 0.8,
@@ -416,7 +430,9 @@ final class NavMapDrawer {
         var feats: [Feature] = []
         /* Alternatives first, the chosen route last (drawn on top by its own layer anyway). */
         for r in drawing.routes.sorted(by: { !$0.selected && $1.selected }) where r.coordinates.count >= 2 {
-            if r.selected, !r.surfaces.isEmpty, r.traffic?.isEmpty != false {
+            /* The surface split wins over traffic tint (it used to be dropped on every Mapbox route, which
+             * always carries traffic: the owner's sand/dirt stretches stayed blue). All asphalt: traffic stays. */
+            if r.selected, NavSurface.hasOffAsphalt(r.surfaces) {
                 for run in r.surfaces where run.coordinates.count >= 2 {
                     var f = Feature(geometry: .lineString(LineString(run.coordinates.map(\.coordinate))))
                     f.properties = ["s": .number(1), "id": .string(r.id), "k": .string(run.kind.rawValue)]
