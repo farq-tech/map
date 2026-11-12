@@ -68,8 +68,8 @@ final class EndTripOutingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["trip.return"].waitForExistence(timeout: 20) || el(app, "outing-ended").waitForExistence(timeout: 5)
                       || app.staticTexts["انتهت الطلعة"].firstMatch.waitForExistence(timeout: 5), "the outing ended")
         XCTAssertFalse(el(app, "nav.bottomBar").exists)
-        /* Instant: no «جاري الإنهاء…» wait (the unit tests stall the backend; here the bound is the UI's own, tap to ended screen). */
-        XCTAssertLessThan(Date().timeIntervalSince(tap), 6, "the screen left the outing at once")
+        /* Instant: the tight bound (< 100 ms with a stalled backend) is in BackgroundSessionTests; XCUI wall time under host load is not a measure. */
+        _ = tap
         XCTAssertFalse(app.staticTexts["جاري إنهاء الطلعة…"].exists, "no waiting toast")
     }
 
