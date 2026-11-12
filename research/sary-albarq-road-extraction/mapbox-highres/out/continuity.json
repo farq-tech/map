@@ -1,0 +1,122 @@
+{
+ "bright_0.95": {
+  "real": {
+   "covered_m": 11130.0,
+   "frac_in_runs_ge_100m": 0.8283917340521114,
+   "longest_run_m": 670.0
+  },
+  "control_one_draw": {
+   "covered_m": 11460.0,
+   "frac_in_runs_ge_100m": 0.7068062827225131,
+   "longest_run_m": 960.0
+  }
+ },
+ "bright_0.97": {
+  "real": {
+   "covered_m": 7100.0,
+   "frac_in_runs_ge_100m": 0.7309859154929578,
+   "longest_run_m": 600.0
+  },
+  "control_one_draw": {
+   "covered_m": 6540.0,
+   "frac_in_runs_ge_100m": 0.6467889908256881,
+   "longest_run_m": 570.0
+  }
+ },
+ "bright_0.99": {
+  "real": {
+   "covered_m": 1430.0,
+   "frac_in_runs_ge_100m": 0.5104895104895105,
+   "longest_run_m": 190.0
+  },
+  "control_one_draw": {
+   "covered_m": 1370.0,
+   "frac_in_runs_ge_100m": 0.4306569343065693,
+   "longest_run_m": 170.0
+  }
+ },
+ "dark_0.95": {
+  "real": {
+   "covered_m": 7890.0,
+   "frac_in_runs_ge_100m": 0.779467680608365,
+   "longest_run_m": 680.0
+  },
+  "control_one_draw": {
+   "covered_m": 9340.0,
+   "frac_in_runs_ge_100m": 0.6916488222698073,
+   "longest_run_m": 500.0
+  }
+ },
+ "dark_0.97": {
+  "real": {
+   "covered_m": 4410.0,
+   "frac_in_runs_ge_100m": 0.7551020408163265,
+   "longest_run_m": 680.0
+  },
+  "control_one_draw": {
+   "covered_m": 7010.0,
+   "frac_in_runs_ge_100m": 0.6205420827389444,
+   "longest_run_m": 330.0
+  }
+ },
+ "dark_0.99": {
+  "real": {
+   "covered_m": 770.0,
+   "frac_in_runs_ge_100m": 0.5454545454545454,
+   "longest_run_m": 160.0
+  },
+  "control_one_draw": {
+   "covered_m": 1470.0,
+   "frac_in_runs_ge_100m": 0.3129251700680272,
+   "longest_run_m": 160.0
+  }
+ },
+ "meijering_bright_0.95": {
+  "real": {
+   "covered_m": 9590.0,
+   "frac_in_runs_ge_100m": 0.6809176225234619,
+   "longest_run_m": 590.0
+  },
+  "control_one_draw": {
+   "covered_m": 10480.0,
+   "frac_in_runs_ge_100m": 0.6641221374045801,
+   "longest_run_m": 930.0
+  }
+ },
+ "meijering_bright_0.97": {
+  "real": {
+   "covered_m": 5670.0,
+   "frac_in_runs_ge_100m": 0.6772486772486772,
+   "longest_run_m": 580.0
+  },
+  "control_one_draw": {
+   "covered_m": 5160.0,
+   "frac_in_runs_ge_100m": 0.47674418604651164,
+   "longest_run_m": 450.0
+  }
+ },
+ "meijering_dark_0.95": {
+  "real": {
+   "covered_m": 5480.0,
+   "frac_in_runs_ge_100m": 0.7645985401459854,
+   "longest_run_m": 680.0
+  },
+  "control_one_draw": {
+   "covered_m": 7270.0,
+   "frac_in_runs_ge_100m": 0.546079779917469,
+   "longest_run_m": 510.0
+  }
+ },
+ "meijering_dark_0.97": {
+  "real": {
+   "covered_m": 3560.0,
+   "frac_in_runs_ge_100m": 0.7303370786516854,
+   "longest_run_m": 670.0
+  },
+  "control_one_draw": {
+   "covered_m": 4460.0,
+   "frac_in_runs_ge_100m": 0.5403587443946188,
+   "longest_run_m": 330.0
+  }
+ }
+}

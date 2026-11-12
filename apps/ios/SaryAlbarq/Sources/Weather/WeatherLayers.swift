@@ -81,8 +81,9 @@ enum WeatherLegend {
         .init(hex: 0xFFFFFF, label: "خط التدفق: طوله مسافة ٦ ساعات بسرعة الريح، والسهم وجهتها"),
     ]
     static let clouds: [WeatherLegendItem] = [
-        .init(hex: 0xFFFFFF, label: "أبيض كثيف: سحب عالية (احتمال مطر)"),
-        .init(hex: 0xD8DEE6, label: "خفيف: سحب رقيقة"),
+        .init(hex: 0x78D6FF, label: "قمم باردة: احتمال مطر"),
+        .init(hex: 0xFFFFFF, label: "سحب كثيفة"),
+        .init(hex: 0xA5C8EE, label: "سحب رقيقة"),
     ]
 
     static func items(_ k: WeatherOverlayKind) -> [WeatherLegendItem] {

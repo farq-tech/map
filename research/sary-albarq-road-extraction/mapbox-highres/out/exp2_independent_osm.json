@@ -1,0 +1,24 @@
+{
+ "north": {
+  "osm_only_km": 0.09,
+  "note": "too little independent OSM track in the corridor"
+ },
+ "middle": {
+  "osm_only_km": 0.79,
+  "covered_30m_ft": 0.20253164556962025,
+  "control_p50_ft": 0.0759493670886076,
+  "control_p95_ft": 0.7987341772151902,
+  "covered_30m_zeroshot": 0.06329113924050633,
+  "control_p50_zeroshot": 0.0,
+  "control_p95_zeroshot": 0.0759493670886076
+ },
+ "south": {
+  "osm_only_km": 1.1500000000000001,
+  "covered_30m_ft": 0.4782608695652174,
+  "control_p50_ft": 0.12173913043478261,
+  "control_p95_ft": 0.34826086956521746,
+  "covered_30m_zeroshot": 0.0,
+  "control_p50_zeroshot": 0.0,
+  "control_p95_zeroshot": 0.09565217391304348
+ }
+}

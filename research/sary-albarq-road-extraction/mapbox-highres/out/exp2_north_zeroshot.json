@@ -1,0 +1,22 @@
+{
+ "fold": "north",
+ "zeroshot": true,
+ "steps": 0,
+ "test_tiles": 105,
+ "dirt_km_in_zone": 11.21,
+ "skeleton_km": null,
+ "coverage_15m": 0.012488849241748439,
+ "covered_km_15m": 0.14,
+ "coverage_30m": 0.015165031222123104,
+ "covered_km_30m": 0.17,
+ "control_15m_p50": 0.0,
+ "control_15m_p95": 0.0,
+ "frac_controls_ge_15m": 0.0,
+ "control_30m_p50": 0.0,
+ "control_30m_p95": 0.0,
+ "frac_controls_ge_30m": 0.0,
+ "precision_30m_gps_plus_osm_tracks": 1.0,
+ "precision_30m_control_p50": 0.0,
+ "skeleton_px": 97,
+ "pass_gates": false
+}

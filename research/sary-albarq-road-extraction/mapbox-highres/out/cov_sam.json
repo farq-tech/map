@@ -1,0 +1,18 @@
+{
+ "masked_out_frac": 0.2510729613733905,
+ "asphalt_mask_m": 75,
+ "windows": 24,
+ "edge_len_km_after_mask": 3.49,
+ "samples_dirt_in_windows": 1071,
+ "coverage_15m_dirt": 0.10644257703081232,
+ "coverage_30m_dirt": 0.12138188608776844,
+ "control_15m_p50": 0.0028011204481792717,
+ "control_15m_p95": 0.003734827264239029,
+ "frac_controls_ge_real_15m": 0.0,
+ "control_30m_p50": 0.0056022408963585435,
+ "control_30m_p95": 0.008403361344537815,
+ "frac_controls_ge_real_30m": 0.0,
+ "precision_30m_vs_gps_edges_near_track": 0.660458452722063,
+ "precision_30m_control_p50": 0.025787965616045846,
+ "precision_30m_control_p95": 0.05730659025787966
+}
