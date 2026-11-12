@@ -210,4 +210,30 @@ final class OneMapIdleUITests: XCTestCase {
         el(app, "profile.sheet.settings").tap()
         XCTAssertTrue(app.staticTexts["الإعدادات"].firstMatch.waitForExistence(timeout: 10), "the settings page is pushed")
     }
+
+    // MARK: R01: high-res imagery where it exists
+
+    /// The enhancement draws only from z16 in the desert and z18 in a city (`HiResZoom`); the home map's z15 never reached it.
+    /// Opt-in (slow: network tiles + the on-device model): `TEST_RUNNER_SARY_R01=1`. Shots: `r01-<spot>-on|off`.
+    func testHighResAtTheZoomWhereItExistsShowsTheBadgeAndChangesThePixels() throws {
+        guard ProcessInfo.processInfo.environment["SARY_R01"] != nil else { throw XCTSkip("set TEST_RUNNER_SARY_R01=1 (slow, needs the network)") }
+        let spots = [("huraymila-z18", "25.12,46.10,18.0"), ("riyadh-z19", "24.80,46.68,19.0")]
+        for (name, cam) in spots {
+            for on in [true, false] {
+                let app = launch(["-SaryHiResCam", cam, "-SaryHiRes", on ? "on" : "off", "-SaryHiResRemote", "on"], reset: on)
+                XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
+                app.allowLocationIfAsked(within: 3)
+                let badge = el(app, "hires.badge")
+                if on {
+                    XCTAssertTrue(badge.waitForExistence(timeout: 150), "\(name): «مُحسّنة» once enhanced tiles are on screen")
+                    Thread.sleep(forTimeInterval: 90)
+                } else {
+                    Thread.sleep(forTimeInterval: 40)
+                    XCTAssertFalse(badge.exists, "\(name): switched off, no badge")
+                }
+                shot("r01-\(name)-\(on ? "on" : "off")")
+                app.terminate()
+            }
+        }
+    }
 }
