@@ -254,3 +254,117 @@ enum HomeListCopy {
         return generic.contains(message.trimmingCharacters(in: .whitespaces)) ? "صار خلل من طرفنا. جرّب مرة ثانية بعد شوي." : message
     }
 }
+
+// MARK: - Home V2 (the owner-approved redesign: one bar on top, one card at the bottom, two map buttons)
+
+/// The home layout: V2 by default; the old layout (chips over the map, three side buttons, search
+/// inside the sheet) stays reachable behind DEBUG `-SaryHomeV1`, like `StandaloneNavSwitch`.
+enum HomeLayoutSwitch {
+    static let argument = "-SaryHomeV1"
+
+    /// True when the old layout was asked for (DEBUG builds only; Release is always V2).
+    static func v1(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
+        #if DEBUG
+        return arguments.contains(argument)
+        #else
+        return false
+        #endif
+    }
+
+    static var isV2: Bool { !v1() }
+}
+
+/// The weather line on top of the V2 bottom card: «٢٤° صافي» and «المغرب ٥:١٢ م».
+struct HomeWeatherLine: Equatable {
+    /// Temperature and condition now; nil when no usable reading is kept (offline, expired).
+    var weather: String?
+    /// «المغرب …» by day, «الشروق …» by night: from the sun's position, no network.
+    var sun: String?
+}
+
+/// Pure rules of the V2 bottom card (unit-tested in HomeFlowTests): which rows it shows for a
+/// screen height, and how tall it is collapsed. Small screens (iPhone SE, 667 pt) drop the last
+/// outing row first, then shrink the shortcut grid to icons.
+enum HomeLayoutRules {
+    enum Grid: Equatable { case tiles, icons }
+
+    struct Plan: Equatable {
+        var weatherLine: Bool
+        /// The last ended outing as one row (only when no state card takes that slot).
+        var recentRow: Bool
+        var grid: Grid
+    }
+
+    /// Heights at the default text size (pt).
+    static let handle = 44.0
+    static let top = 12.0
+    static let bottom = 40.0
+    static let spacing = 12.0
+    static let weatherRow = 22.0
+    static let primaryRow = 52.0
+    static let tilesRow = 82.0
+    static let iconsRow = 52.0
+    static let recentRowHeight = 64.0
+    /// The collapsed card stays under this share of the screen: the map keeps the rest.
+    static let maxShare = 0.46
+
+    /// The state card in the outing slot (`HomeStateCard`): a one-line card, the invite card, or nothing.
+    static func statusHeight(_ card: HomeStateCard) -> Double {
+        switch card {
+        case .active, .upcoming, .failed: return 72
+        case .invite: return 150
+        case .start, .none: return 0
+        }
+    }
+
+    /// The rows for this screen. `narrow` (Display Zoom, `SaryWidthClass.narrow`) starts with icons.
+    static func plan(screen: Double, textScale: Double = 1, narrow: Bool = false, weather: Bool, status: HomeStateCard, hasRecent: Bool) -> Plan {
+        let budget = (screen.isFinite ? max(0, screen) : 0) * maxShare
+        var p = Plan(weatherLine: weather, recentRow: hasRecent && statusHeight(status) == 0, grid: narrow ? .icons : .tiles)
+        if height(p, status: status, textScale: textScale) > budget { p.recentRow = false }
+        if height(p, status: status, textScale: textScale) > budget { p.grid = .icons }
+        return p
+    }
+
+    /// The collapsed card's height for `p` (text grows with Dynamic Type, up to 1.4×).
+    static func height(_ p: Plan, status: HomeStateCard, textScale: Double = 1) -> Double {
+        let k = textScale.isFinite ? min(1.4, max(1, textScale)) : 1
+        var rows = [primaryRow, p.grid == .tiles ? tilesRow : iconsRow]
+        if p.weatherLine { rows.append(weatherRow) }
+        let s = statusHeight(status)
+        if s > 0 { rows.append(s) }
+        if p.recentRow { rows.append(recentRowHeight) }
+        let content = rows.reduce(0, +) * k + spacing * Double(rows.count - 1)
+        return (handle + top + content + bottom).rounded()
+    }
+
+    /// The sheet's widest (iPad / landscape: centred, the map beside it).
+    static let cardMaxWidth = 560.0
+    /// Room the Mapbox logo and «ⓘ» need from the map's bottom-left corner.
+    static let ornamentsWidth = 120.0
+
+    /// How far the map's bottom edge is lifted (pt) so the Mapbox logo and the attribution button
+    /// stay above the resting card: the card's height on a phone; 0 when the centred card leaves
+    /// the corner free (wide windows).
+    static func mapBottomInset(width: Double, restingCard: Double) -> Double {
+        guard width.isFinite, restingCard.isFinite, width > 0 else { return 0 }
+        let side = (width - min(width, cardMaxWidth)) / 2
+        return side >= ornamentsWidth ? 0 : max(0, restingCard)
+    }
+
+    /// The line's two halves; nil (no line) without a position: nothing to say then.
+    static func weatherLine(_ r: WeatherReport?, point: LngLat?, now: Date, timeZone: TimeZone = .current) -> HomeWeatherLine? {
+        guard let point, PlanGeo.valid(lat: point.lat, lng: point.lng) else { return nil }
+        var line = HomeWeatherLine()
+        if let r, let now0 = WeatherRules.nowValue(r, now: now) {
+            line.weather = "\(WeatherFormat.temp(now0.hour.temperatureC)) \(WeatherRules.displayCondition(now0.hour).text)"
+        }
+        let sun = PlaceBriefRules.sun(now: now, lat: point.lat, lng: point.lng)
+        if sun.isDay, let set = sun.sunset {
+            line.sun = "المغرب \(WeatherFormat.clock(set, timeZone: timeZone))"
+        } else if let rise = sun.sunrise {
+            line.sun = "الشروق \(WeatherFormat.clock(rise, timeZone: timeZone))"
+        }
+        return line.weather == nil && line.sun == nil ? nil : line
+    }
+}

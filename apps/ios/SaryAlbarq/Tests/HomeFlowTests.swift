@@ -350,3 +350,99 @@ final class HomeBaseLayerTests: XCTestCase {
         XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).flatMap(\.rows).map(\.id), ["data.qibla"])
     }
 }
+
+/// Home V2: the bottom card's rows per screen height, its height, the weather line and the fallback switch.
+final class HomeLayoutRulesTests: XCTestCase {
+    private typealias R = HomeLayoutRules
+
+    func testTallPhoneShowsEveryRow() {
+        // iPhone 15 (852 pt): weather, «ابدأ طلعة», the four tiles and the last outing.
+        let p = R.plan(screen: 852, weather: true, status: .start, hasRecent: true)
+        XCTAssertEqual(p, R.Plan(weatherLine: true, recentRow: true, grid: .tiles))
+        XCTAssertLessThanOrEqual(R.height(p, status: .start), 852 * R.maxShare)
+    }
+
+    func testSmallPhoneDropsTheRecentRowFirst() {
+        // iPhone SE (667 pt): the last outing goes, the tiles stay.
+        let p = R.plan(screen: 667, weather: true, status: .start, hasRecent: true)
+        XCTAssertFalse(p.recentRow)
+        XCTAssertEqual(p.grid, .tiles)
+        XCTAssertTrue(p.weatherLine)
+    }
+
+    func testSmallPhoneWithAStateCardShrinksTheGridToIcons() {
+        // A running outing keeps its card (never dropped); the grid becomes icons.
+        let p = R.plan(screen: 667, weather: true, status: .active("a"), hasRecent: true)
+        XCTAssertFalse(p.recentRow)
+        XCTAssertEqual(p.grid, .icons)
+        XCTAssertLessThan(R.height(p, status: .active("a")), R.height(R.Plan(weatherLine: true, recentRow: false, grid: .tiles), status: .active("a")))
+    }
+
+    func testAStateCardTakesTheOutingSlot() {
+        // Never both the state card and the last outing.
+        XCTAssertFalse(R.plan(screen: 1000, weather: false, status: .upcoming("u"), hasRecent: true).recentRow)
+        XCTAssertFalse(R.plan(screen: 1000, weather: false, status: .start, hasRecent: false).recentRow, "no ended outing: no row")
+    }
+
+    func testNarrowWidthAndLargeTextUseIcons() {
+        XCTAssertEqual(R.plan(screen: 852, narrow: true, weather: true, status: .start, hasRecent: false).grid, .icons)
+        let big = R.plan(screen: 667, textScale: 1.4, weather: true, status: .start, hasRecent: true)
+        XCTAssertEqual(big, R.Plan(weatherLine: true, recentRow: false, grid: .icons))
+    }
+
+    func testHeightGrowsWithTextAndIsBoundedAt140Percent() {
+        let p = R.Plan(weatherLine: true, recentRow: false, grid: .tiles)
+        XCTAssertGreaterThan(R.height(p, status: .start, textScale: 1.2), R.height(p, status: .start))
+        XCTAssertEqual(R.height(p, status: .start, textScale: 3), R.height(p, status: .start, textScale: 1.4))
+        XCTAssertEqual(R.height(p, status: .start, textScale: .nan), R.height(p, status: .start))
+        XCTAssertGreaterThan(R.height(p, status: .invite), R.height(p, status: .active("a")))
+    }
+
+    func testWeatherLineNeedsAPosition() {
+        XCTAssertNil(R.weatherLine(nil, point: nil, now: Date()))
+        XCTAssertNil(R.weatherLine(nil, point: LngLat(lng: 46, lat: 200), now: Date()))
+    }
+
+    func testWeatherLineSaysSunsetByDayAndSunriseByNight() throws {
+        let riyadh = try XCTUnwrap(TimeZone(identifier: "Asia/Riyadh"))
+        let p = LngLat(lng: 46.67, lat: 24.71)
+        let noon = Date(timeIntervalSince1970: 1_793_869_200) // 2026-11-05 09:00 UTC = 12:00 Riyadh
+        let day = try XCTUnwrap(R.weatherLine(nil, point: p, now: noon, timeZone: riyadh))
+        XCTAssertNil(day.weather, "no reading kept: only the sun (offline)")
+        XCTAssertTrue(day.sun?.hasPrefix("المغرب ") == true, day.sun ?? "")
+        let night = try XCTUnwrap(R.weatherLine(nil, point: p, now: noon.addingTimeInterval(11 * 3600), timeZone: riyadh))
+        XCTAssertTrue(night.sun?.hasPrefix("الشروق ") == true, night.sun ?? "")
+    }
+
+    func testWeatherLineShowsTheTemperatureFromAKeptReading() throws {
+        let p = LngLat(lng: 46.67, lat: 24.71)
+        let now = Date(timeIntervalSince1970: 1_793_869_200)
+        let hours = (-1..<4).map { i in
+            WeatherHour(time: now.addingTimeInterval(Double(i) * 3600 - 600), temperatureC: 26, precipitationMm: 0, precipitationProbability: 0,
+                        weatherCode: 0, windKmh: 12, gustKmh: 20, windFromDeg: 90, visibilityM: 20_000, dust: nil, pm10: nil)
+        }
+        let r = WeatherReport(area: WeatherArea(around: p.lat, lng: p.lng), fetchedAt: now, current: nil, hours: hours, airAvailable: false)
+        let line = try XCTUnwrap(R.weatherLine(r, point: p, now: now))
+        XCTAssertTrue(line.weather?.hasPrefix(WeatherFormat.temp(26)) == true, line.weather ?? "")
+        // An expired forecast is never shown as now.
+        let old = try XCTUnwrap(R.weatherLine(r, point: p, now: now.addingTimeInterval(10 * 3600)))
+        XCTAssertNil(old.weather)
+    }
+
+    func testMapIsLiftedAboveTheCardOnlyWhereTheCardCoversTheLogo() {
+        // A phone: the card is full width, so the map ends where the card starts (logo + «ⓘ» stay visible).
+        XCTAssertEqual(R.mapBottomInset(width: 393, restingCard: 352), 352)
+        XCTAssertEqual(R.mapBottomInset(width: 375, restingCard: 278), 278)
+        // iPad / landscape: the centred 560 pt card leaves the bottom-left corner free.
+        XCTAssertEqual(R.mapBottomInset(width: 1024, restingCard: 352), 0)
+        XCTAssertEqual(R.mapBottomInset(width: 0, restingCard: 352), 0, "not measured yet")
+        XCTAssertEqual(R.mapBottomInset(width: 393, restingCard: .nan), 0)
+    }
+
+    func testOldLayoutOnlyBehindTheDebugArgument() {
+        XCTAssertFalse(HomeLayoutSwitch.v1(arguments: []))
+        #if DEBUG
+        XCTAssertTrue(HomeLayoutSwitch.v1(arguments: ["-SaryHomeV1"]))
+        #endif
+    }
+}
