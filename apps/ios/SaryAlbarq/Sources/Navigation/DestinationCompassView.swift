@@ -270,6 +270,8 @@ struct DestinationCompassView: View {
     /// iOS 26, which squeezed the round dial into a pill and clipped «غ» / «ق» — owner report, Build 46).
     @State private var choosing = false
     @State private var listHeight: CGFloat = 300
+    /// The dial's top edge on the screen: the open list may grow up to the maneuver card, never over it.
+    @State private var dialTop: CGFloat = 600
 
     static let dial: CGFloat = 120
 
@@ -305,6 +307,8 @@ struct DestinationCompassView: View {
         .accessibilityHint(Text("اضغط تختار وين تأشر البوصلة: الوجهة، الرجعة، القبلة، أقرب مطر، أقرب ربيع"))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("live.compass")
+        .background(GeometryReader { g in Color.clear.preference(key: CompassDialTopKey.self, value: g.frame(in: .global).minY) })
+        .onPreferenceChange(CompassDialTopKey.self) { dialTop = $0 }
         /* The list is a card over the map, just above the dial. (A `.popover` presented from here dismissed the live
          * sheet under it and never appeared on the simulator.) */
         .overlay(alignment: .topTrailing) {
@@ -330,10 +334,24 @@ struct DestinationCompassView: View {
         }
     }
 
+    /// The most the open list may be tall: from the dial up to under the maneuver card and its chips (the safe top, the card,
+    /// «ثم» / lanes chips and «طوارئ» take ~`reserveTop`), at least two rows. It scrolls when it is taller.
+    static func maxListHeight(dialTop: CGFloat, safeTop: CGFloat) -> CGFloat {
+        max(96, dialTop - 10 - (safeTop + reserveTop))
+    }
+    static let reserveTop: CGFloat = 236
+
     /// The five targets, as in the mockup: the chosen one filled, a reason under a disabled one.
     private var targetList: some View {
         let p = theme.palette
-        return VStack(alignment: .leading, spacing: 2) {
+        let safeTop = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }.first ?? 59
+        return ScrollView(.vertical, showsIndicators: false) { listRows(p) }
+            .frame(maxHeight: Self.maxListHeight(dialTop: dialTop, safeTop: safeTop))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func listRows(_ p: SaryPalette) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(options) { o in
                 let on = o.target == reading.target
                 Button {
@@ -351,7 +369,9 @@ struct DestinationCompassView: View {
                                 Text(n)
                                     .saryText(.micro, weight: .medium)
                                     .foregroundStyle(on ? p.onAccent.opacity(0.8) : p.textSecondary)
-                                    .lineLimit(2)
+                                    /* The whole line («مطر ١٢ ملم · قبل ٣ ساعات · NASA GPM IMERG»): wraps, never cut. */
+                                    .lineLimit(4)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         Spacer(minLength: 0)
@@ -370,7 +390,7 @@ struct DestinationCompassView: View {
             }
         }
         .padding(6)
-        .frame(width: 250)
+        .frame(width: 262)
     }
 
     private var dialView: some View {
@@ -468,5 +488,10 @@ private struct CompassNeedleShape: Shape {
 
 private struct CompassListHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 300
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct CompassDialTopKey: PreferenceKey {
+    static var defaultValue: CGFloat = 600
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

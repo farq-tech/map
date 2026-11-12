@@ -136,8 +136,9 @@ struct LiveOutingScreen: View {
         }
         .ignoresSafeArea(.keyboard)
         /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
-         * its own window (the dock's copy is hidden or covered then). */
-        .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded && !controller.settingsOpen,
+         * its own window (the dock's copy is hidden or covered then). Not over the end sheet («إنهاء الرحلة»): the map's own
+         * «طوارئ» (under the card) stays reachable and a second disc on the sheet doubled it (owner review). */
+        .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || (controller.modal != nil && controller.modal != .endChoice)) && !controller.tripEnded && !controller.settingsOpen,
                                    state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger,
                                    frame: frames["sos"], size: sosSize,
                                    countdown: controller.groupUI.serverSOS))
@@ -274,7 +275,8 @@ struct LiveOutingScreen: View {
         let dockTop = ["flow", "dock", "convoy", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
-        let side = ["cluster", "speed"].compactMap { frames[$0] }
+        /* The destination compass counts as a side control: Mapbox's logo and «i» sit beside it, never under it (owner review). */
+        let side = ["cluster", "speed", "compass"].compactMap { frames[$0] }
         let left = side.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 }.max() ?? 0
         let right = side.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 }.max() ?? 0
         return UIEdgeInsets(top: topChromeBottom + 4, left: left, bottom: bottom + 4, right: right)

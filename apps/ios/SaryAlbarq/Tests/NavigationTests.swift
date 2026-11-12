@@ -1277,3 +1277,21 @@ final class NavDriveLayoutTests: XCTestCase {
         XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 13_000), 0, "the old total: stuck at zero")
     }
 }
+
+/// Owner review (2026-11-13): every decimal in the guidance is written with the Arabic decimal separator «٫» (U+066B),
+/// never a Latin "." or ",".
+final class GuidanceDecimalTests: XCTestCase {
+    private func assertArabicDecimal(_ s: String, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertFalse(s.contains("."), "Latin point in «\(s)»", file: file, line: line)
+        XCTAssertFalse(s.contains(","), "Latin comma in «\(s)»", file: file, line: line)
+        XCTAssertTrue(s.contains("\u{066B}"), "no «٫» in «\(s)»", file: file, line: line)
+    }
+
+    func testDistancesUseTheArabicDecimalSeparator() {
+        assertArabicDecimal(SaryFormat.distance(meters: 1900))
+        assertArabicDecimal(SaryFormat.distance(meters: 43_200))
+        assertArabicDecimal(NavSurfaceKmStrip.kmText(100))
+        assertArabicDecimal(NavSurfaceKmStrip.kmText(8_100))
+        assertArabicDecimal(NavHUD.distanceParts(1_900).value)
+    }
+}

@@ -94,6 +94,9 @@ final class NewGuidanceUITests: XCTestCase {
         let all = (trip.exists ? trip.label : "") + (solo.exists ? solo.label : "") + (el(app, "end.action.endOutingForAll").exists ? el(app, "end.action.endOutingForAll").label : "")
         XCTAssertFalse(all.contains("رحلة"), "«طلعة» / «مشوار», not «رحلة»: \(all)")
         XCTAssertTrue(all.contains("أوقف التوجيه") || all.contains("أنهِ المشوار"), all)
+        /* One «طوارئ», the map's own: no floating copy over the end sheet (owner review). */
+        XCTAssertFalse(el(app, "sos.overlay").exists, "no second «طوارئ» floating over the end sheet")
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "outing-sos").count, 1, "a single «طوارئ»")
         shot(app, "end-sheet")
         app.terminate()
     }
@@ -111,6 +114,38 @@ final class NewGuidanceUITests: XCTestCase {
             XCTAssertTrue(el(app, "live.compass.\(id)").waitForExistence(timeout: 5), id)
         }
         XCTAssertTrue(el(app, "live.compass.qibla").isEnabled)
+        app.terminate()
+    }
+
+    /// A route with dirt on it (`-SaryNavSurfaces`): the bar shows the coloured strip of the surfaces in driving order and the
+    /// line under it («زفلت … ← ترابي … ← بر مفتوح …»). The old shots had an all-asphalt route, so no strip was drawn.
+    func testSurfaceStripShowsOnARouteWithDirt() {
+        let app = launch(["-SaryNavSurfaces"])
+        let strip = el(app, "nav.surfaceAhead")
+        XCTAssertTrue(strip.waitForExistence(timeout: 15), "the surface strip on a route with dirt")
+        let bar = el(app, "nav.bottomBar").frame
+        XCTAssertTrue(bar.contains(CGPoint(x: strip.frame.midX, y: strip.frame.midY)), "inside the one bar")
+        XCTAssertFalse(el(app, "nav.progress").exists, "the thin progress bar gives way to the surfaces")
+        let words = strip.label + " " + strip.value.debugDescription
+        XCTAssertTrue(words.contains("أسفلت") || words.contains("زفلت") || strip.frame.width > 150, "the legend line: \(words)")
+        sleep(2)
+        shot(app, "surfaces")
+        app.terminate()
+    }
+
+    /// The open compass list stays under the maneuver card (and its chips): never over its edge.
+    func testCompassMenuStaysUnderTheCard() throws {
+        let app = launch(["-SaryNavSurfaces"])
+        let compass = el(app, "live.compass")
+        guard compass.waitForExistence(timeout: 25) else { throw XCTSkip("no recent GPS fix: the compass is hidden by design") }
+        compass.tap()
+        sleep(1)
+        let first = el(app, "live.compass.destination")
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        let card = el(app, "nav.banner").frame
+        XCTAssertGreaterThanOrEqual(first.frame.minY, card.maxY + 4, "the list starts under the card: \(first.frame) vs \(card)")
+        XCTAssertLessThanOrEqual(first.frame.maxX, app.frame.maxX + 1)
+        shot(app, "compass-menu-surfaces")
         app.terminate()
     }
 }
