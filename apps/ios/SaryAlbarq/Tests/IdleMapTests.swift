@@ -46,4 +46,44 @@ final class IdleMapTests: XCTestCase {
         XCTAssertFalse(s.hasConsent)
         s.close()
     }
+
+    func testWhoPresentsAnInvite() {
+        XCTAssertTrue(IdleMapRules.rootShowsInvite(hasSession: false, idleMapShown: false), "no trip, no idle map: the root presents it")
+        XCTAssertFalse(IdleMapRules.rootShowsInvite(hasSession: true, idleMapShown: false), "a trip: its live sheet presents it")
+        XCTAssertFalse(IdleMapRules.rootShowsInvite(hasSession: false, idleMapShown: true), "the idle map: its live sheet presents it, never twice")
+    }
+
+    @MainActor
+    private func idleController(go: ((OutingDestination) -> Void)?) -> (LiveOutingController, OutingSession) {
+        let location = LocationSharer()
+        location.testAuthorization = .authorizedWhenInUse
+        let s = OutingSession.idleMap(me: PublicUser(id: "u1", display_name: "أنا"), location: location)
+        let c = LiveOutingController(session: s, location: location, appearance: AppearanceSettings())
+        c.idleHome = true
+        c.idleNavigate = go
+        return (c, s)
+    }
+
+    @MainActor
+    func testGuidanceFromTheIdleMapOpensARealSoloOutingInsteadOfPlanningOnTheCarrier() {
+        var handed: [OutingDestination] = []
+        let (c, s) = idleController { handed.append($0) }
+        let t = NavTarget(source: .point, name: "روضة الثمامة", position: LngLat(lng: 46.7491, lat: 24.7590))
+        XCTAssertTrue(c.handOffToSolo(t))
+        XCTAssertEqual(c.nav.phase, .idle, "the carrier session plans nothing")
+        let done = expectation(description: "handed")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { done.fulfill() }
+        wait(for: [done], timeout: 2)
+        XCTAssertEqual(handed.map(\.name), ["روضة الثمامة"])
+        XCTAssertEqual(handed.first?.lat ?? 0, 24.7590, accuracy: 1e-6)
+        s.close()
+    }
+
+    @MainActor
+    func testAnOrdinaryTripNeverHandsOff() {
+        let (c, s) = idleController(go: nil)
+        c.idleHome = false
+        XCTAssertFalse(c.handOffToSolo(NavTarget(source: .point, name: "x", position: LngLat(lng: 46, lat: 24))))
+        s.close()
+    }
 }
