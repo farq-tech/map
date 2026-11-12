@@ -160,6 +160,7 @@
 		42509F9DD8D5B3058755BF87 /* openmeteo-air-riyadh.json in Resources */ = {isa = PBXBuildFile; fileRef = EF09C4AABF9811DD61A64B35 /* openmeteo-air-riyadh.json */; };
 		429B511AFE846789D7E089D1 /* VoiceNoteViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C1CF12223A92BA82C5D9F2F /* VoiceNoteViews.swift */; };
 		42EAA13E620563DD972207F2 /* Qibla.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB8DDC21C2DEE9CE14CA999 /* Qibla.swift */; };
+		4304B2AAA061C546E5EEDEDD /* MapLayerCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AEAA98C1A049782A21FDC92 /* MapLayerCatalog.swift */; };
 		44413C11D673845BD6EEFEE0 /* SaryTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D3B6FF13946A342A7CAEF7 /* SaryTheme.swift */; };
 		453600FDFF719FC086526D11 /* PlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B691EE90902AA118435E198F /* PlanTests.swift */; };
 		45B41E2FCCB4BCFE643BDCD0 /* BilingualSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD953F3EF9949FE956D773AA /* BilingualSearchTests.swift */; };
@@ -181,6 +182,7 @@
 		4DFBB64521E50C91BF259E1C /* SaryVoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8305E4E8351FA6F8723B885 /* SaryVoiceTests.swift */; };
 		4E82C131A91F499D045F0A83 /* HideReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CA51732B57030AFD444A5B1 /* HideReminder.swift */; };
 		4EDBA8D58F4A895E3B2FED43 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */; };
+		4F4AE1AE340EBDAE4098A52C /* MapLayerRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67DD4EAB4D27F8C84AE49B47 /* MapLayerRegistry.swift */; };
 		4F848E32D0BD48569D8D5DBB /* PTTChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE4E7B325A85D3ECE01843CC /* PTTChannels.swift */; };
 		501366BCD787DDCFA022FA50 /* PersonalInvitesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1567BA6CA7032196D1BC0AB /* PersonalInvitesUITests.swift */; };
 		5040FC0B563E355095FD42A8 /* LiveSilence.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8B0FAD7F7F6C8B244F4824 /* LiveSilence.swift */; };
@@ -519,6 +521,7 @@
 		E9E23ADE2D2ECBDF3B9026D6 /* SafetyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FCE3EEF86D3386602FB586 /* SafetyUITests.swift */; };
 		EA122FABE04CDF342A97DE37 /* SpeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFE11BD246D68B3CF32D2369 /* SpeedTests.swift */; };
 		EB117F3CB14386B3BD6E2D74 /* GroupAudioCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7329A626C21DA36D0C6394 /* GroupAudioCenter.swift */; };
+		EB3D166085B88F1DBB4698CB /* MapLayerRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21F79C2AFE114E37400B332A /* MapLayerRegistryTests.swift */; };
 		EBA818268ADEED8837BA885D /* AlertLaneUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF8235E8B2B0DB268D32902 /* AlertLaneUITests.swift */; };
 		ECC05342C40A5D9AC7C042B2 /* SaryColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E4678268B288A88DA575A6 /* SaryColors.swift */; };
 		ECC2A21694CBDC1B7EB5FB39 /* TripProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8A1A61FE8E2FEBBA4FACA4 /* TripProgressTests.swift */; };
@@ -664,6 +667,7 @@
 		2026730EB662B04457DEB1C2 /* WaypointPins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointPins.swift; sourceTree = "<group>"; };
 		20FB2DA77DABE9F602B10595 /* HomeDesert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeDesert.swift; sourceTree = "<group>"; };
 		21D5E93787461C83529EC4FA /* VoiceSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSearch.swift; sourceTree = "<group>"; };
+		21F79C2AFE114E37400B332A /* MapLayerRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayerRegistryTests.swift; sourceTree = "<group>"; };
 		22577D3538F441C2B397A087 /* LocationTuning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTuning.swift; sourceTree = "<group>"; };
 		228B792179E7688D3B50771D /* ChipLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipLayout.swift; sourceTree = "<group>"; };
 		22D142BEE2D2FB9BA3700CFB /* SaryAlbarq.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SaryAlbarq.entitlements; sourceTree = "<group>"; };
@@ -728,6 +732,7 @@
 		3965FB1AEE0F3BE181A0450F /* SaryAlbarqTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SaryAlbarqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A022F20DA4CEBB0A0B4B328 /* CarPlayPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayPresenter.swift; sourceTree = "<group>"; };
 		3AE698E0E5A63A513307711A /* farq-route-roundabout.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "farq-route-roundabout.json"; sourceTree = "<group>"; };
+		3AEAA98C1A049782A21FDC92 /* MapLayerCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayerCatalog.swift; sourceTree = "<group>"; };
 		3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryParticipant.swift; sourceTree = "<group>"; };
 		3C9B06D4A123CE3781120D31 /* SOSAlwaysUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SOSAlwaysUITests.swift; sourceTree = "<group>"; };
 		3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-Medium.ttf"; sourceTree = "<group>"; };
@@ -828,6 +833,7 @@
 		6738086AFB683BCF39276691 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		67707621CC9E957DE75D3CFA /* PrivacyManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyManifestTests.swift; sourceTree = "<group>"; };
 		67C384D2700540B51F8F9CB7 /* WeatherLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherLayers.swift; sourceTree = "<group>"; };
+		67DD4EAB4D27F8C84AE49B47 /* MapLayerRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayerRegistry.swift; sourceTree = "<group>"; };
 		DB0A1829B8D7F5303C46DB28 /* CloudOutlook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOutlook.swift; sourceTree = "<group>"; };
 		6279B67DAA10A1762E33D070 /* CloudFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFlow.swift; sourceTree = "<group>"; };
 		7C3E1A5B9D2F4608A1B3C5D8 /* WindRainMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindRainMotion.swift; sourceTree = "<group>"; };
@@ -1230,6 +1236,7 @@
 				0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */,
 				2026730EB662B04457DEB1C2 /* WaypointPins.swift */,
 				B6B9C67923D28B12B32B3B24 /* AIEnhance */,
+				A2E62A8E58F03E5B08848444 /* Layers */,
 				301784C93DDA50E227E63DF8 /* Motion */,
 				7DB81BE3AA88181430F89278 /* Visuals */,
 			);
@@ -1569,6 +1576,7 @@
 				14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */,
 				816FF5DA4F1C348B22CC18E1 /* LiveDeclutterTests.swift */,
 				7A60F871C0ECFBC36E136A51 /* LivePresenterTests.swift */,
+				21F79C2AFE114E37400B332A /* MapLayerRegistryTests.swift */,
 				7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */,
 				6A9F72A4E7942FD403937496 /* MapVisualsTests.swift */,
 				2E8157241C66D62BF5D9F505 /* MediaTests.swift */,
@@ -1863,6 +1871,15 @@
 				DAC2AF7F1CCB257E4CCDA9AB /* TouchWatcher.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		A2E62A8E58F03E5B08848444 /* Layers */ = {
+			isa = PBXGroup;
+			children = (
+				3AEAA98C1A049782A21FDC92 /* MapLayerCatalog.swift */,
+				67DD4EAB4D27F8C84AE49B47 /* MapLayerRegistry.swift */,
+			);
+			path = Layers;
 			sourceTree = "<group>";
 		};
 		A61CF0B5EC7091E026928877 /* Intro */ = {
@@ -2551,6 +2568,7 @@
 				260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */,
 				F4C74240EB3E350477F54F33 /* LiveDeclutterTests.swift in Sources */,
 				5AEBB2630684E87173633AB6 /* LivePresenterTests.swift in Sources */,
+				EB3D166085B88F1DBB4698CB /* MapLayerRegistryTests.swift in Sources */,
 				1C734BBA510CAEB54C8F56F5 /* MapPortTests.swift in Sources */,
 				937BD488B8CF7F675E025386 /* MapVisualsTests.swift in Sources */,
 				4BA4A96DCCC4A72FE59AF238 /* MediaTests.swift in Sources */,
@@ -2745,6 +2763,8 @@
 				091E418E859C66DF2F4CDFF2 /* LocationTuning.swift in Sources */,
 				48B96A3CFD58F83AC7128007 /* MapHomeScreen.swift in Sources */,
 				B179D66077CDA1A5CCA6009C /* MapLayer.swift in Sources */,
+				4304B2AAA061C546E5EEDEDD /* MapLayerCatalog.swift in Sources */,
+				4F4AE1AE340EBDAE4098A52C /* MapLayerRegistry.swift in Sources */,
 				FD5538296A9585D2DD795C7F /* MapStage.swift in Sources */,
 				27728D75EC70BC50BD5FB093 /* MapVisualsDirector.swift in Sources */,
 				7A8831F654E9D2771A4AA4CC /* MapboxNav.swift in Sources */,
