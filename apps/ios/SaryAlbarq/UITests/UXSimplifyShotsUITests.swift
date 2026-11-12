@@ -75,13 +75,10 @@ final class UXSimplifyShotsUITests: XCTestCase {
         sleep(2)
         shot("06-start-who-is-with-you")
         any(app, "start.withFriends").tap()
-        XCTAssertTrue(any(app, "create.start").waitForExistence(timeout: 10))
-        sleep(1)
-        shot("07-start-invite-whatsapp")
-        let start = any(app, "create.start")
-        start.scrollIntoView(in: app)
-        start.tap()
-        XCTAssertTrue(any(app, "outing-sheet-summary").waitForExistence(timeout: 20))
+        /* Build 47: «ادعُ أصدقاءك» starts the trip at once (no second «ابدأ الطلعة»); the invite opens over the live map. */
+        XCTAssertFalse(any(app, "create.start").waitForExistence(timeout: 2), "no invite step holding the start back")
+        XCTAssertTrue(any(app, "outing-sheet-summary").waitForExistence(timeout: 25))
+        shot("07-start-invite-over-live")
         let later = any(app, "share.always.later")
         if later.waitForExistence(timeout: 10) { later.tap() }
         sleep(5)

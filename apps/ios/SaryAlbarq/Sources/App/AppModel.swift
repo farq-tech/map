@@ -49,6 +49,9 @@ final class AppModel: ObservableObject {
     @Published var offerNotifications = false
     /// «ابدأ الطلعة» at the end of «طلعة جديدة»: the live screen starts this outing when it opens.
     @Published var pendingStart: String?
+    /// «ادعُ أصدقاءك» at the end of «طلعة جديدة»: the trip starts at once and the live screen opens the invite panel
+    /// over it (the invite goes out in parallel, it never holds the start back).
+    @Published var pendingInvitePanel: String?
     /// A point selected on the home map should open the active outing and start a leg there,
     /// instead of accidentally creating a second outing.
     struct PendingMapDestination: Equatable {

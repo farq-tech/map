@@ -60,7 +60,7 @@ final class TripAutoNavUITests: XCTestCase {
         }
     }
 
-    /// The leader presses «ابدأ الطلعة»: his choice, «للكل» highlighted; «للكل» starts guidance.
+    /// The leader presses «ابدأ الطلعة»: guidance starts for everyone at once, with no second question (Build 47).
     func testLeaderStartTripForAll() {
         let app = launch(["-demoNotStarted"], sheet: "half")
         XCTAssertFalse(el(app, "nav.banner").exists, "nothing before the start")
@@ -70,32 +70,17 @@ final class TripAutoNavUITests: XCTestCase {
         XCTAssertTrue(start.waitForExistence(timeout: 10), "«ابدأ الطلعة»")
         shot(app, "autonav-0-before-start")
         start.tap()
-        XCTAssertTrue(el(app, "nav.choice").waitForExistence(timeout: 10), "the leader's choice")
-        XCTAssertTrue(el(app, "nav.choice.all").exists, "«ابدأ التوجيه للكل»")
-        XCTAssertTrue(el(app, "nav.choice.me").exists, "«لي فقط»")
-        XCTAssertFalse(el(app, "nav.banner").exists, "not silently started for everyone")
-        sleep(1)
-        shot(app, "autonav-0b-leader-choice")
-        el(app, "nav.choice.all").tap()
+        XCTAssertFalse(el(app, "nav.choice").exists, "no «للكل أو لي فقط» question: the trip and its guidance just begin")
         XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15), "turn-by-turn starts")
+        XCTAssertFalse(el(app, "nav.choice").exists)
         XCTAssertTrue(el(app, "nav.distance").exists, "the next manoeuvre's distance")
         XCTAssertTrue(el(app, "nav.instruction").exists, "the next manoeuvre")
         XCTAssertTrue(el(app, "nav.banner.eta").exists, "where to and the ETA, in the header")
         XCTAssertTrue(el(app, "nav.banner.eta").label.contains("روضة الثمامة"))
         XCTAssertFalse(el(app, "nav.options").exists, "no options sheet to tap through")
-        XCTAssertTrue(el(app, "nav.auto.pause").waitForExistence(timeout: 5), "«أوقف التوجيه»")
+        XCTAssertTrue(el(app, "nav.auto.pause").waitForExistence(timeout: 5), "«أوقف التوجيه» (this phone only: the old «لي فقط»)")
         sleep(2)
         shot(app, "autonav-1-started")
-    }
-
-    func testLeaderStartTripOnlyMe() {
-        let app = launch(["-demoNotStarted"], sheet: "half")
-        let start = el(app, "flow.cta.startOuting")
-        XCTAssertTrue(start.waitForExistence(timeout: 10))
-        start.tap()
-        XCTAssertTrue(el(app, "nav.choice.me").waitForExistence(timeout: 10))
-        el(app, "nav.choice.me").tap()
-        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15), "guidance for the leader himself")
     }
 
     /// A member: the leader's «للكل» arrives over his note ⇒ guidance starts; a local stop stays local.

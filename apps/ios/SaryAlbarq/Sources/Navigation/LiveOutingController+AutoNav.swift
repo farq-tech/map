@@ -168,12 +168,13 @@ extension LiveOutingController {
         }
     }
 
-    /// After «ابدأ الطلعة»: the leader's choice («للكل» highlighted, or «لي فقط»).
+    /// After «ابدأ الطلعة»: guidance starts at once, with no second question (the owner's Build 46 report:
+    /// creating the outing IS starting the trip). A leader with friends already in the trip starts it for everyone
+    /// (what the old sheet highlighted); alone, for this phone. «لي فقط» is «أوقف التوجيه» in the guidance bar
+    /// (it pauses only this phone), and «وجّه الكل» stays a tile in «المزيد» (`guideAll`).
     func offerGuidanceChoice() {
         guard autoNavAllowed, canGuideAll, tripDestination != nil else { return }
-        /* A leader alone in the trip is not asked «للكل؟»: guided like any member. */
-        guard guideAllHasOthers else { return startGuidanceForMe() }
-        modal = .navStartChoice
+        if guideAllHasOthers { startGuidanceForAll() } else { startGuidanceForMe() }
     }
 
     private func autoNavArrived(_ t: NavTarget) {

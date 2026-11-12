@@ -92,6 +92,11 @@ extension LiveOutingHost {
     /// has not started yet (never in the demo, which has no server).
     fileprivate func startIfAsked() {
         guard model.pendingStart == controller.session.id, let v = controller.session.view else { return }
+        /* «ادعُ أصدقاءك وابدأ»: the invite panel opens over the live map while the trip starts (once). */
+        if model.pendingInvitePanel == controller.session.id {
+            model.pendingInvitePanel = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { controller.modal = .panel(.invite) }
+        }
         /* A solo outing is already running: once the destination is in its plan, guidance starts by
          * itself (one member: `offerGuidanceChoice` goes straight to `startGuidanceForMe`). */
         if controller.session.isSolo {

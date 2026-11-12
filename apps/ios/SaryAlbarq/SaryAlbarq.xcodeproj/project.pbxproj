@@ -80,6 +80,7 @@
 		20A22BFAF63655EA5FBC46E3 /* PersonalInvitesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F8FEFC78FDF837D13AF242 /* PersonalInvitesTests.swift */; };
 		221DBCA2BC5B78E51263FF28 /* WeatherModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CAF059F25F880DEEA683E7A /* WeatherModels.swift */; };
 		22303CB419B043844D10AFAA /* itfHuwiyaArabic-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = 2ECC5F666033C9EDD0ADEA34 /* itfHuwiyaArabic-Medium.otf */; };
+		22DEDA5ABF5E34BE9F05DE72 /* StartFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20C1241184E26287B3E6899 /* StartFlowUITests.swift */; };
 		2341A82005EF1EE0663EF5EC /* DeepFilterNet3Stream.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = A337BE5419510227D3640A03 /* DeepFilterNet3Stream.mlpackage */; };
 		235C2F94568E11CD370A89F6 /* NavETATests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9BC401E005AFE8C3788F3C /* NavETATests.swift */; };
 		2366305671698D07EC24D3A7 /* camp-sites-nafud.geojson in Resources */ = {isa = PBXBuildFile; fileRef = B77FE5D4AC5660C69F62681A /* camp-sites-nafud.geojson */; };
@@ -1164,6 +1165,7 @@
 		E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrar.swift; sourceTree = "<group>"; };
 		E1EB5A63D0A8DAA5F932FD3A /* PTTChannelViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTChannelViews.swift; sourceTree = "<group>"; };
 		E1F76C428A1BC91857A5F458 /* SaryShare-PortalPending.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SaryShare-PortalPending.entitlements"; sourceTree = "<group>"; };
+		E20C1241184E26287B3E6899 /* StartFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartFlowUITests.swift; sourceTree = "<group>"; };
 		E2837B11E95DD4B17B54C37E /* GpsQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GpsQuality.swift; sourceTree = "<group>"; };
 		E28812358815F698C2D6D9CE /* Real-ESRGAN-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Real-ESRGAN-LICENSE.txt"; sourceTree = "<group>"; };
 		E2FB8B1FE3B733CDB15CDA57 /* SaryAlbarqWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = SaryAlbarqWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2059,6 +2061,7 @@
 				E38FF141ADCD1DE7AF6350C5 /* ScreensUITests.swift */,
 				3C9B06D4A123CE3781120D31 /* SOSAlwaysUITests.swift */,
 				29029D8E01752FD2B307DDB3 /* SpeedUITests.swift */,
+				E20C1241184E26287B3E6899 /* StartFlowUITests.swift */,
 				A2F250B4DBC1D0018C096D9D /* StoryUITests.swift */,
 				D195AD214B4CA1E984CD2A64 /* TrackFollowUITests.swift */,
 				A6B3DBC08695A8D21743AB97 /* TripAutoNavUITests.swift */,
@@ -2665,6 +2668,7 @@
 				32CC22CAE8AE3CB40321B17D /* SaryAlbarqUITests.swift in Sources */,
 				2F8F190AEC4682EBB4977F9E /* ScreensUITests.swift in Sources */,
 				693C61DAE332565D0BB660FD /* SpeedUITests.swift in Sources */,
+				22DEDA5ABF5E34BE9F05DE72 /* StartFlowUITests.swift in Sources */,
 				1FF78175DEA5D06E0A2A39A4 /* StoryUITests.swift in Sources */,
 				BB92ECB854EB5E22C291E8E5 /* TrackFollowUITests.swift in Sources */,
 				97A100225D3CD8937DEA30EB /* TripAutoNavUITests.swift in Sources */,

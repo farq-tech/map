@@ -20,6 +20,8 @@ struct CreateOutingWizard: View {
     var quick: OutingDestination? = nil
     /// «لحالي، ابدأ»: once the outing exists, open it and start (no invite step).
     @State private var solo = false
+    /// «ادعُ أصدقاءك»: like «ابدأ الطلعة», and the invite panel opens over the live map (`AppModel.pendingInvitePanel`).
+    @State private var invite = false
     /// Quick mode, then «غيّر المكان» / back: the full steps from step ١ (UI-AUDIT ١-هـ).
     @State private var quickChangedPlace = false
     /// The outing ids on the list before the first create attempt (to recognise ours after a timeout).
@@ -54,6 +56,8 @@ struct CreateOutingWizard: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if flow.step == .invite {
                 inviteBar.transition(SaryTransition.card(theme))
+            } else if flow.step == .weather, !isQuick {
+                startBar.transition(SaryTransition.card(theme))
             }
         }
         .presentationDetents([.large])
@@ -92,9 +96,9 @@ struct CreateOutingWizard: View {
         case .weather:
             if isQuick {
                 CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo, solo: solo,
-                               withFriends: { solo = false; approve() }, alone: { solo = true; approve() }, changePlace: changePlace)
+                               withFriends: { solo = false; invite = true; approve() }, alone: { solo = true; invite = false; approve() }, changePlace: changePlace)
             } else {
-                WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
+                WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo)
             }
         case .invite:
             InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly)
@@ -137,6 +141,46 @@ struct CreateOutingWizard: View {
         .onChange(of: startReady) { _, ready in if ready { emphasizeStartIfReady(after: 0) } }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("create.bar")
+    }
+
+    /// The pinned actions of the full steps once the destination, name and time are set: the trip starts at once
+    /// («ابدأ الطلعة»), with friends («ادعُ أصدقاءك»: the invite opens over the live map), or is only created for later.
+    private var startBar: some View {
+        let p = theme.palette
+        let online = model.online || model.isDemo
+        let failed = flow.failure != nil
+        return VStack(spacing: theme.space(.xs)) {
+            Label(ShareMemory.joinStatement, systemImage: "location.fill")
+                .saryText(.caption, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("create.shareStatement")
+            Button { solo = true; invite = false; approve() } label: {
+                SaryButtonLabel(title: failed && solo ? CreateFlowState.retryTitle : "ابدأ الطلعة",
+                                systemImage: failed && solo ? SaryIcon.retry : SaryIcon.play, busy: flow.creating && solo, busyTitle: "ننشئ الطلعة…")
+            }
+            .buttonStyle(.sary(.primary))
+            .disabled(flow.creating || !online || flow.destination == nil)
+            .accessibilityIdentifier("start.solo")
+            Button { solo = false; invite = true; approve() } label: {
+                SaryButtonLabel(title: failed && invite ? CreateFlowState.retryTitle : "ادعُ أصدقاءك وابدأ",
+                                systemImage: failed && invite ? SaryIcon.retry : "person.2.fill", busy: flow.creating && invite, busyTitle: "ننشئ الطلعة…")
+            }
+            .buttonStyle(.sary(.secondary))
+            .disabled(flow.creating || !online || flow.destination == nil)
+            .accessibilityIdentifier("start.withFriends")
+            Button { solo = false; invite = false; approve() } label: { Text("أنشئ الطلعة وابدأ لاحقًا") }
+                .buttonStyle(.sary(.plain, compact: true))
+                .disabled(flow.creating || !online || flow.destination == nil)
+                .accessibilityIdentifier("create.approve")
+        }
+        .padding(.horizontal, theme.space(.l))
+        .padding(.top, theme.space(.s))
+        .padding(.bottom, theme.space(.xs))
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
+        .background(p.background.shadow(color: .black.opacity(0.12), radius: 8, y: -2).ignoresSafeArea(edges: .bottom))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("create.startBar")
     }
 
     /// «ابدأ الطلعة» can go now (`finish(start:)` would open the trip).
@@ -223,7 +267,10 @@ struct CreateOutingWizard: View {
                 }
             }
             withAnimation(theme.animation(.smooth)) { flow.created(id) }
-            if solo { finish(start: true) }
+            if solo || invite {
+                if invite { model.pendingInvitePanel = id }
+                finish(start: true)
+            }
         }
     }
 
@@ -583,7 +630,6 @@ private struct WeatherStep: View {
     @Binding var flow: CreateFlowState
     @ObservedObject var weather: WizardWeather
     var online: Bool
-    var approve: () -> Void
     @Environment(\.sary) private var theme
     @State private var now = Date()
     @FocusState private var timeFocused: Bool
@@ -602,19 +648,10 @@ private struct WeatherStep: View {
                 if let d = flow.destination {
                     weatherCards(d)
                 }
-                Text("يناسبنا الجو؟").saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary).accessibilityAddTraits(.isHeader)
                 if let e = flow.error, e != CreateFlowState.Issue.nameEmpty.arabic { SaryInlineMessage(text: e, tone: .error) }
-                /* Honest: nothing is queued (the server creates the outing), the button waits for the network. */
+                /* Honest: nothing is queued (the server creates the outing), the buttons wait for the network. */
                 if !online { SaryOfflineStrip(text: CreateCopy.offline) }
                 CreateProgressLine(flow: flow)
-                Button(action: approve) {
-                    SaryButtonLabel(title: flow.failure != nil ? CreateFlowState.retryTitle : "يناسبنا الجو، كمّل",
-                                    systemImage: flow.failure != nil ? SaryIcon.retry : "checkmark",
-                                    busy: flow.creating, busyTitle: "ننشئ الطلعة…")
-                }
-                .buttonStyle(.sary(.primary))
-                .disabled(flow.creating || !online || flow.destination == nil)
-                .accessibilityIdentifier("create.approve")
                 HStack(spacing: theme.space(.s)) {
                     Button {
                         withAnimation(theme.animation(.smooth)) { proxy.scrollTo("departure", anchor: .center) }
