@@ -23,6 +23,8 @@ extension View {
             SaryShowcaseRoot()
         } else if ProcessInfo.processInfo.arguments.contains("-SaryFoundations") {
             SaryFoundationsPreview()
+        } else if ProcessInfo.processInfo.arguments.contains("-SaryComponents") {
+            SaryComponentsGallery()
         } else {
             self
         }
