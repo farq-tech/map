@@ -45,32 +45,6 @@ enum Qibla {
         return 2 * 6371.0088 * asin(min(1, sqrt(h)))
     }
 
-    /// Points along the great-circle line from the user's location to the Kaaba.
-    /// Rendering intermediate points keeps the bearing true on a Mercator map at country scale.
-    static func greatCirclePoints(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D = kaaba,
-                                  segments: Int = 48) -> [CLLocationCoordinate2D] {
-        let count = max(1, segments)
-        func vector(_ c: CLLocationCoordinate2D) -> (x: Double, y: Double, z: Double) {
-            let lat = c.latitude * .pi / 180, lon = c.longitude * .pi / 180
-            return (cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat))
-        }
-        let a = vector(from), b = vector(to)
-        let dot = min(1, max(-1, a.x * b.x + a.y * b.y + a.z * b.z))
-        let omega = acos(dot)
-        guard omega > 1e-10 else { return [from, to] }
-        let sinOmega = sin(omega)
-        return (0...count).map { index in
-            let t = Double(index) / Double(count)
-            let wa = sin((1 - t) * omega) / sinOmega
-            let wb = sin(t * omega) / sinOmega
-            let x = wa * a.x + wb * b.x
-            let y = wa * a.y + wb * b.y
-            let z = wa * a.z + wb * b.z
-            return CLLocationCoordinate2D(latitude: atan2(z, hypot(x, y)) * 180 / .pi,
-                                          longitude: atan2(y, x) * 180 / .pi)
-        }
-    }
-
     static func normalize(_ d: Double) -> Double {
         let r = d.truncatingRemainder(dividingBy: 360)
         return r < 0 ? r + 360 : r
@@ -316,7 +290,6 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
 /// The «القبلة» sheet: an arrow to the Kaaba over a compass rose turning with the phone.
 struct QiblaView: View {
     @StateObject private var compass: QiblaCompass
-    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showDirectionOnMap = true
     var close: () -> Void
     @Environment(\.sary) private var theme
     /// Facing the Qibla (`Qibla.aligned`, with hysteresis).
@@ -438,11 +411,6 @@ struct QiblaView: View {
         if compass.heading != nil && !compass.isTrueNorth {
             Text("الاتجاه حسب الشمال المغناطيسي (ما وصل الموقع بعد)").saryText(.caption).foregroundStyle(p.textTertiary)
         }
-        SaryToggleRow(title: "أظهر اتجاه القبلة على الخريطة",
-                      subtitle: "خط من موقعك إلى الكعبة، يتحدث مع تغيّر موقعك",
-                      systemImage: "location.north.line.fill",
-                      isOn: $showDirectionOnMap,
-                      id: "qibla.map.visible")
     }
 
     private func hint(_ icon: String, _ text: String, tone: Color) -> some View {

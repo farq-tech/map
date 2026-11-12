@@ -106,6 +106,27 @@ extension LiveOutingController {
         objectWillChange.send()
     }
 
+    /// What the end sheet offers now (`EndControls`): from the same values «المزيد» → «الطلعة» uses.
+    var endState: EndControls.State {
+        let running = session.view?.status != .ended
+        return EndControls.State(solo: isSolo, guiding: nav.isActive || nav.phase == .planning, outingRunning: running,
+                                 iOwn: session.view?.iOwn == true,
+                                 canLeave: session.closedReason == nil && groupUI.leaveAndPause)
+    }
+
+    func openEndChoice() { modal = .endChoice }
+
+
+    /// A row of the end sheet was chosen: each is a call that already existed.
+    func performEnd(_ a: EndControls.Action) {
+        modal = nil
+        switch a {
+        case .endTrip: stopGuidanceTapped()
+        case .endSolo, .endOutingForAll: endTrip()
+        case .leaveOnly, .leaveOuting: leaveOuting()
+        }
+    }
+
     /// «أنهِ الرحلة» (asked first in the view): ends the outing for everyone.
     func endTrip() {
         tripConfirmEnd = false
@@ -113,13 +134,11 @@ extension LiveOutingController {
         if backTrack != nil { stopBackTrack() }
         /* `-demo` keeps no trip log of its own: the screen's one goes to the summary. */
         if session.isDemo { let l = speed.local; TripLogStore.update(session.id) { $0 = l } }
-        /* #173: ending is for everyone, so the server decides (never faked); this line answers the tap now. */
-        if !session.isLocal { toast("جاري إنهاء الطلعة…") }
-        Task {
-            await session.setStatus("end")
-            /* «أنهِ المشوار» (solo): ended on this phone at once, then its summary (docs/SOLO-OUTING.md (ج)). */
-            if session.isSolo, session.closedReason == .outingEnded { openSummary() }
-        }
+        /* Instant (owner's Build 44 report: ending «takes time and sometimes does not respond»): the outing ends on this phone now
+         * and the server is told through the outbox, retried until it agrees (`OutingSession.endOuting`). */
+        session.endOuting()
+        /* «أنهِ المشوار» (solo): ended on this phone at once, then its summary (docs/SOLO-OUTING.md (ج)). */
+        if session.isSolo, session.closedReason == .outingEnded { openSummary() }
     }
 
     /// The trip is over on this phone (ended here or by the leader's phone, or I left / was

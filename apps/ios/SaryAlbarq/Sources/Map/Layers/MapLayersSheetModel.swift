@@ -37,6 +37,18 @@ enum MapLayersSheetModel {
         exploring ? .explore : (navigating ? .navigate : .outing)
     }
 
+    /// The quick weather chips pinned above the base-map cards (owner's Build 44 report: weather must be one tap away while guiding):
+    /// clouds, rain and wind, in the weather group's order. The same registry layers as the «الطقس» section, so a tap here and a tap
+    /// there are the same switch (they are mutually exclusive, and a second tap on the chosen one turns the group off).
+    static func quickWeather(registry: MapLayerRegistry, mode: MapLayerMode) -> [MapLayerSwitchRow] {
+        let kinds: [WeatherOverlayKind] = [.clouds, .rain, .wind]
+        return kinds.compactMap { k in
+            guard let d = registry.layers(in: mode).first(where: { $0.id == MapLayerCatalog.weatherID(k) }) else { return nil }
+            return MapLayerSwitchRow(id: d.id, title: d.title, detail: d.detail, systemImage: d.systemImage,
+                                     isOn: registry.isActive(d.id), testID: "weather.quick.\(k.rawValue)", needsNetwork: d.needsNetwork)
+        }
+    }
+
     /// Registered non-base layers, as one flat list (kept for callers that only need "is anything else registered").
     static func switchLayers(registry: MapLayerRegistry, mode: MapLayerMode) -> [MapLayerDescriptor] {
         registry.layers(in: mode).filter { $0.category != .base }
@@ -56,9 +68,11 @@ enum MapLayersSheetModel {
         for d in others { if let t = d.groupTitle, !groupTitles.contains(t) { groupTitles.append(t) } }
         for t in groupTitles {
             let members = others.filter { $0.groupTitle == t }
-            let none = MapLayerOffRow(title: WeatherOverlayKind.none.label, detail: WeatherOverlayKind.none.detail,
-                                      systemImage: WeatherOverlayKind.none.systemImage, testID: "weather.layer.none",
-                                      isSelected: !members.contains { registry.isActive($0.id) })
+            /* Only a group that may be off (weather) offers «بدون»; a plain choice (image colours) always has one chosen. */
+            let mayBeOff = members.contains { if case .optionalChoice = $0.persistence { return true } else { return false } }
+            let none = mayBeOff ? MapLayerOffRow(title: WeatherOverlayKind.none.label, detail: WeatherOverlayKind.none.detail,
+                                                 systemImage: WeatherOverlayKind.none.systemImage, testID: "weather.layer.none",
+                                                 isSelected: !members.contains { registry.isActive($0.id) }) : nil
             out.append(MapLayerSection(id: "group.\(t)", title: t, style: .singleSelect, rows: members.map(row), off: none))
         }
         // 2) the rest by category, independent switches
@@ -108,3 +122,15 @@ enum MapLayersSheetFlag {
 #else
 enum MapLayersSheetFlag { static var useLegacy: Bool { false } }
 #endif
+
+extension WeatherOverlayKind {
+    /// The short chip name of the sheet's quick weather row.
+    static func quickName(_ k: WeatherOverlayKind) -> String {
+        switch k {
+        case .clouds: return "السحاب"
+        case .rain: return "المطر"
+        case .wind: return "الرياح"
+        default: return k.label
+        }
+    }
+}

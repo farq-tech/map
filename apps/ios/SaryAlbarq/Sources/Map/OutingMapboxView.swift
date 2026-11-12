@@ -91,6 +91,10 @@ struct MapCameraRequest: Equatable {
         case fitTrack([LngLat])
         /// Tilt to this pitch in degrees (the idle map's 3D look); the centre and zoom stay.
         case tilt(Double)
+        /// Go to this zoom in place (the idle map's «قرّب لصور أوضح»).
+        case zoom(Double)
+        /// The idle map's opening view: me at this zoom, tilted.
+        case idleOpen(zoom: Double, pitch: Double)
     }
 
     var kind: Kind
@@ -161,7 +165,6 @@ struct OutingMapboxView: UIViewRepresentable {
     /// «صور عالية الوضوح» gating input (Sources/Map/AIEnhance; original imagery when `.off`).
     var hiRes = HiResRequest.off
     /// Fresh device location for the always-on map direction to the Kaaba (nil hides it).
-    var qiblaOrigin: LngLat?
     /// The person's own recent fix (the cloud outlook's point when no destination is chosen).
     var userPoint: LngLat?
 
@@ -180,6 +183,11 @@ struct OutingMapboxView: UIViewRepresentable {
         map.ornaments.options.scaleBar.visibility = .hidden
         /* «تخفيف الزحمة» ١٦ (Lovable has no compass): the north lives in the camera button. */
         map.ornaments.options.compass.visibility = .hidden
+        /* Owner (Build 45): no tilting by touch; the «٣د / ٢د» button does it. Pan, pinch zoom and rotation stay. */
+        map.gestures.options.pitchEnabled = false
+        #if DEBUG
+        map.accessibilityValue = "pitchEnabled=\(map.gestures.options.pitchEnabled)"
+        #endif
         /* No over-zoom past what the layer's tiles resolve (pinch, follow, fits all clamp to it). */
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme
@@ -236,9 +244,8 @@ struct OutingMapboxView: UIViewRepresentable {
         /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
         /* The planned destination only: a long-pressed / searched point card is not where the person is going. */
         let cloudDest = plan.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }
-        WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome,
+        WeatherOverlay.of(map).update(WeatherOverlayRequest(active: true, chrome: chrome,
                                                             point: cloudDest ?? userPoint, pointIsDestination: cloudDest != nil))
-        QiblaMapOverlay.of(map).update(origin: qiblaOrigin)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -257,6 +264,10 @@ struct OutingMapboxView: UIViewRepresentable {
                 c.fit(pts, maxZoom: SatelliteLabels.trackMaxZoom)
             case let .tilt(deg):
                 c.tilt(to: deg)
+            case let .zoom(z):
+                c.zoomTo(z)
+            case let .idleOpen(z, pitch):
+                c.openIdle(zoom: z, pitch: pitch)
             }
         }
     }
@@ -422,9 +433,17 @@ struct OutingMapboxView: UIViewRepresentable {
             var key: String { item.isMe ? "" : Vehicle.carKey(item.id) }
         }
 
+        /// Keeps the pitch on the «٣د / ٢د» choice. While a follow camera drives the pitch every frame, that camera takes the change.
+        private var tiltBinding: MapTiltBinding?
+
         func attach(_ map: MapView) {
             self.map = map
             map.gestures.delegate = self
+            tiltBinding = MapTiltBinding(map: map, mode: { MapTiltModel.shared.lookingMode }, external: { [weak self] in
+                guard let self, self.followMode != .free else { return false }
+                self.startLink()
+                return true
+            })
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
             map.mapboxMap.onMapIdle.observe { [weak self] _ in
@@ -695,8 +714,27 @@ struct OutingMapboxView: UIViewRepresentable {
             ease(map, to: cam, .tilt)
         }
 
+        func zoomTo(_ z: Double) {
+            guard let map else { return }
+            /* A programmatic move may never reach «map idle» (animated effects keep it rendering): report the settled view ourselves. */
+            ease(map, to: CameraOptions(zoom: min(z, layer.maxZoom)), .focus) { [weak self] in self?.reportCenter(force: true) }
+        }
+
+        /// Me at `zoom`, tilted to `pitch`: one move, so neither request replaces the other.
+        func openIdle(zoom: Double, pitch: Double) {
+            guard let map else { return }
+            keepGroup = false
+            if let me = lastCars.first(where: \.isMe) {
+                let at = recs[me.id]?.shown ?? me.position
+                ease(map, to: CameraOptions(center: at.coordinate, zoom: min(zoom, layer.maxZoom), pitch: terrain3D ? nil : pitch), .recenter) { [weak self] in self?.reportCenter(force: true) }
+            } else {
+                tilt(to: pitch)
+            }
+        }
+
         func tilt(to degrees: Double) {
             guard let map, !terrain3D else { return }
+            /* The idle map's 3D look is the person's remembered choice (`MapTiltModel`), 2D included. */
             ease(map, to: CameraOptions(pitch: degrees), .tilt)
         }
 
@@ -725,7 +763,7 @@ struct OutingMapboxView: UIViewRepresentable {
             guard styleReady, let map, !visuals.ownsLight else { return }
             let at = lastCars.first(where: \.isMe)?.position ?? lastCars.first?.position
             /* Night mode (forced or after sunset) is the night light; otherwise the sun decides. */
-            let preset: SunLight.Preset = theme.night ? .night : (at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
+            let preset: SunLight.Preset = theme.night ? .night : SunLook.preset(at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
             guard preset != light else { return }
             light = preset
             try? map.mapboxMap.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: preset.rawValue)
@@ -1080,11 +1118,12 @@ struct OutingMapboxView: UIViewRepresentable {
                 let bearing = headingSource.update(speedKmh: kmh, course: r.heading, compass: c?.heading, compassError: c?.error)
                     ?? followSmoother.shown?.bearing ?? m.cameraState.bearing
                 let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: FollowZoom.carScreenShare)
-                target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: FollowZoom.headingPitch,
+                target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: MapTiltModel.shared.pitch(.navigation),
                                           topPadding: pad.top, bottomPadding: pad.bottom)
             default:
                 let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: 0.5)
-                target = FollowCameraPose(center: r.shown, zoom: northZoom, bearing: 0, pitch: 0, topPadding: pad.top, bottomPadding: pad.bottom)
+                target = FollowCameraPose(center: r.shown, zoom: northZoom, bearing: 0, pitch: MapTiltModel.shared.pitch(MapTiltModel.shared.lookingMode),
+                                          topPadding: pad.top, bottomPadding: pad.bottom)
             }
             let (p, settling) = followSmoother.step(target: target, at: now, reduceMotion: UIAccessibility.isReduceMotionEnabled)
             let cam = CameraOptions(center: p.center.coordinate, padding: UIEdgeInsets(top: p.topPadding, left: 0, bottom: p.bottomPadding, right: 0),
@@ -1392,8 +1431,22 @@ struct OutingMapboxView: UIViewRepresentable {
             var opts = ChipLayout.Options(bounds: map.bounds.inset(by: UIEdgeInsets(top: chrome.top, left: 0, bottom: 0, right: 0)))
             opts.expanded = expandedGroups
             if theme.drive { opts.maxStack = 2 }
+            /* Drive mode: names over the nearest friends only (`ChipLayout.namedNearest`); the rest are
+             * their car alone, the chip and note hidden until they come near again. */
+            var unnamed = Set<String>()
+            if theme.drive {
+                /* A friend who is stuck («غرّزت») or talking on the radio keeps their name, near or far. */
+                let keep = Set(recs.values.filter { $0.item.chip?.stuck == true || $0.item.chip?.speaking == true }.map(\.item.id))
+                let named = ChipLayout.namedNearest(items, limit: ChipLayout.driveNamed, keep: keep)
+                unnamed = Set(items.map(\.id)).subtracting(named)
+                items = items.filter { named.contains($0.id) }
+            }
             let result = ChipLayout.solve(items, opts)
             lastLayout = result
+            for id in unnamed {
+                recs[id]?.chipBox?.isHidden = true
+                recs[id]?.noteBox?.isHidden = true
+            }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             let leaders = CGMutablePath()
@@ -1645,7 +1698,7 @@ struct OutingMapboxView: UIViewRepresentable {
             mineDrawer.update(m, line: trails.mineTrack, style: TrackLineStyle(width: w, color: myColor, speedColours: true,
                                                                                 casing: Self.casing(for: myColor), showEnds: false,
                                                                                 glow: trails.highlight), below: below())
-            followDrawer.update(m, line: trails.followed, style: TrackLineStyle(width: TrackLineStyle.width + 1, glow: true),
+            followDrawer.update(m, line: trails.followed, style: .gpsTrack,
                                 below: below())
             placeStart(trails.start)
             placeGapLabels(trails.gapLabels)
@@ -1928,6 +1981,7 @@ struct OutingMapboxView: UIViewRepresentable {
             gesturesRunning = max(0, gesturesRunning - 1)
             guard gesturesRunning == 0, let start = gestureStartCamera, let map else { return }
             gestureStartCamera = nil
+            reportCenter(force: true)
             let now = map.mapboxMap.cameraState
             let a = map.mapboxMap.point(for: start.center), b = map.mapboxMap.point(for: now.center)
             let shift = Double(hypot(a.x - b.x, a.y - b.y))

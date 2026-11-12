@@ -16,8 +16,20 @@ struct TrackLineStyle: Equatable {
     /// A soft glow under it (the track being followed).
     var glow = false
     var opacity = 1.0
+    /// A GPS track («أثري (GPS)»): thin neon-aqua with direction chevrons, `GPSTrackStyle`. Ignores colour, width and glow.
+    var gps = false
 
     static let width = 5.5
+
+    /// The shared style of every GPS track overlay (followed, saved or imported).
+    static var gpsTrack: TrackLineStyle {
+        #if DEBUG
+        /* Screenshots only: the pre-«أثري (GPS)» look (warm 6.5 pt line, casing, glow) for same-frame before / after. */
+        if ProcessInfo.processInfo.arguments.contains("-SaryLegacyTrackStyle") { return TrackLineStyle(width: TrackLineStyle.width + 1, glow: true) }
+        #endif
+        return TrackLineStyle(width: GPSTrackStyle.coreWidth, color: GPSTrackStyle.coreRGB, speedColours: false,
+                       casing: GPSTrackStyle.edge, showEnds: true, glow: false, opacity: 1, gps: true)
+    }
 }
 
 /// Draws one `TrackLine` as Mapbox layers: a darker casing, the line itself with a
@@ -34,7 +46,7 @@ final class TrackLineDrawer {
     private var solid: String { "\(id)-solid" }
     private var gapSrc: String { "\(id)-gaps" }
     private var ends: String { "\(id)-ends" }
-    var layerIds: [String] { ["\(id)-glow", "\(id)-casing", "\(id)-line", "\(id)-gap-casing", "\(id)-gap", "\(id)-ends"] }
+    var layerIds: [String] { ["\(id)-glow", "\(id)-casing", "\(id)-line", "\(id)-gap-casing", "\(id)-gap", "\(id)-ends", "\(id)-gps-edge", "\(id)-gps-chevrons"] }
     var lineLayerId: String { "\(id)-line" }
 
     /// The style was (re)loaded: everything must be added again.
@@ -90,6 +102,33 @@ final class TrackLineDrawer {
         }
     }
 
+    /// «أثري (GPS)»: the edge under the gradient line (so the unrecorded dashes and the start / end dots
+    /// keep their place), the chevrons on top. See `GPSTrackStyle`.
+    private func addGPSLayers(_ m: MapboxMap, pos: LayerPosition?) {
+        GPSTrackStyle.addImages(m)
+        let round: [String: Any] = ["line-join": "round", "line-cap": "round"]
+        let colour = GPSTrackStyle.core
+        let k = GPSTrackStyle.coreWidth
+        let layers: [[String: Any]] = [
+            ["id": "\(id)-gps-edge", "type": "line", "source": solid, "layout": round,
+             "paint": ["line-color": GPSTrackStyle.edge, "line-width": GPSTrackStyle.width(k + GPSTrackStyle.edgeExtra),
+                       "line-opacity": GPSTrackStyle.edgeOpacity, "line-emissive-strength": 1] as [String: Any]],
+            ["id": lineLayerId, "type": "line", "source": grad, "layout": round,
+             "paint": ["line-width": GPSTrackStyle.width(k), "line-opacity": GPSTrackStyle.coreOpacity, "line-emissive-strength": 1,
+                       "line-gradient": ["interpolate", ["linear"], ["line-progress"], 0, colour, 1, colour]] as [String: Any]],
+            ["id": "\(id)-gap", "type": "line", "source": gapSrc, "layout": ["line-join": "round"],
+             "paint": ["line-color": colour, "line-width": GPSTrackStyle.width(k), "line-dasharray": [1.2, 1.6],
+                       "line-opacity": GPSTrackStyle.coreOpacity, "line-emissive-strength": 1] as [String: Any]],
+            GPSTrackStyle.chevronLayer(id: "\(id)-gps-chevrons", source: solid),
+            ["id": "\(id)-ends", "type": "circle", "source": ends,
+             "paint": ["circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 5, 18, 6.5],
+                       "circle-color": ["match", ["get", "k"], "s", "#ffffff", colour],
+                       "circle-stroke-color": GPSTrackStyle.edge, "circle-stroke-width": 2,
+                       "circle-pitch-alignment": "map", "circle-emissive-strength": 1] as [String: Any]],
+        ]
+        for l in layers { try? m.addLayer(with: l, layerPosition: pos) }
+    }
+
     private func clear(_ m: MapboxMap) {
         let empty = GeoJSONObject.featureCollection(FeatureCollection(features: []))
         for s in [solid, gapSrc, ends] where m.sourceExists(withId: s) { m.updateGeoJSONSource(withId: s, geoJSON: empty) }
@@ -110,6 +149,7 @@ final class TrackLineDrawer {
             s.data = .featureCollection(FeatureCollection(features: []))
             try? m.addSource(s)
         }
+        if style.gps { addGPSLayers(m, pos: below.flatMap { m.layerExists(withId: $0) ? .below($0) : nil }); return }
         let w = style.width
         func width(_ k: Double) -> [Any] { ["interpolate", ["exponential", 1.5], ["zoom"], 8, k * 0.45, 14, k, 18, k * 1.45, 20, k * 1.8] }
         let round: [String: Any] = ["line-join": "round", "line-cap": "round"]

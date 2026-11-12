@@ -28,6 +28,8 @@ final class AppModel: ObservableObject {
     private var parkedSink: AnyCancellable?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
+    /// EM2: the idle navigation map is on screen. Its live sheet is always presented, so an invite is shown from inside it (`LiveSheet`), not from the root.
+    @Published var idleMapShown = false
     /// Join was tapped and iOS is resolving location permission. Keep this across a sheet
     /// recreation when the system permission alert takes the app inactive.
     @Published private var pendingInviteJoinAttempt: String?
@@ -157,6 +159,10 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.open(id) }
         })
         #if DEBUG
+        /* `-SaryOfferNotify <seconds>`: the notifications explainer is offered that many seconds after launch (UI tests). */
+        if let i = arguments.firstIndex(of: "-SaryOfferNotify"), i + 1 < arguments.count, let s = Double(arguments[i + 1]) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + s) { [weak self] in self?.offerNotifications = true }
+        }
         if let i = arguments.firstIndex(of: "-SaryScreen"), i + 1 < arguments.count { debugScreen = arguments[i + 1] }
         /* Local end-to-end lab (with -SaryAPIBase): `-SaryLabIdentity "<token>|<user id>|<name>"` signs in as
          * a test identity made against the local API, `-SaryLabOuting <id>` opens that outing at once. */

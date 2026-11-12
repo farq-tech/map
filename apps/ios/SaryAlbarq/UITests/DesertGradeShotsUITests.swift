@@ -84,5 +84,10 @@ final class DesertGradeShotsUITests: XCTestCase {
     func test7RiyadhTop() { view("riyadh-top", 24.7113, 46.6744, zoom: 15.5, pitch: 0, bearing: 0) }
     func test9NafudClose() { view("nafud-close", 28.30, 41.40, zoom: 16.5, pitch: 0, bearing: 0) }
     func testANafudClosePitch() { view("nafud-close-pitch", 28.30, 41.40, zoom: 16, pitch: 60) }
+    /// Owner's Build 44 frame: the Nafud west of Zulfi, 26.3 N 44.6 E (SARY_GRADE=natural|naturalwarm|legacy|mild|strong).
+    func testZ1ZulfiNavZ14() { view("zulfi-nav-z14", 26.30, 44.60, zoom: 14, pitch: 60) }
+    func testZ2ZulfiNavZ13() { view("zulfi-nav-z13", 26.30, 44.60, zoom: 13, pitch: 60) }
+    func testZ3ZulfiClose() { view("zulfi-close-z16", 26.30, 44.60, zoom: 16.5, pitch: 45) }
+    func testZ4ZulfiFar() { view("zulfi-far-z10", 26.30, 44.60, zoom: 10.5, pitch: 0, bearing: 0) }
     func test8RiyadhPitch() { view("riyadh-pitch", 24.7113, 46.6744, zoom: 15, pitch: 60) }
 }

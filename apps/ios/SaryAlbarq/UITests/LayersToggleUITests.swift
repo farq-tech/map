@@ -28,6 +28,8 @@ final class LayersToggleUITests: XCTestCase {
 
         let sevenDays = app.buttons["weather.rain.days.7"]
         XCTAssertTrue(sevenDays.waitForExistence(timeout: 5), "the 1/3/7-day period picker appears only for rainfall")
+        /* The picker opens below the weather rows: bring it fully on screen with short steps before tapping. */
+        for _ in 0..<8 where !sevenDays.isHittable { layerList.swipeUp(velocity: .slow) }
         XCTAssertTrue(sevenDays.isHittable)
         sevenDays.tap()
         XCTAssertTrue(sevenDays.isSelected, "the selected accumulation period is visible")
@@ -88,8 +90,8 @@ final class LayersToggleUITests: XCTestCase {
         let sheet = app.descendants(matching: .any)["explore.layers.sheet"]
         XCTAssertTrue(sheet.waitForExistence(timeout: 20))
         sleep(2)
-        // The sheet scroll helper moves downward only; visit top-to-bottom.
-        for id in ["explore-hires", "explore-osm-tracks"] {
+        // The sheet scroll helper moves downward only; visit top-to-bottom in the sheet's order (data layers «مسارات البر», then imagery «صور عالية الوضوح»).
+        for id in ["explore-osm-tracks", "explore-hires"] {
             let sw = app.switches[id].firstMatch
             XCTAssertTrue(sw.waitForExistence(timeout: 5), id)
             sw.scrollIntoView(in: app, margin: 120)

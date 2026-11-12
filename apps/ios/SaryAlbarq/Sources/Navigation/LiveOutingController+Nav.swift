@@ -62,6 +62,8 @@ extension LiveOutingController {
         case let .failure(e):
             toast(e.message)
         case let .success(t):
+            /* The idle map has no trip: guidance starts as a real solo outing (`AppModel.openSolo`), like «اتجه» always did. */
+            if handOffToSolo(t) { return }
             /* No fresh fix: never silent — «ننتظر موقعك…», and the plan starts by itself once one comes. */
             guard hasFreshFix else { return beginFixWait(.navigate(t)) }
             if case .navigate = fixWait?.pending { fixWait = nil }
@@ -138,6 +140,7 @@ extension LiveOutingController {
     /// A long press on the map: «ابدأ الملاحة إلى هنا».
     func navLongPressed(_ p: LngLat, name: String? = nil) {
         guard case let .success(target) = NavTargets.point(p, name: name) else { return }
+        if handOffToSolo(target) { return }
         guard hasFreshFix else {
             modal = nil
             return beginFixWait(.immediate(target))
