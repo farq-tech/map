@@ -608,10 +608,14 @@ final class LiveOutingController: ObservableObject {
             /* Ages tick in whole minutes on the chip; quantised so the annotation is not rebuilt every second. */
             let chipNow = Date(timeIntervalSince1970: (i.now.timeIntervalSince1970 / 30).rounded(.down) * 30)
             let convoyRole = features.convoyRole(m.id)
-            if showNames || m.isMe || convoyRole != nil {
+            /* The one talking on the radio, or a friend who is stuck, is named whatever the names setting:
+             * the name shows while they talk and goes the moment their transmission ends. */
+            let speaking = i.speakingUserId == m.id
+            let stuck = safety.isStuck(m.id)
+            if showNames || m.isMe || convoyRole != nil || speaking || stuck {
                 m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
-                                    stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby,
-                                    speaking: i.speakingUserId == m.id, silentSince: p?.silentSince, silentReason: p?.presenceReason)
+                                    stuck: stuck, convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby,
+                                    speaking: speaking, silentSince: p?.silentSince, silentReason: p?.presenceReason)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
