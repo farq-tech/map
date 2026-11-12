@@ -35,6 +35,39 @@ final class LayersSheetUITests: XCTestCase {
         XCTAssertFalse(el(app, "layer.topo").isSelected)
     }
 
+    /// «ألوان الصور»: three choices in the sheet, «طبيعي» by default; choosing one changes the stored value and the map still loads.
+    func testImageryGradeSettingChangesTheStoredValueAndTheMapStillLoads() {
+        let app = open()
+        let natural = el(app, "imagery.grade.natural")
+        let page = app.scrollViews.firstMatch
+        for _ in 0..<4 where !natural.exists || !natural.isHittable { page.swipeUp() }
+        XCTAssertTrue(natural.waitForExistence(timeout: 5))
+        XCTAssertTrue(natural.isSelected, "طبيعي is the default")
+        for id in ["imagery.grade.warm", "imagery.grade.strong"] { XCTAssertTrue(el(app, id).exists, id); XCTAssertFalse(el(app, id).isSelected, id) }
+        el(app, "imagery.grade.strong").tap()
+        XCTAssertTrue(el(app, "imagery.grade.strong").isSelected)
+        XCTAssertFalse(natural.isSelected)
+        shot("imagery-grade-strong-chosen")
+        app.terminate()
+        /* The stored value is read at the next launch, and the map is drawn with it. */
+        let again = XCUIApplication()
+        again.launchArguments = ["-demo", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryDrive", "0", "-SaryContext", "stopped", "-SaryExplore", "-SaryLiveModal", "layers"]
+        again.launch()
+        again.allowLocationIfAsked()
+        XCTAssertTrue(el(again, "explore.layers.sheet").waitForExistence(timeout: 20))
+        let strong = el(again, "imagery.grade.strong")
+        for _ in 0..<4 where !strong.exists || !strong.isHittable { again.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(strong.waitForExistence(timeout: 5))
+        XCTAssertTrue(strong.isSelected, "the choice is stored")
+        el(again, "imagery.grade.warm").tap()
+        XCTAssertTrue(el(again, "imagery.grade.warm").isSelected)
+        let sat = el(again, "layer.satellite")
+        for _ in 0..<6 where !sat.exists || !sat.isHittable { again.scrollViews.firstMatch.swipeDown() }
+        XCTAssertTrue(sat.waitForExistence(timeout: 5), "the sheet is still alive after regrading")
+        sat.tap()
+        XCTAssertTrue(sat.isSelected, "the map still takes a base-layer change after regrading")
+    }
+
     private func assertRowsLaidOut(_ app: XCUIApplication, step: String) {
         let ids = ["layer.satellite", "layer.standard", "layer.topo"]
         let screen = app.frame

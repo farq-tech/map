@@ -3,7 +3,7 @@ import Foundation
 /// THE registration point (docs/ONE-MAP-UNIFICATION.md §5.2): to add a layer, add one
 /// `MapLayerDescriptor` here. No sheet, screen or map view changes.
 enum MapLayerCatalog {
-    static let all: [MapLayerDescriptor] = base + weather + data + imagery
+    static let all: [MapLayerDescriptor] = base + weather + data + imagery + imageryGrade
 
     /// Satellite / standard / topographic. Built from `MapLayer` (the legacy enum stays the
     /// source of the titles and icons until S4 removes it) and stored under its key
@@ -66,6 +66,18 @@ enum MapLayerCatalog {
         systemImage: "mountain.2.fill", category: .terrain, persistence: .session(name: "terrain3D"),
         availableIn: [.explore, .outing], accessibilityID: "explore-terrain3d")
     static let imagery: [MapLayerDescriptor] = [hiRes, terrain]
+
+    static let imageryGradeGroup = "ألوان الصور"
+    static func gradeID(_ c: SandGrade.Choice) -> MapLayerID { MapLayerID(rawValue: "imagery.grade.\(c.rawValue)") }
+    /// «ألوان الصور»: how the satellite picture is coloured (`SandGrade`). One choice of three, stored under
+    /// `SandGrade.choiceKey`; the basemap, the high-res layer and CarPlay follow it live.
+    static let imageryGrade: [MapLayerDescriptor] = SandGrade.Choice.allCases.map { c in
+        MapLayerDescriptor(
+            id: gradeID(c), title: c.label, detail: c.detail, systemImage: c.systemImage, category: .terrain,
+            defaultOn: c == SandGrade.defaultChoice, conflicts: Set(SandGrade.Choice.allCases.filter { $0 != c }.map(gradeID)),
+            persistence: .choice(key: SandGrade.choiceKey, value: c.rawValue), availableIn: [.home, .explore, .outing, .navigate],
+            groupTitle: imageryGradeGroup, accessibilityID: "imagery.grade.\(c.rawValue)")
+    }
 
     static func baseID(_ l: MapLayer) -> MapLayerID { MapLayerID(rawValue: "base.\(l.rawValue)") }
 
