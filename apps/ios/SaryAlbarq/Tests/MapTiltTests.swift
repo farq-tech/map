@@ -97,8 +97,9 @@ final class MapTiltTests: XCTestCase {
 
     func testTheIdleColumnStaysWithinTheOverlapBound() {
         // layers + tilt + the idle items: one more than `IdleSideRules.columnCount`, still short enough for an SE.
-        XCTAssertEqual(IdleSideRules.columnCount(compact: true) + 1, 5)
-        XCTAssertEqual(IdleSideRules.columnCount(compact: false) + 1, 6)
+        // (The Qibla button left the column on 2026-11-12 by the owner's decision: 4 on a compact phone, 5 otherwise.)
+        XCTAssertEqual(IdleSideRules.columnCount(compact: true) + 1, 4)
+        XCTAssertEqual(IdleSideRules.columnCount(compact: false) + 1, 5)
     }
 
     // MARK: the sun-free look
