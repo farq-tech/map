@@ -50,10 +50,9 @@ enum IdleMapRules {
     }
 }
 
-/// EM3: the idle map's side column. The layers button is always first (`SaryMapControlItem.layers`), then «موقعي» and
-/// the compass (the Qibla shortcut), then what fits. Everything else sits behind ONE «المزيد» handle, so the column
+/// EM3: the idle map's side column. The layers button is always first (`SaryMapControlItem.layers`), then «موقعي», then what fits (the Qibla button was removed by the owner, 2026-11-13). Everything else sits behind ONE «المزيد» handle, so the column
 /// never grows past the safe height on a short phone (iPhone SE).
-enum IdleSideItem: String, Equatable { case locate, qibla, places, more }
+enum IdleSideItem: String, Equatable { case locate, places, more }
 enum IdleMoreAction: String, Equatable, CaseIterable { case places, drone, realistic }
 
 enum IdleSideRules {
@@ -63,7 +62,7 @@ enum IdleSideRules {
     static func isCompact(screenHeight: Double) -> Bool { screenHeight < compactHeight }
 
     static func items(compact: Bool) -> [IdleSideItem] {
-        compact ? [.locate, .qibla, .more] : [.locate, .qibla, .places, .more]
+        compact ? [.locate, .more] : [.locate, .places, .more]
     }
 
     /// What «المزيد» holds: «أماكني» too when the column had no room for it.

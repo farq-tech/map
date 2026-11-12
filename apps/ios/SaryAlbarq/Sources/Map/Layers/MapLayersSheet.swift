@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// «الطبقات»: the shared layers sheet (docs/ONE-MAP-UNIFICATION.md §6). The base-map cards AND the data layers
-/// (weather, camp sites, OSM tracks, Qibla, high-res imagery, 3D terrain) are generated from `MapLayerRegistry`;
+/// (weather, camp sites, OSM tracks, high-res imagery, 3D terrain) are generated from `MapLayerRegistry`;
 /// only the action rows (camp suggestion, desert route, realistic mode, offline maps) are written by hand.
 /// Same accessibility identifiers as the old `ExploreLayersSheet`, so every existing UI test keeps working.
 struct MapLayersSheet: View {

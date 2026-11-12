@@ -91,10 +91,10 @@ final class IdleMapTests: XCTestCase {
         XCTAssertTrue(IdleSideRules.isCompact(screenHeight: 667), "iPhone SE")
         XCTAssertFalse(IdleSideRules.isCompact(screenHeight: 852), "iPhone Pro")
         XCTAssertFalse(IdleSideRules.isCompact(screenHeight: 1366), "iPad")
-        XCTAssertEqual(IdleSideRules.items(compact: true), [.locate, .qibla, .more])
-        XCTAssertEqual(IdleSideRules.items(compact: false), [.locate, .qibla, .places, .more])
-        XCTAssertEqual(IdleSideRules.columnCount(compact: true), 4, "layers + locate + compass + more")
-        XCTAssertEqual(IdleSideRules.columnCount(compact: false), 5)
+        XCTAssertEqual(IdleSideRules.items(compact: true), [.locate, .more])
+        XCTAssertEqual(IdleSideRules.items(compact: false), [.locate, .places, .more])
+        XCTAssertEqual(IdleSideRules.columnCount(compact: true), 3, "layers + locate + more")
+        XCTAssertEqual(IdleSideRules.columnCount(compact: false), 4)
         XCTAssertLessThanOrEqual(IdleSideRules.columnCount(compact: false), 5)
     }
 

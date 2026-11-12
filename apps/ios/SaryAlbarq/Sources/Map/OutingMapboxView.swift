@@ -161,7 +161,6 @@ struct OutingMapboxView: UIViewRepresentable {
     /// «صور عالية الوضوح» gating input (Sources/Map/AIEnhance; original imagery when `.off`).
     var hiRes = HiResRequest.off
     /// Fresh device location for the always-on map direction to the Kaaba (nil hides it).
-    var qiblaOrigin: LngLat?
     /// The person's own recent fix (the cloud outlook's point when no destination is chosen).
     var userPoint: LngLat?
 
@@ -243,7 +242,6 @@ struct OutingMapboxView: UIViewRepresentable {
         let cloudDest = plan.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }
         WeatherOverlay.of(map).update(WeatherOverlayRequest(active: true, chrome: chrome,
                                                             point: cloudDest ?? userPoint, pointIsDestination: cloudDest != nil))
-        QiblaMapOverlay.of(map).update(origin: qiblaOrigin)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {

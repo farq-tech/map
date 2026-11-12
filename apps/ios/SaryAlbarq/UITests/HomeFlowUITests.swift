@@ -33,10 +33,9 @@ final class HomeFlowUITests: XCTestCase {
             XCTAssertTrue(layers.waitForExistence(timeout: 20), "\(tag): the layers button is on the home map")
             XCTAssertTrue(layers.isHittable)
             XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "map.layers").count, 1)
-            // The Qibla shortcut stays a separate button beside it, and they do not overlap.
-            let qibla = app.buttons["home.qibla.toggle"]
-            XCTAssertTrue(qibla.exists, "\(tag): Qibla stays its own shortcut")
-            for other in [qibla, app.buttons["home.locate"]] {
+            // The Qibla button and ray were removed (owner, 2026-11-13); «موقعي» sits beside it and they do not overlap.
+            XCTAssertFalse(app.buttons["home.qibla.toggle"].exists, "\(tag): no Qibla button on the home map")
+            for other in [app.buttons["home.locate"]] {
                 let x = layers.frame.intersection(other.frame)
                 XCTAssertFalse(x.width > 1 && x.height > 1, "\(tag): map.layers overlaps \(other.identifier)")
             }
@@ -44,7 +43,8 @@ final class HomeFlowUITests: XCTestCase {
             shot("home-button-\(tag)")
             layers.tap()
             XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10), "\(tag): the shared sheet opens")
-            for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-qibla"] { XCTAssertTrue(el(app, id).waitForExistence(timeout: 5), "\(tag): \(id)") }
+            for id in ["layer.satellite", "layer.standard", "layer.topo"] { XCTAssertTrue(el(app, id).waitForExistence(timeout: 5), "\(tag): \(id)") }
+            XCTAssertFalse(el(app, "explore-qibla").exists, "\(tag): no Qibla row in the sheet")
             XCTAssertTrue(el(app, "layer.satellite").isSelected, "\(tag): satellite on a first launch")
             // Only what the home map draws: no weather, terrain or outing actions.
             for id in ["weather.layer.rain", "explore-terrain3d", "explore-offline", "explore-camp-suggest"] { XCTAssertFalse(el(app, id).exists, "\(tag): \(id) is not offered on home") }

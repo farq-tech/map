@@ -411,7 +411,6 @@
 		ADB6DE867E0647CAAC0D69C6 /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C955FB296901E5F5AA3ED3A /* ChatModels.swift */; };
 		B029B98238C9EDEABB757DD5 /* OutingDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0BA2EAA55F3208B7380B12C /* OutingDestination.swift */; };
 		B03944730428454F4F738462 /* NavOptionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E93B21DF625D320A704ACF1 /* NavOptionsSheet.swift */; };
-		B08FAFE310A9152AC0F7202D /* QiblaMapOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066AFB5B44B283F55DCDA139 /* QiblaMapOverlay.swift */; };
 		B0F63AD4963228B6CE716916 /* ExploreUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C20F3D96CC034D11B618E01 /* ExploreUITests.swift */; };
 		B101CF9F8728496CF5709184 /* HiResEnhancer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DB1EAF1242F5F08BFA63295 /* HiResEnhancer.swift */; };
 		B179D66077CDA1A5CCA6009C /* MapLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045023FD183A9121FEFAF6FE /* MapLayer.swift */; };
@@ -643,7 +642,6 @@
 		045023FD183A9121FEFAF6FE /* MapLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayer.swift; sourceTree = "<group>"; };
 		051727DD1152CBFFC71F0478 /* SpeedModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedModel.swift; sourceTree = "<group>"; };
 		06228EED7F4332FE3814E788 /* SunPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunPosition.swift; sourceTree = "<group>"; };
-		066AFB5B44B283F55DCDA139 /* QiblaMapOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QiblaMapOverlay.swift; sourceTree = "<group>"; };
 		0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSettingsPage.swift; sourceTree = "<group>"; };
 		0770F4C24CEEC9C2B35D8095 /* RecoveryScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryScreens.swift; sourceTree = "<group>"; };
 		0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointLayout.swift; sourceTree = "<group>"; };
@@ -2253,7 +2251,6 @@
 			isa = PBXGroup;
 			children = (
 				9BB8DDC21C2DEE9CE14CA999 /* Qibla.swift */,
-				066AFB5B44B283F55DCDA139 /* QiblaMapOverlay.swift */,
 			);
 			path = Qibla;
 			sourceTree = "<group>";
@@ -2949,7 +2946,6 @@
 				5D025BA6900E695BD9FA233A /* ProfileSheet.swift in Sources */,
 				898ED523A944F35E4094E013 /* PushRegistrar.swift in Sources */,
 				42EAA13E620563DD972207F2 /* Qibla.swift in Sources */,
-				B08FAFE310A9152AC0F7202D /* QiblaMapOverlay.swift in Sources */,
 				9FF77483E3A55368DC947B4A /* RealisticEntry.swift in Sources */,
 				754EC8B7CBF2869C441F228F /* RealisticMapView.swift in Sources */,
 				D0017E84AD574077A510D521 /* RealisticRules.swift in Sources */,

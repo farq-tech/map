@@ -41,7 +41,6 @@ struct LiveOutingScreen: View {
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
     @State private var realistic: RealisticScene?
-    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
     @ObservedObject private var tilt = MapTiltModel.shared
@@ -94,7 +93,6 @@ struct LiveOutingScreen: View {
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) },
                     hiRes: controller.hiResRequest(ui, exploring: exploring),
-                    qiblaOrigin: qiblaMapOrigin,
                     userPoint: weatherUserPoint
                 )
                 }
@@ -186,16 +184,6 @@ struct LiveOutingScreen: View {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
         return max(measured, sheetShape.peekHeight)
-    }
-
-    /// The qibla ray follows only a recent accepted fix; stale/low-quality GPS must not move it.
-    private var qiblaMapOrigin: LngLat? {
-        let navigating = controller.nav.phase == .guiding || controller.nav.phase == .offRoad
-        guard QiblaMapOverlay.shows(userChoice: showQiblaOnMap, navigating: navigating),
-              let fix = controller.location.lastFix else { return nil }
-        let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
-        guard ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 else { return nil }
-        return LngLat(lng: fix.lng, lat: fix.lat)
     }
 
     /// The cloud outlook's own-position point: a fix younger than 10 min and accurate to 2 km.
@@ -508,15 +496,12 @@ struct LiveOutingScreen: View {
             .map { var i = $0; i.label = "أماكني"; return i }
     }
 
-    /// The idle map (EM3): «موقعي» and the compass, what fits, then ONE «المزيد» (`IdleSideRules`); the layers button is added in front.
+    /// The idle map (EM3): «موقعي», what fits, then ONE «المزيد» (`IdleSideRules`); the layers button is added in front.
     private var idleSide: [SaryMapControlItem] {
         IdleSideRules.items(compact: IdleSideRules.isCompact(screenHeight: Double(screenHeight))).map { item in
             switch item {
             case .locate:
                 return SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate")
-            case .qibla:
-                return SaryMapControlItem(id: "qibla", systemImage: "location.north.line.fill", label: "القبلة", accessibilityID: "idle-qibla",
-                                          isActive: showQiblaOnMap, hint: "شعاع القبلة على الخريطة")
             case .places:
                 return SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني", accessibilityID: "explore-places")
             case .more:
@@ -577,7 +562,6 @@ struct LiveOutingScreen: View {
         case "tilt": tilt.toggle(CameraTiltRules.mode(heading: controller.mapFollowMode == .heading, idle: controller.idleHome))
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
-        case "qibla": showQiblaOnMap.toggle()
         case "idleMore": controller.idleMoreOpen = true
         case "tracks": controller.modal = .tracks
         case "realistic": openRealistic(atMapCamera: offersCityRealistic(exploring: controller.exploreActive, driving: false))

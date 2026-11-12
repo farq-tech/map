@@ -347,6 +347,6 @@ final class HomeBaseLayerTests: XCTestCase {
         let suite = UserDefaults(suiteName: "HomeBaseLayerTests.rows.\(UUID().uuidString)")!
         let r = MapLayerRegistry(defaults: suite)
         XCTAssertEqual(MapLayersSheetModel.baseRows(registry: r, mode: .home, areas: 0, topoAreas: 0).count, 3)
-        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).flatMap(\.rows).map(\.id), ["data.qibla"])
+        XCTAssertTrue(MapLayersSheetModel.sections(registry: r, mode: .home).flatMap(\.rows).allSatisfy { $0.id.rawValue.hasPrefix("imagery.grade.") }, "only the image colours: no data layers on the home map")
     }
 }
