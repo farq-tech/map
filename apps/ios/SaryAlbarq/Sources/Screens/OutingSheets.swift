@@ -15,6 +15,46 @@ struct JoinByLinkSheet: View {
     @State private var scanning = false
 
     var body: some View {
+        Group {
+            if NewUI.enabled { newBody } else { legacyBody }
+        }
+        .sheet(isPresented: $scanning) {
+            QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال أمير الطلعة.") { s in
+                scanning = false
+                text = s
+                go(s)
+            } cancel: { scanning = false }
+            .rtl()
+        }
+    }
+
+    /// Build 47 (`NewUI`): unified header, the link field, the system «لصق» and «امسح QR» as secondaries, ONE pinned primary.
+    private var newBody: some View {
+        NewUIPage(title: "انضم برابط", subtitle: "الصق رابط الدعوة أو امسح رمز QR", close: { dismiss() }, content: {
+            SaryTextField(title: "رابط الدعوة", placeholder: "https://…/outings/join#…", text: $text, id: "paste.field",
+                          state: invalid ? .error("الرابط ناقص أو فيه خطأ.") : .normal)
+                .environment(\.layoutDirection, .leftToRight)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            HStack(spacing: theme.space(.s)) {
+                /* The system «لصق»: the pasteboard is read only on this tap (no iOS paste banner). */
+                PasteButton(payloadType: String.self) { strings in
+                    Task { @MainActor in pasted(strings) }
+                }
+                .buttonBorderShape(.capsule)
+                .tint(theme.palette.accent)
+                .accessibilityIdentifier("paste.paste")
+                SarySecondaryButton("امسح QR", systemImage: "qrcode.viewfinder", id: "paste.scan") { scanning = true }
+            }
+            Text(ShareMemory.joinStatement)
+                .saryType(.caption).foregroundStyle(theme.palette.textSecondary)
+        }, actions: {
+            SaryPrimaryButton("متابعة", id: "paste.continue") { go(text) }
+                .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+        })
+    }
+
+    @ViewBuilder private var legacyBody: some View {
         SaryPage(title: "انضم برابط", subtitle: "الصق رابط الدعوة أو امسح رمز QR", close: { dismiss() }) {
             SaryTextField(title: "رابط الدعوة", placeholder: "https://…/outings/join#…", text: $text, id: "paste.field",
                           state: invalid ? .error("الرابط ناقص أو فيه خطأ.") : .normal)
@@ -39,14 +79,6 @@ struct JoinByLinkSheet: View {
                 .accessibilityIdentifier("paste.continue")
             Text(ShareMemory.joinStatement)
                 .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
-        }
-        .sheet(isPresented: $scanning) {
-            QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال أمير الطلعة.") { s in
-                scanning = false
-                text = s
-                go(s)
-            } cancel: { scanning = false }
-            .rtl()
         }
     }
 
@@ -168,9 +200,106 @@ struct InviteJoinSheet: View {
     /// iOS has not asked for the location yet: the pre-prompt says why before the system alert.
     private var showsPrePrompt: Bool { location.authorization == .notDetermined }
 
-    private var page: some View {
+    @ViewBuilder private var page: some View {
+        if NewUI.enabled { newPage } else { legacyPage }
+    }
+
+    /// Build 47 (`NewUI`): header (title right, ✕ left), who invited you + the outing in one glass card, and ONE pinned
+    /// primary «انضم للطلعة». Expired / taken / invalid / error keep the shared state view (icon, one line, one button).
+    @ViewBuilder private var newPage: some View {
         let p = theme.palette
-        return SaryPage(title: "دعوة طلعة", close: { send(.cancel) }) {
+        switch phase {
+        case .ready(let inv):
+            NewUIPage(title: "دعوة طلعة", close: { send(.cancel) }, content: {
+                NewUICard {
+                    HStack(spacing: theme.space(.s)) {
+                        Image(systemName: SaryIcon.crown).foregroundStyle(p.accentText)
+                        Text("دعاك \(inv.inviterName)").saryType(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                            .saryLongName(lines: 1, minScale: 0.7)
+                            .accessibilityIdentifier("invite.inviter")
+                        Spacer()
+                        SaryOutingStatusPill(status: status(inv.status))
+                    }
+                    Text(inv.outingName).saryType(.display).foregroundStyle(p.textPrimary)
+                        .saryLongName(lines: 2, minScale: 0.6)
+                        .accessibilityIdentifier("invite.name")
+                    if let dest = inv.destinationName {
+                        Label {
+                            Text("الوجهة: \(dest)").saryType(.body, weight: .bold)
+                                .accessibilityIdentifier("invite.destination")
+                        } icon: { Image(systemName: "mappin.and.ellipse").accessibilityHidden(true) }
+                            .foregroundStyle(p.textPrimary)
+                    }
+                    Label {
+                        Text("\(SaryFormat.number(inv.participantCount)) في الطلعة الآن").saryType(.body)
+                    } icon: { Image(systemName: "person.2.fill") }
+                        .foregroundStyle(p.textSecondary)
+                    if let invitee = inv.inviteeName {
+                        Label {
+                            Text("تظهر في الطلعة باسم «\(invitee)» كما حفظك \(inv.inviterName)").saryType(.body)
+                        } icon: { Image(systemName: "person.fill.checkmark") }
+                            .foregroundStyle(p.textSecondary)
+                            .accessibilityIdentifier("invite.personal")
+                    }
+                }
+                if inv.status == .ended {
+                    SaryBanner(text: "انتهت هذه الطلعة، فلا يمكن الانضمام لها.", tone: .warning)
+                } else {
+                    if needsTypedName(inv) {
+                        SaryTextField(title: "اسمك", placeholder: "كما يشوفه الأصدقاء", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
+                    }
+                    if case let .failed(m) = step { SaryInlineMessage(text: m, tone: .error) }
+                    if showsPrePrompt { JoinPrePrompt() }
+                    Text(JoinCopy.statement)
+                        .saryType(.caption).foregroundStyle(p.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("join.shareStatement")
+                }
+            }, actions: {
+                if inv.status != .ended {
+                    SaryPrimaryButton(step.busy ? (step == .askingPrecise ? "نطلب الموقع الدقيق…" : "ننضم…") : JoinCopy.button,
+                                      systemImage: step.busy ? nil : SaryIcon.locate, id: "invite.join") { join(inv) }
+                        .disabled(step.busy || (needsTypedName(inv) && name.trimmingCharacters(in: .whitespaces).isEmpty))
+                        .accessibilityValue(joinButtonAccessibilityValue)
+                }
+            })
+        default:
+            NewUIPage(title: "دعوة طلعة", close: { send(.cancel) }) {
+                stateView
+            }
+        }
+    }
+
+    /// The non-ready phases, shared by both skins.
+    @ViewBuilder private var stateView: some View {
+        switch phase {
+        case .loading:
+            SaryStateView(kind: .loading("نقرأ الدعوة…"))
+        case .expired:
+            SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من أمير الطلعة رابطًا جديدًا. الروابط تنتهي أو يلغيها أمير الطلعة."),
+                          actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
+                .accessibilityIdentifier("invite.expired")
+        case .taken:
+            SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «ملفي» وافتح الرابط مرة ثانية، أو اطلب من أمير الطلعة دعوة جديدة باسمك."),
+                          actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
+                .accessibilityIdentifier("invite.taken")
+        case .invalid:
+            SaryStateView(kind: .error(title: "الرابط ناقص أو فيه خطأ", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الطلعة."),
+                          actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
+                .accessibilityIdentifier("invite.invalid")
+        case .error(let m):
+            SaryStateView(kind: model.online ? .error(title: "تعذّر قراءة الدعوة", message: m) : .offline(message: "نقرأ الدعوة أول ما يرجع الاتصال."),
+                          actionTitle: "حاول مرة ثانية", actionID: "invite.retry") { Task { await load() } }
+        case .ready:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder private var legacyPage: some View {
+        let p = theme.palette
+        SaryPage(title: "دعوة طلعة", close: { send(.cancel) }) {
             switch phase {
             case .loading:
                 SaryStateView(kind: .loading("نقرأ الدعوة…"))
@@ -460,18 +589,26 @@ struct JoinNeedsLocationView: View {
             }
             .padding(.horizontal, theme.space(.l))
         } bottom: {
-            VStack(spacing: theme.space(.l)) {
-                Button(action: openSettings) { SaryButtonLabel(title: JoinCopy.openSettings, systemImage: "gearshape.fill") }
-                    .buttonStyle(.sary(.primary))
-                    .accessibilityIdentifier("join.openSettings")
-                Button(JoinCopy.cancel, action: cancel)
-                    .buttonStyle(.sary(.plain))
-                    .accessibilityIdentifier("join.cancel")
+            if NewUI.enabled {
+                /* Build 47 (`NewUI`): ONE primary, the way out as a secondary (not a bare link). */
+                NewUIActions {
+                    SaryPrimaryButton(JoinCopy.openSettings, systemImage: "gearshape.fill", id: "join.openSettings", action: openSettings)
+                    SarySecondaryButton(JoinCopy.cancel, id: "join.cancel", action: cancel)
+                }
+            } else {
+                VStack(spacing: theme.space(.l)) {
+                    Button(action: openSettings) { SaryButtonLabel(title: JoinCopy.openSettings, systemImage: "gearshape.fill") }
+                        .buttonStyle(.sary(.primary))
+                        .accessibilityIdentifier("join.openSettings")
+                    Button(JoinCopy.cancel, action: cancel)
+                        .buttonStyle(.sary(.plain))
+                        .accessibilityIdentifier("join.cancel")
+                }
+                .padding(.top, theme.space(.s))
+                .padding(.horizontal, theme.space(.l))
+                .padding(.bottom, theme.space(.l))
+                .background(p.background)
             }
-            .padding(.top, theme.space(.s))
-            .padding(.horizontal, theme.space(.l))
-            .padding(.bottom, theme.space(.l))
-            .background(p.background)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.palette.background.ignoresSafeArea())
