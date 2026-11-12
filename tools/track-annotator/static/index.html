@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#14181c">
+<title>أداة وسم الدروب — سَرى البارق</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>أداة وسم دروب الصحراء <small>سَرى البارق · تعليم SAM-Road</small></h1>
+  <div id="imgnote" class="badge" title="">الصور: Mapbox z17@2x ≈ 0.54 م/بكسل — ما فوق z17 تكبير فقط</div>
+  <div id="budget" class="badge"></div>
+  <button id="to-review" class="badge" style="pointer-events:auto;cursor:pointer">← وضع المراجعة</button>
+  <div id="zoomwarn" class="badge warn" hidden>⚠ تكبير فقط: لا تفاصيل جديدة فوق الدقة الحقيقية</div>
+</header>
+<main>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="crosshair" hidden><i></i><i></i></div>
+    <div id="toolbar" hidden>
+      <div class="tb-g tb-tools">
+        <button data-tool="select" title="تحديد وتعديل (V)">تحديد</button>
+        <button data-tool="centerline" title="خط الوسط للمسار (C)">خط الوسط</button>
+        <button data-tool="edge" title="حافة المسار — اختر مسارًا أولًا (E)">حافة</button>
+        <button data-tool="negative" id="btn-neg" title="ليس درب: ارسم فوق ما يشبه الدرب ولا يجوز تعلّمه (N)">ليس درب</button>
+        <button id="btn-del" title="حذف المحدد (Delete)">حذف</button>
+        <button id="btn-delvtx" title="حذف النقطة المحددة" hidden>حذف نقطة</button>
+      </div>
+      <div class="tb-g tb-actions">
+        <button id="btn-add" class="mob" title="إضافة نقطة عند التصويب">＋ نقطة</button>
+        <button id="btn-finish" title="إنهاء الرسم (Enter / نقر مزدوج)">إنهاء</button>
+        <button id="btn-undo" title="تراجع (Ctrl+Z)">تراجع</button>
+        <button id="btn-aim" class="mob" title="وضع التصويب: حرّك الخريطة تحت المؤشر ثم ＋ نقطة">تصويب</button>
+        <button id="btn-save" class="primary" title="حفظ (Ctrl+S)">حفظ</button>
+      </div>
+      <div class="tb-g tb-negcat" id="negrow" hidden><select id="neg-cat" aria-label="فئة ليس درب"></select></div>
+      <div class="tb-g tb-sug" id="sugrow" hidden>
+        <button id="btn-accept" class="primary" title="قبول المقترح المحدد">قبول المقترح</button>
+        <button id="btn-accept-all" title="قبول كل المقترحات">قبول الكل</button>
+        <button id="btn-reject-all" title="رفض كل المقترحات المعلّقة">رفض الكل</button>
+      </div>
+      <div class="tb-g tb-types mob" id="typebar"></div>
+      <label class="chk desk"><input type="checkbox" id="chk-overlay"> القناع المحفوظ</label>
+    </div>
+    <button id="fab-win" class="primary" hidden>جلب النافذة المحددة</button>
+    <div id="hint"></div>
+    <div id="drop" hidden>أفلت ملف GeoTIFF هنا</div>
+  </div>
+  <aside id="sheet">
+    <nav id="tabs">
+      <button data-tab="sample" class="on">العينة</button>
+      <button data-tab="batch">طلب الدفعة</button>
+      <button data-tab="export">التصدير</button>
+      <button data-tab="impact">أثر وسمك</button>
+    </nav>
+
+    <div id="sheetbody">
+    <section id="tab-sample">
+      <h3>1) نافذة صور جديدة</h3>
+      <div class="row">
+        <label>الحجم
+          <select id="win-size"><option value="2">2×2 (≈550 م)</option><option value="3" selected>3×3 (≈830 م)</option><option value="4">4×4 (≈1.1 كم)</option></select>
+        </label>
+        <button id="btn-win" class="primary">جلب النافذة (مركز الخريطة)</button>
+      </div>
+      <div id="win-info" class="muted">حرّك الخريطة؛ المستطيل الأصفر هو النافذة التي ستُجلب (محاذاة بلاطات z17).</div>
+      <h3>2) أو استورد GeoTIFF</h3>
+      <div class="row"><input type="file" id="file-tif" accept=".tif,.tiff"><span class="muted">أو اسحبه فوق الخريطة</span></div>
+
+      <h3>العينات</h3>
+      <ul id="samples"></ul>
+
+      <div id="cur" hidden>
+        <h3>العينة الحالية <code id="cur-id"></code></h3>
+        <div class="grid2">
+          <label>التضاريس <select id="m-terrain"></select></label>
+          <label>الوضوح العام <select id="m-clarity"></select></label>
+        </div>
+        <label>ملاحظات <textarea id="m-notes" rows="2"></textarea></label>
+        <label class="chk big"><input type="checkbox" id="m-complete"> النافذة مكتملة الوسم — كل ما لم أرسمه ليس درب</label>
+        <div id="m-complete-hint" class="muted">إن لم تُعلَّم «مكتملة» فلا يُتعلَّم منها إلا ما رسمته (بقية الصورة تُتجاهل ولا تُعلَّم خلفية).</div>
+        <div id="m-info" class="muted"></div>
+
+        <h3>اقتراح النموذج</h3>
+        <div class="row"><select id="sg-backend"><option value="auto">تلقائي</option><option value="sam_road">SAM-Road (محلي)</option><option value="ridge">مرشّح خطوط Sato/Meijering</option></select>
+          <button id="btn-suggest" class="primary">اقترح مسارات</button></div>
+        <div id="sg-status" class="muted">يرسم النموذج مسارات «مقترحة» (بنفسجي منقّط) تقبلها أو تحذفها أو تصلحها بدل الرسم من الصفر.</div>
+        <h3>«ليس درب» (سلبيات صعبة)</h3>
+        <label>الفئة <select id="neg-cat2"></select></label>
+
+        <h3>نوع المسار</h3>
+        <div id="types"></div>
+        <label>وضوح المسار <select id="t-clarity"></select></label>
+        <div id="sel-info" class="muted">لا مسار محدد</div>
+        <div id="stats"></div>
+        <div id="quality"></div>
+      </div>
+    </section>
+
+    <section id="tab-batch" hidden>
+      <p class="muted">طلب واحد مجمّع بحسب ما وسمته فعلًا. لن نطلب نافذة سبق أن زوّدتنا بها أو تخطيتها.</p>
+      <button id="btn-batch" class="primary">حلّل ما وسمته واعرض الدفعة</button>
+      <div id="batch"></div>
+    </section>
+
+    <section id="tab-impact" hidden>
+      <p class="muted">أثر آخر عينة حفظتها: كم كم أضفت لكل نوع، أثرها على التقسيم المكاني، وما تبقى. تتحدث بعد كل حفظ.</p>
+      <div id="impact" class="muted">احفظ عينة لترى الأثر.</div>
+    </section>
+
+    <section id="tab-export" hidden>
+      <p class="muted">صيغة SAM-Road (spacenet): بلاطات 400×400 + gt_graph + أقنعة + data_split.json، بتقسيم مكاني مع حاجز. لا تدريب هنا.</p>
+      <div class="grid2">
+        <label>دقة التصدير (م/بكسل) <select id="x-gsd"><option>1.0</option><option>0.6</option></select></label>
+        <label class="chk"><input type="checkbox" id="x-fix"> تضمين عينات الاختبار البرمجية</label>
+        <label class="chk"><input type="checkbox" id="x-complete"> المكتملة الوسم فقط</label>
+      </div>
+      <button id="btn-export" class="primary">تصدير + تقرير الجودة</button>
+      <div id="export-out"></div>
+    </section>
+    </div>
+  </aside>
+</main>
+<div id="review" hidden>
+  <div id="rv-top">
+    <button id="rv-exit" title="الرسم والخريطة">وضع الرسم</button>
+    <div id="rv-prog" aria-live="polite"></div>
+    <button id="rv-statsbtn">المصادر</button>
+  </div>
+  <div id="rv-main">
+    <div id="rv-stage">
+      <img id="rv-img" alt="" draggable="false">
+      <svg id="rv-svg" viewBox="0 0 512 512" preserveAspectRatio="none"></svg>
+      <div id="rv-badge"></div>
+      <div id="rv-swipe-l">✗</div><div id="rv-swipe-r">✓</div>
+      <div id="rv-msg" hidden></div>
+    </div>
+    <div id="rv-panel">
+      <div id="rv-why"></div>
+      <div id="rv-reasons" hidden></div>
+      <div id="rv-edit" hidden>
+        <div id="rv-ehint" class="muted"></div>
+        <div class="rv-row">
+          <button data-et="drag" class="on">نقطة</button><button data-et="trim">قصّ</button><button data-et="extend">مدّ</button>
+          <button data-et="snap">انطباق</button><button data-et="split">اقسم</button>
+        </div>
+        <div class="rv-row"><button id="rv-eundo">↶ تراجع التعديل</button><button id="rv-ecancel">إلغاء</button><button id="rv-edone" class="ok">تم ✓</button></div>
+      </div>
+      <div id="rv-actions">
+        <div class="rv-row big"><button id="rv-right" class="ok">✓ واضح</button><button id="rv-faint" class="faint">✓ ضعيف</button><button id="rv-wrong" class="no">✗ خطأ</button></div>
+        <div class="rv-row"><button id="rv-skip">⤼ تخطّى</button><button id="rv-editbtn">✎ عدّل</button><button id="rv-undo">↶ تراجع</button></div>
+        <div class="rv-row"><button id="rv-more">صح لكن ناقص</button><button id="rv-toggle">إخفاء الخط</button></div>
+      </div>
+    </div>
+  </div>
+  <div id="rv-stats" hidden></div>
+</div>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="app.js"></script>
+<script src="review.js"></script>
+</body>
+</html>

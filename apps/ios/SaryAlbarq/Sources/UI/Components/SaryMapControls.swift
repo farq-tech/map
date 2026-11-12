@@ -21,6 +21,16 @@ struct SaryMapControlItem: Identifiable, Equatable {
     }
 }
 
+extension SaryMapControlItem {
+    /// THE layers button (docs/ONE-MAP-UNIFICATION.md §6): one icon, one identifier (`map.layers`) and one place
+    /// (first in the map's side column) on every map screen. It opens `MapLayersSheet`.
+    /// `active` lights it while a layer that changes the view itself (3D terrain) is on.
+    static func layers(active: Bool = false) -> SaryMapControlItem {
+        SaryMapControlItem(id: "layers", systemImage: "square.3.layers.3d", label: "الطبقات", accessibilityID: "map.layers",
+                           isActive: active, hint: "الخريطة والطقس والمسارات والقبلة والتضاريس")
+    }
+}
+
 /// Single floating round map button (glass). 48 pt, 64 pt in drive mode.
 struct SaryMapControlButton: View {
     var item: SaryMapControlItem

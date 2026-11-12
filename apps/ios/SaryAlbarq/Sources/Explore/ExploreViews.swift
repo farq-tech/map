@@ -172,8 +172,7 @@ extension SaryMapControlItem {
     /// saved places and GPX tracks share one sheet.
     static func explore(terrain3D: Bool, tracksShown: Int) -> [SaryMapControlItem] {
         [
-            SaryMapControlItem(id: "layers", systemImage: "square.3.layers.3d", label: "الطبقات", accessibilityID: "explore-layers",
-                               isActive: terrain3D, hint: "الخريطة، التضاريس ثلاثية الأبعاد، الوضع الواقعي، بلا إنترنت"),
+            .layers(active: terrain3D),
             SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني ومساراتي", accessibilityID: "explore-places",
                                badge: tracksShown > 0 ? tracksShown : nil),
             SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate"),
@@ -226,6 +225,26 @@ struct ExploreLayersSheet: View {
                     .accessibilityIdentifier("layer.\(l.rawValue)")
                 }
             }
+            ExploreLayerSections(controller: controller)
+        }
+        .onAppear { offline.reload() }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.layers.sheet")
+    }
+}
+
+/// Everything under the base-layer cards of «الطبقات» (imagery, weather, camps, tracks, terrain,
+/// realistic mode, offline). Shared by `MapLayersSheet` and the DEBUG-only legacy `ExploreLayersSheet`
+/// until S3 moves these into the registry too.
+struct ExploreLayerSections: View {
+    @ObservedObject var controller: LiveOutingController
+    @ObservedObject private var offline = OfflineMaps.shared
+    @Environment(\.sary) private var theme
+    @AppStorage(DrivingRealismPrefs.osmKey) private var osmTracks = true
+
+    var body: some View {
+        let p = theme.palette
+        Group {
             HiResLayerSection()
             WeatherLayersSection()
             CampSitesLayerSection(controller: controller)
@@ -288,9 +307,6 @@ struct ExploreLayersSheet: View {
                 .padding(.horizontal, theme.space(.m))
             }
         }
-        .onAppear { offline.reload() }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("explore.layers.sheet")
     }
 }
 
@@ -631,7 +647,6 @@ struct PlacesAndTracksSheet: View {
 /// exploration) and «الطبقات» (3D terrain, high-res imagery, offline maps) at the bar's ends.
 struct ExploreTopBar: View {
     @ObservedObject var controller: LiveOutingController
-    var layers: () -> Void
     var exit: () -> Void
     @Environment(\.sary) private var theme
 
@@ -639,7 +654,7 @@ struct ExploreTopBar: View {
         let p = theme.palette
         VStack(spacing: 8) {
             HStack(spacing: 4) {
-                round(SaryIcon.back, label: "ارجع للطلعة", id: "explore-exit", action: exit)
+                if !controller.idleHome { round(SaryIcon.back, label: "ارجع للطلعة", id: "explore-exit", action: exit) }
                 HStack(spacing: 0) {
                     ForEach([MapLayer.satellite, .topo, .standard], id: \.self) { l in
                         let on = controller.mapLayer == l
@@ -661,7 +676,7 @@ struct ExploreTopBar: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(Text("الطبقة: \(controller.mapLayer.label)"))
                 .accessibilityIdentifier("explore.layerName")
-                round("square.3.layers.3d", label: "الطبقات", id: "explore-layers", active: controller.terrain3D, action: layers)
+                /* «الطبقات» is the map's one layers button (`map.layers`, first in the side column), not a second one here. */
             }
             /* The round buttons are 44 pt touch areas around 36 pt circles, so the
              * bar's inset is 1 pt (the circles still sit 5 pt from its edge). */

@@ -162,6 +162,8 @@ extension LiveOutingController {
     /// has AT PEEK, so raising / lowering the sheet never changes its own detent set.
     func sheetShape(drive: Bool) -> LiveSheetShape {
         guard !tripEnded, !nav.isActive else { return LiveSheetShape(drive: drive, trip: false) }
+        /* The idle sheet holds the search field at peek: the taller peek the quick row used. */
+        if idleHome { return LiveSheetShape(drive: drive, trip: true) }
         let f = focusFacts
         let trip = LiveScreenRules.peekShowsQuickRow(override: contextOverride, navigating: false, moving: motion.moving,
                                                      driveMode: drive, exploring: exploreActive, ended: false,

@@ -1,0 +1,7 @@
+# user data (git-ignored): imagery cache, samples, batches, exports
+data/
+exports/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc

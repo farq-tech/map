@@ -239,6 +239,12 @@ final class LiveOutingController: ObservableObject {
     let exploreReading = ExploreReadingModel()
     /// Exploration was entered by panning away (said in the toast); the person's own entry is not.
     var exploreAuto = false
+    /// EM1: this controller carries the idle navigation map (no trip); exploration's capabilities stay on and it never "exits".
+    var idleHome = false
+    /// EM2: set by the idle host: guidance from the idle map starts a real solo outing (`AppModel.openSolo`).
+    var idleNavigate: ((OutingDestination) -> Void)?
+    /// EM3: the idle map's «المزيد» handle (the actions that do not fit the side column).
+    @Published var idleMoreOpen = false
     /// A finger moved the map since the last settle (auto-exploration needs a real pan).
     var userPannedMap = false
     /// «ذكاء القافلة»: separation / unexpected-stop watch (Core/ConvoyWatch.swift).

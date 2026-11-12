@@ -33,6 +33,8 @@ struct PlanMapView: UIViewRepresentable {
     var onDesertTap: (String) -> Void = { _ in }
     /// Fresh location for the optional always-visible Qibla ray (used on the home map).
     var qiblaOrigin: LngLat? = nil
+    /// The base map (S6): the home map follows the person's choice in the layers sheet; every other use stays satellite.
+    var baseLayer: MapLayer = .satellite
 
     /// More vertices than this are not drawn as handles (an imported track); the line still is.
     static let maxHandles = 150
@@ -42,9 +44,10 @@ struct PlanMapView: UIViewRepresentable {
     func makeUIView(context: Context) -> MapView {
         let start = PlanCamera.initial(route: route, destination: destination, picked: picked)
         let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: CameraOptions(center: start.coordinate, zoom: 11.5),
-                                                                      styleURI: ArabicBasemap.cachedJSON == nil ? OutingMapboxView.styleURI : nil))
-        if let json = ArabicBasemap.cachedJSON { map.mapboxMap.loadStyle(json) } else {
-            ArabicBasemap.load { json in if let json { map.mapboxMap.loadStyle(json) } }
+                                                                      styleURI: ArabicBasemap.cached(baseLayer) == nil ? baseLayer.styleURI : nil))
+        if let json = ArabicBasemap.cached(baseLayer) { map.mapboxMap.loadStyle(json) } else {
+            let first = baseLayer
+            ArabicBasemap.load(first) { json in if let json, context.coordinator.appliedLayer == first { map.mapboxMap.loadStyle(json) } }
         }
         map.accessibilityIdentifier = "plan.map"
         map.location.options.puckType = nil
@@ -75,6 +78,8 @@ struct PlanMapView: UIViewRepresentable {
         private var drawnEditing = false
         private var drawnDesert: DesertOverlay??
         private var lastCamera = -1
+        /// The base layer the map is showing (or loading).
+        var appliedLayer: MapLayer = .satellite
         /// Asked before the map had a size or a style: done once it has.
         private var pendingCamera: PlanCamera?
         private var dragging = false
@@ -105,6 +110,7 @@ struct PlanMapView: UIViewRepresentable {
         func attach(_ map: MapView, parent: PlanMapView) {
             self.map = map
             self.parent = parent
+            appliedLayer = parent.baseLayer
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &bag)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.reportCenter() }.store(in: &bag)
             guard parent.interactive else { return }
@@ -140,8 +146,8 @@ struct PlanMapView: UIViewRepresentable {
                 try? m.setStyleImportConfigProperty(for: "basemap", config: k, value: v)
             }
             PlanMapStyle.ensureLayers(m, emphasised: true, night: parent?.theme.night ?? false)
-            /* Every building, flat and light, from a neighbourhood zoom (the home map is satellite). */
-            BuildingFootprints.install(m)
+            /* Every building, flat and light, from a neighbourhood zoom (the satellite base only: the other styles draw their own). */
+            if appliedLayer == .satellite { BuildingFootprints.install(m) }
             drawnRoute = nil
             drawnHandles = nil
             drawnDesert = nil
@@ -155,9 +161,22 @@ struct PlanMapView: UIViewRepresentable {
             }
         }
 
+        /// The person chose another base layer: load its style (the cached Arabic copy first, then the refreshed one);
+        /// `styleLoaded` puts the route, desert layers and footprints back.
+        private func setBase(_ l: MapLayer, on map: MapView) {
+            appliedLayer = l
+            styleReady = false
+            if let json = ArabicBasemap.cached(l) { map.mapboxMap.loadStyle(json) } else { map.mapboxMap.loadStyle(l.styleURI) }
+            ArabicBasemap.load(l) { [weak self, weak map] json in
+                guard let self, let map, let json, self.appliedLayer == l else { return }
+                map.mapboxMap.loadStyle(json)
+            }
+        }
+
         func update(_ p: PlanMapView) {
             parent = p
             guard let map else { return }
+            if p.baseLayer != appliedLayer { setBase(p.baseLayer, on: map) }
             QiblaMapOverlay.of(map).update(origin: p.qiblaOrigin)
             if styleReady, let m = map.mapboxMap, !dragging, drawnRoute != p.route {
                 PlanMapStyle.update(m, route: p.route)

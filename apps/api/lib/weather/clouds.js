@@ -31,7 +31,7 @@ const FREE_LATENCY_MIN = 60;
 const WINDOW_MIN = 120;
 /* Clouds over the Kingdom arrive from the Red Sea, the Levant and the Gulf: a wider box. */
 const REGION = { west: 25, south: 8, east: 65, north: 40 };
-const MIN_ZOOM = 3;
+const MIN_ZOOM = 0; // the globe view too: full-disk IR is one picture at every zoom
 const MAX_ZOOM = 9; // FCI IR is 1 km at nadir (~2 km over KSA): past z9 only magnified
 
 
@@ -121,7 +121,7 @@ async function latestImageTime(nowMs = Date.now()) {
 
 async function framesPayload(nowMs = Date.now()) {
   const latest = await latestImageTime(nowMs);
-  const frames = planFrames(latest, nowMs).map((f) => ({ ...f, tile_url: `/api/weather/clouds/tile/${f.id}/{z}/{x}/{y}.png` }));
+  const frames = planFrames(latest, nowMs).map((f) => ({ ...f, tile_url: `/api/weather/clouds/tile/${f.id}/{z}/{x}/{y}.png?v=2` }));
   const year = new Date(nowMs).getUTCFullYear();
   return {
     ok: frames.length > 0,
@@ -136,7 +136,7 @@ async function framesPayload(nowMs = Date.now()) {
     maxzoom: MAX_ZOOM,
     bounds: [REGION.west, REGION.south, REGION.east, REGION.north],
     refresh_seconds: 300,
-    legend: { kind: 'clouds', items_ar: ['أبيض كثيف: سحب عالية باردة (ركامي، احتمال مطر)', 'أبيض خفيف: سحب رقيقة أو منخفضة'] },
+    legend: { kind: 'clouds', items_ar: ['سماوي: قمم باردة جدًا (ركامي، احتمال مطر)', 'أبيض: سحب كثيفة', 'أزرق فاتح: سحب رقيقة'] },
     generated_at: new Date(nowMs).toISOString(),
   };
 }
@@ -145,6 +145,10 @@ async function framesPayload(nowMs = Date.now()) {
  * Grey IR (bright = cold cloud tops) → white with alpha. Below `lo` transparent, above `hi`
  * nearly opaque, smooth between. Pure; tested.
  */
+/* The picture drawn on the map: thin/mid cloud (IR ~75–175) must show on a bright satellite basemap.
+ * (The outlook keeps the default curve: its "dense cloud" thresholds were tuned on it.) */
+const TILE_CURVE = { lo: 75, hi: 175, maxAlpha: 245 };
+
 function irToOverlay(rgba, { lo = 105, hi = 205, maxAlpha = 235 } = {}) {
   const out = Buffer.alloc(rgba.length);
   for (let i = 0; i < rgba.length; i += 4) {
@@ -167,6 +171,78 @@ function wmsMapUrl([a, b, c, d], width, height, tMs) {
     + `&time=${encodeURIComponent(new Date(tMs).toISOString().replace('.000', ''))}`;
 }
 
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+
+/**
+ * The picture drawn on the map, readable on pale sand and on dark night ground alike:
+ *  - colour by cloud-top temperature (brightness): thin cloud pale blue, thick cloud white, very cold
+ *    tops (deep convection, where rain can come from) ice-cyan;
+ *  - a soft dark shadow under and beside the cloud (offset down-right), so white does not melt into sand.
+ * Pure; `rgba` is the WMS grey picture, returns a new RGBA buffer of the same size.
+ */
+function cloudTileRgba(rgba, w, h) {
+  const n = w * h;
+  const a = new Float32Array(n); // cloud alpha 0..1
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = (rgba[i * 4] + rgba[i * 4 + 1] + rgba[i * 4 + 2]) / 3;
+    const k = rgba[i * 4 + 3] === 0 ? 0 : smooth((v - TILE_CURVE.lo) / (TILE_CURVE.hi - TILE_CURVE.lo));
+    a[i] = k * (TILE_CURVE.maxAlpha / 255);
+    const thin = smooth((v - 75) / 80); // 0 pale blue … 1 white
+    const cold = smooth((v - 205) / 35); // → ice cyan
+    let r = lerp(165, 255, thin);
+    let g = lerp(200, 255, thin);
+    let b = lerp(238, 255, thin);
+    r = lerp(r, 120, cold);
+    g = lerp(g, 214, cold);
+    b = lerp(b, 255, cold);
+    col[i * 3] = r;
+    col[i * 3 + 1] = g;
+    col[i * 3 + 2] = b;
+  }
+  /* Shadow: 5×5 box blur of the alpha, shifted (+2, +3) px. */
+  const blur = new Float32Array(n);
+  const R = 2;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      let c = 0;
+      for (let dy = -R; dy <= R; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -R; dx <= R; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= w) continue;
+          sum += a[yy * w + xx];
+          c++;
+        }
+      }
+      blur[y * w + x] = sum / c;
+    }
+  }
+  const out = Buffer.alloc(n * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const sx = x - 2;
+      const sy = y - 3;
+      const sa = sx >= 0 && sy >= 0 ? blur[sy * w + sx] * 0.5 : 0; // shadow alpha
+      const ca = a[i];
+      const oa = ca + sa * (1 - ca);
+      if (oa <= 0.002) continue;
+      /* over: cloud colour on top of a dark blue-grey shadow (20, 28, 52). */
+      const wc = ca / oa;
+      out[i * 4] = Math.round(col[i * 3] * wc + 20 * (1 - wc));
+      out[i * 4 + 1] = Math.round(col[i * 3 + 1] * wc + 28 * (1 - wc));
+      out[i * 4 + 2] = Math.round(col[i * 3 + 2] * wc + 52 * (1 - wc));
+      out[i * 4 + 3] = Math.round(oa * 255);
+    }
+  }
+  return out;
+}
+
 const tileCache = new Lru(Number(process.env.WEATHER_CLOUD_TILE_CACHE) || 1500);
 const inflight = new Map();
 let EMPTY;
@@ -182,13 +258,13 @@ function emptyPng() {
  * One overlay tile. Returns { status, body } — 404 for a frame the licence does not allow
  * yet or a bad tile, an empty PNG outside the region.
  */
-async function tile(id, z, x, y, nowMs = Date.now()) {
+async function tile(id, z, x, y, nowMs = Date.now(), { legacy = false } = {}) {
   const t = parseFrameId(id);
   if (t == null || !Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y)) return { status: 400 };
   if (z < MIN_ZOOM || z > MAX_ZOOM || x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z) return { status: 404 };
   if (!frameAllowed(t, nowMs)) return { status: 404, reason: 'frame_not_licensed_yet' };
   if (!intersects(tileBox(z, x, y), REGION)) return { status: 200, body: emptyPng() };
-  const key = `${id}/${z}/${x}/${y}`;
+  const key = `${id}/${z}/${x}/${y}${legacy ? '/legacy' : ''}`;
   const body = await memo(tileCache, inflight, key, async () => {
     /* WMS reprojects and resamples to the tile for us. */
     const size = 256;
@@ -198,7 +274,8 @@ async function tile(id, z, x, y, nowMs = Date.now()) {
     if (r.status !== 200 || !/png/.test(r.type)) return null;
     const src = PNG.sync.read(r.body);
     const png = new PNG({ width: src.width, height: src.height });
-    png.data = irToOverlay(src.data);
+    /* `legacy` = the Build 41–43 look (white on a thin curve), kept only to compare before/after. */
+    png.data = legacy ? irToOverlay(src.data) : cloudTileRgba(src.data, src.width, src.height);
     return PNG.sync.write(png, { colorType: 6 });
   });
   if (!body) return { status: 502 };
@@ -214,7 +291,7 @@ async function warm(nowMs = Date.now(), { frames = 4 } = {}) {
   const latest = await latestImageTime(nowMs);
   const plan = planFrames(latest, nowMs).slice(-frames).reverse(); // newest first
   const KSA_BOX = { west: 34, south: 16, east: 56, north: 33 };
-  const base = [3, 4, 5].flatMap((z) => tilesFor(KSA_BOX, z));
+  const base = [0, 1, 2, 3, 4, 5].flatMap((z) => tilesFor(KSA_BOX, z));
   /* The newest picture also gets z6 (what a person zoomed in a little asks for). Deeper zooms (up to z9)
    * would be thousands of ~20 s upstream tiles a frame, so they stay on demand. */
   const closer = tilesFor(KSA_BOX, 6);
@@ -229,7 +306,7 @@ async function warm(nowMs = Date.now(), { frames = 4 } = {}) {
 
 module.exports = {
   LAYER, REGION, MIN_ZOOM, MAX_ZOOM,
-  frameId, parseFrameId, frameAllowed, planFrames, warm, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, tile, riyadhLabel, attribution,
+  frameId, parseFrameId, frameAllowed, planFrames, warm, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, cloudTileRgba, TILE_CURVE, tile, riyadhLabel, attribution,
   _reset() {
     capsCache = { at: 0, latest: null };
   },

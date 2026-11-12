@@ -117,7 +117,7 @@ final class RealisticTests: XCTestCase {
 
     func testExplorationOffersTheRealisticEntry() {
         /* «تخفيف الزحمة» ١٠: «الوضع الواقعي» is a row of «الطبقات» (explore-realistic), reached from its button. */
-        XCTAssertTrue(SaryMapControlItem.explore(terrain3D: false, tracksShown: 0).contains { $0.accessibilityID == "explore-layers" })
+        XCTAssertTrue(SaryMapControlItem.explore(terrain3D: false, tracksShown: 0).contains { $0.accessibilityID == "map.layers" })
         XCTAssertFalse(SaryMapControlItem.explore(terrain3D: false, tracksShown: 0).contains { $0.accessibilityID == "explore-realistic" })
     }
 

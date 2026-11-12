@@ -269,6 +269,14 @@ struct NavManeuverBanner: View {
                     nextRow(next)
                 }
             }
+            /* Asphalt / dirt / off-road km still ahead, in the map's colours (only when dirt or off-road is left). */
+            if !nav.rerouting, let km = nav.remainingSurfaces {
+                NavSurfaceKmStrip(km: km, labels: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(p.sunken.opacity(0.7))
+            }
         }
         /* «نعيد حساب الطريق…» and back: a crossfade, so the reroute reads as one change. */
         .animation(theme.animation(.smooth), value: nav.rerouting)
@@ -351,6 +359,7 @@ struct NavETARow: View {
         let size: CGFloat = theme.drive ? 16 : 14
         if nav.etaDate != nil || nav.remainingMeters != nil {
             VStack(spacing: 0) {
+              VStack(spacing: 0) {
                 Rectangle().fill(p.separator).frame(height: 0.75).padding(.horizontal, 13)
                 HStack(spacing: 4) {
                     if let eta = nav.etaDate {
@@ -380,12 +389,21 @@ struct NavETARow: View {
                 .minimumScaleFactor(0.8)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 10)
+              }
+              .accessibilityElement(children: .combine)
+              .accessibilityLabel(Text(label))
+              .accessibilityIdentifier("nav.banner.eta")
+                /* Asphalt / dirt / off-road km still ahead (not on a route without dirt or surface data). */
+                if let km = nav.remainingSurfaces {
+                    NavSurfaceKmStrip(km: km)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 13)
+                        .padding(.bottom, 8)
+                }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(Text(label))
-            .accessibilityIdentifier("nav.banner.eta")
         }
     }
+
 
     private var label: String {
         [nav.target.map { "إلى \($0.name)" }, nav.etaDate.map { "توصل \(NavText.clock($0))" },
@@ -946,5 +964,15 @@ struct GuidancePromptRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier(prompt == .resume ? "nav.auto.resume" : "nav.auto.start")
         }
+    }
+}
+
+extension NavSession {
+    /// The km still ahead per surface (`NavSurfaceKm.remaining`), only when dirt / off-road is left on the way.
+    var remainingSurfaces: NavSurfaceKm? {
+        guard let r = active, !r.surfaceRuns.isEmpty, let p = shownProgress else { return nil }
+        let done = max(0, r.distanceM - p.distanceRemainingM)
+        let k = NavSurfaceKm.remaining(r.surfaceRuns, from: done, cum: NavRouteMetrics.tables(r).surfaceCum, routeM: p.distanceRemainingM)
+        return k.showsSplit ? k : nil
     }
 }

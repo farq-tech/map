@@ -37,6 +37,8 @@ struct LiveSheet: View {
                                    changeDestination: controller.navChangeDestination)
                         .padding(.top, theme.space(.s))
                 }
+            } else if controller.idleHome {
+                IdleSheetContent(controller: controller, detent: ui.sheetDetent)
             } else {
                 /* One line: the people (the trip's numbers are in the header above), then the key actions. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
@@ -46,7 +48,7 @@ struct LiveSheet: View {
                     LiveQuickRow(controller: controller, hasRally: ui.participantsTab.rally != nil)
                 }
             }
-            if ui.sheetDetent != .peek {
+            if ui.sheetDetent != .peek && !(controller.idleHome && !controller.nav.isActive) {
                 /* No tabs (UX simplification): the people, then whatever needs attention. The rest is
                  * one tap away in the quick row or «المزيد». docs/ux-simplify-inventory.md. */
                 ScrollView {
@@ -236,7 +238,10 @@ struct LiveSheet: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case .layers:
-            ExploreLayersSheet(controller: controller)
+            Group {
+                if MapLayersSheetFlag.useLegacy { ExploreLayersSheet(controller: controller) } else { MapLayersSheet(controller: controller, mode: MapLayersSheetModel.mode(exploring: controller.exploreActive, navigating: controller.nav.phase == .guiding || controller.nav.phase == .offRoad),
+                                                                  close: { controller.modal = nil }) }
+            }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case .places:

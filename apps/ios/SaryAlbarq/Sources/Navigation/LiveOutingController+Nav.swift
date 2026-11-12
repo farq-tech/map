@@ -62,6 +62,8 @@ extension LiveOutingController {
         case let .failure(e):
             toast(e.message)
         case let .success(t):
+            /* The idle map has no trip: guidance starts as a real solo outing (`AppModel.openSolo`), like «اتجه» always did. */
+            if handOffToSolo(t) { return }
             /* No fresh fix: never silent — «ننتظر موقعك…», and the plan starts by itself once one comes. */
             guard hasFreshFix else { return beginFixWait(.navigate(t)) }
             if case .navigate = fixWait?.pending { fixWait = nil }
@@ -138,6 +140,7 @@ extension LiveOutingController {
     /// A long press on the map: «ابدأ الملاحة إلى هنا».
     func navLongPressed(_ p: LngLat, name: String? = nil) {
         guard case let .success(target) = NavTargets.point(p, name: name) else { return }
+        if handOffToSolo(target) { return }
         guard hasFreshFix else {
             modal = nil
             return beginFixWait(.immediate(target))
@@ -211,7 +214,7 @@ extension LiveOutingController {
         switch nav.phase {
         case .planning:
             let sel = nav.selectedId ?? nav.routes.first?.id
-            d.routes = nav.routes.map { .init(id: $0.id, coordinates: $0.coordinates, selected: $0.id == sel) }
+            d.routes = nav.routes.map { .init(id: $0.id, coordinates: $0.coordinates, selected: $0.id == sel, surfaces: $0.surfaceRuns) }
             /* The first options on the map draw on (`NavRouteReveal`); picking another one does not. */
             d.revealKey = nav.routes.first { $0.id == sel }?.geometryRevision.uuidString
             if let best = nav.routes.first {
@@ -235,8 +238,9 @@ extension LiveOutingController {
                  * metres come from `NavRouteMetrics` (once per geometry), not a fresh pass each time. */
                 let metrics = NavRouteMetrics.tables(r)
                 let traffic = NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done, cum: metrics.cum)
-                /* Surfaces are drawn only without traffic colours; like traffic, only what is left. */
-                let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done, cum: metrics.surfaceCum)
+                /* Surfaces: only what is left, like traffic. Dirt / off-road runs win over the traffic tint
+                 * on the map (`drawRoutes`); an all-asphalt route keeps its traffic colours. */
+                let surfaces = NavSurface.remaining(r.surfaceRuns, from: done, cum: metrics.surfaceCum)
                 d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.shownProgress), selected: true,
                                   traffic: traffic, surfaces: surfaces)]
                 /* A new geometry while guiding is a reroute: a quick fade-in and a brief halo on the map. */
@@ -424,6 +428,11 @@ extension LiveOutingController {
         if ProcessInfo.processInfo.arguments.contains("-SaryNavOverview") {
             nav.camera = .overview
             navCameraKey += 1
+            /* The map's follow camera can claim the frame first: ask again once it is up. */
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.nav.camera = .overview
+                self?.navCameraKey += 1
+            }
         }
         sheetDetent = .peek
         if ProcessInfo.processInfo.arguments.contains("-SaryNavSteps") {
@@ -435,6 +444,21 @@ extension LiveOutingController {
 /// Screenshots / UI tests without network: a real-shaped route in Riyadh.
 final class DemoNavProvider: NavRoutingProvider {
     let name = "Demo"
+
+    /// Fixture surfaces along `c`: 0–45 % asphalt, 45–62 % dirt, 62–78 % open terrain, 78–90 % rough, the rest unknown.
+    static func demoSurfaces(_ c: [LngLat]) -> [NavSurfaceRun] {
+        let n = c.count - 1
+        guard n >= 5 else { return [] }
+        let kinds: [(Double, NavSurfaceKind)] = [(0.45, .paved), (0.62, .unpaved), (0.78, .terrain), (0.90, .rough), (1.0, .unknown)]
+        var runs: [NavSurfaceRun] = []
+        var from = 0
+        for (f, k) in kinds {
+            let to = min(n, Int((Double(n) * f).rounded()))
+            if to > from { runs.append(NavSurfaceRun(kind: k, coordinates: Array(c[from...to]))) }
+            from = to
+        }
+        return runs
+    }
 
     /// `-SaryNavOfflineFor <s>`: no network for the first s seconds (`-SaryNavOffline`: never).
     private static let launched = Date()
@@ -481,8 +505,14 @@ final class DemoNavProvider: NavRoutingProvider {
                     }
                 }
             }
-            return NavRoute(id: id, coordinates: c, distanceM: d1 + d2, durationS: (d1 / 14 + d2 / 16) * factor, steps: steps,
+            var route = NavRoute(id: id, coordinates: c, distanceM: d1 + d2, durationS: (d1 / 14 + d2 / 16) * factor, steps: steps,
                             hasUnpaved: endsShort, hasTolls: false, via: first, congestion: jam)
+            /* `-SaryNavSurfaces`: asphalt, then dirt track, open terrain, rough ground (screenshots of the surface colours). */
+            if args.contains("-SaryNavSurfaces") {
+                route.hasUnpaved = true
+                route.surfaceRuns = Self.demoSurfaces(c)
+            }
+            return route
         }
         return NavRoutePlan(routes: [route("demo-a", k1, first: "طريق الملك فهد", second: "طريق مكة المكرمة", factor: 1),
                                      route("demo-b", k2, first: "طريق العليا", second: "طريق الملك عبدالله", factor: 1.18)])

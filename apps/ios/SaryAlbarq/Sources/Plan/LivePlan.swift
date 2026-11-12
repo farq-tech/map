@@ -233,6 +233,8 @@ struct PlaceOrderPicker: View {
 /// in a lean sheet with a close button. Picking a place sets the next leg's destination.
 struct LiveSearchSheet: View {
     var near: LngLat?
+    /// EM3: a category chip opens the search already asking for it.
+    var initialQuery = ""
     var pick: (OutingDestination) -> Void
     var close: () -> Void
     @Environment(\.sary) private var theme
@@ -290,6 +292,7 @@ struct LiveSearchSheet: View {
         .onAppear {
             recent = RecentPlaces.load()
             focused = true
+            if !initialQuery.isEmpty, query.isEmpty { query = initialQuery; schedule(initialQuery, now: true) }
         }
         .onDisappear { job?.cancel() }
         .accessibilityElement(children: .contain)

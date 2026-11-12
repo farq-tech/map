@@ -19,7 +19,8 @@ struct DebugScreen: View {
         case "recovery-restore": RecoveryRestoreScreen(close: {})
         case "recovery-code": NavigationStack { RecoveryCodeScreen(back: {}) }
         case "recovery-code-shown": NavigationStack { RecoveryCodeScreen(back: {}, code: .init(code: "7K3Q-M9XD-2HPA-VR6T-WC4N-8B1F-ZJ5E", created_at: nil)) }
-        case "home": HomeView()
+        case "home":
+            if OneMapFlag.isOn(), let user = model.identity?.user { IdleMapHost(user: user, model: model, appearance: appearance).id(user.id) } else { HomeView() }
         case "details": HomeView(initial: [.details(DemoData.outingId)])
         case "summary": HomeView(initial: [.summary("demo-old")])
         case "history": HomeView(initial: [.history])
@@ -80,6 +81,14 @@ struct DebugScreen: View {
             SaryPage(title: "نوع الطريق") {
                 NavSurfaceLegend(runs: [NavSurfaceRun(kind: .paved, coordinates: km(71.4)), NavSurfaceRun(kind: .unpaved, coordinates: km(1.1)),
                                         NavSurfaceRun(kind: .terrain, coordinates: km(0.4))])
+            }
+        case "route-km":
+            /* The km split of a route crossing asphalt, dirt and off-road (owner's example), no network. */
+            SaryPage(title: "المسافات") {
+                NavSurfaceKmStrip(km: NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 0))
+                    .padding(12).sarySurface(radius: SaryRadius.m)
+                NavSurfaceKmStrip(km: NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 1_200), labels: false)
+                    .padding(12).sarySurface(radius: SaryRadius.m)
             }
         #endif
         case "plan-details": HomeView(initial: [.details("demo-new")])

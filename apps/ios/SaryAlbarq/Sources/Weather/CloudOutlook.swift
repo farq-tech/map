@@ -31,6 +31,30 @@ struct CloudOutlook: Decodable, Equatable {
 enum CloudOutlookSubject: Equatable {
     case me
     case destination
+    /// No destination and no fix: the middle of the map being looked at.
+    case mapCenter
+
+    var at: String {
+        switch self {
+        case .me: return "عندك"
+        case .destination: return "عند وجهتك"
+        case .mapCenter: return "عند منتصف الخريطة"
+        }
+    }
+    var reach: String {
+        switch self {
+        case .me: return "يصلك"
+        case .destination: return "يصل وجهتك"
+        case .mapCenter: return "يصل منتصف الخريطة"
+        }
+    }
+    var over: String {
+        switch self {
+        case .me: return "السحاب فوقك"
+        case .destination: return "السحاب فوق وجهتك"
+        case .mapCenter: return "السحاب فوق منتصف الخريطة"
+        }
+    }
 }
 
 enum CloudOutlookPresenter {
@@ -40,6 +64,8 @@ enum CloudOutlookPresenter {
     struct Display: Equatable {
         /// Where the cloud moves toward, degrees clockwise from north; nil = no arrow (stationary).
         var arrowDegrees: Double?
+        /// Estimated cloud speed (km/h) when there is a direction; drives the on-map streaks.
+        var speedKmh: Double?
         var headline: String
         var detail: String
         /// Always present: the picture's age and what the estimate is not.
@@ -51,28 +77,28 @@ enum CloudOutlookPresenter {
         guard let motion = o.motion else { return nil }
         let age = o.image_age_min.map { "بحسب صور قبل \(ageText($0))" } ?? "بحسب آخر صور القمر"
         let foot = "\(age) · مو حيّة، وهذا تقدير لحركة السحاب فقط، مو توقع مطر"
-        let at = subject == .me ? "عندك" : "عند وجهتك"
-        let reach = subject == .me ? "يصلك" : "يصل وجهتك"
+        let at = subject.at
+        let reach = subject.reach
         let margin = o.margin_minutes.map { " (±\(durationText($0)))" } ?? ""
 
         if o.state == "stationary" {
-            return Display(arrowDegrees: nil, headline: "السحاب شبه ثابت", detail: "ما نقدّر وقت وصوله \(at)", footnote: foot)
+            return Display(arrowDegrees: nil, speedKmh: nil, headline: "السحاب شبه ثابت", detail: "ما نقدّر وقت وصوله \(at)", footnote: foot)
         }
         guard let bearing = motion.bearing_deg else { return nil }
         let head = "السحاب يتجه \(directionText(bearing)) بسرعة ~\(SaryFormat.number(Int(motion.speed_kmh.rounded()))) كم/س"
         switch o.state {
         case "approaching":
             guard let eta = o.eta_minutes else { return nil }
-            return Display(arrowDegrees: bearing, headline: head, detail: "سحاب كثيف \(reach) بعد ~\(durationText(eta))\(margin)", footnote: foot)
+            return Display(arrowDegrees: bearing, speedKmh: motion.speed_kmh, headline: head, detail: "سحاب كثيف \(reach) بعد ~\(durationText(eta))\(margin)", footnote: foot)
         case "overhead":
-            var d = "السحاب فوقك" + (subject == .me ? "" : " (عند الوجهة)") + " وقت الصورة"
+            var d = subject.over + " وقت الصورة"
             if let c = o.clearing_minutes { d += "، ويبتعد بعد ~\(durationText(c))\(margin)" }
-            return Display(arrowDegrees: bearing, headline: head, detail: d, footnote: foot)
+            return Display(arrowDegrees: bearing, speedKmh: motion.speed_kmh, headline: head, detail: d, footnote: foot)
         case "arrived":
-            return Display(arrowDegrees: bearing, headline: head, detail: "غالبًا وصل \(at) أو مرّ؛ الصورة أقدم من وصوله", footnote: foot)
+            return Display(arrowDegrees: bearing, speedKmh: motion.speed_kmh, headline: head, detail: "غالبًا وصل \(at) أو مرّ؛ الصورة أقدم من وصوله", footnote: foot)
         case "clear":
             let km = o.scanned_km.map { " ضمن ~\(SaryFormat.number($0)) كم" } ?? ""
-            return Display(arrowDegrees: bearing, headline: head, detail: "ما نشوف سحابًا كثيفًا جاي \(at)\(km)", footnote: foot)
+            return Display(arrowDegrees: bearing, speedKmh: motion.speed_kmh, headline: head, detail: "ما نشوف سحابًا كثيفًا جاي \(at)\(km)", footnote: foot)
         default:
             return nil
         }

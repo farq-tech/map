@@ -24,7 +24,9 @@ struct WeatherOverlayRequest: Equatable {
 @MainActor
 final class WeatherOverlay {
     static let prefix = "sary-weather-"
-    static let opacity: Double = 0.85
+    static let opacity: Double = 0.95
+    /// How much the basemap is darkened under the cloud layer.
+    static let scrimOpacity: Double = 0.38
 
     private weak var map: MapView?
     private let layers: WeatherLayers
@@ -41,13 +43,14 @@ final class WeatherOverlay {
     private var timer: Timer?
     private var outlookTask: Task<Void, Never>?
     private var outlookRetried = false
-    private var outlookFor: (point: LngLat, at: Date, kind: WeatherOverlayKind, destination: Bool)?
+    private var outlookFor: (point: LngLat, at: Date, kind: WeatherOverlayKind, subject: CloudOutlookSubject)?
     private var windTask: Task<Void, Never>?
     private var windFetchedAt: Date?
     private var frameIndex = 0
     private var pauseTicks = 0
     let legend = WeatherLegendModel()
     private var legendHost: UIHostingController<WeatherLegendCard>?
+    private var flowHost: UIHostingController<CloudFlowHost>?
 
     private struct Drawn: Equatable {
         var kind: WeatherOverlayKind
@@ -68,6 +71,11 @@ final class WeatherOverlay {
         legend.onTogglePlay = { [weak self] in self?.togglePlay() }
         legend.onScrub = { [weak self] i in self?.seek(to: i) }
         legend.onClose = { [weak self] in self?.layers.kind = .none }
+        /* Looking around with no destination/fix: re-estimate for the new middle of the map (25 km / 10 min rules apply). */
+        map.mapboxMap.onMapIdle.observe { [weak self] _ in
+            guard let self, self.request.point == nil, self.effectiveKind == .clouds else { return }
+            self.refreshOutlook()
+        }.store(in: &cancelables)
         styleReady = map.mapboxMap.isStyleLoaded
         map.mapboxMap.onStyleLoaded.observe { [weak self] _ in
             guard let self else { return }
@@ -77,9 +85,18 @@ final class WeatherOverlay {
         }.store(in: &cancelables)
         legend.$outlook.dropFirst().receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.layoutLegend() }.store(in: &bag)
+        legend.$cardMode.dropFirst().receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.layoutLegend() }.store(in: &bag)
         layers.$kind.combineLatest(layers.$rainDays).dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.apply() }.store(in: &bag)
+        /* Streaks first (under the legend card), full-size, never takes a touch. */
+        let flow = UIHostingController(rootView: CloudFlowHost(model: legend))
+        flow.view.backgroundColor = .clear
+        flow.view.isUserInteractionEnabled = false
+        flow.view.isHidden = true
+        map.addSubview(flow.view)
+        flowHost = flow
         let host = UIHostingController(rootView: WeatherLegendCard(model: legend))
         host.view.backgroundColor = .clear
         host.view.isHidden = true
@@ -179,12 +196,16 @@ final class WeatherOverlay {
                 let key = "clouds-" + frames.map(\.id).joined(separator: ",")
                 let fresh = drawn != Drawn(kind: .clouds, key: key)
                 install(m, kind: .clouds, key: key,
-                        sources: frames.map { ("cloud-\($0.id)", WeatherLayerAPI.absolute($0.tile_url)) }, min: 3, max: 9, bounds: [25, 8, 65, 40],
+                        sources: frames.map { ("cloud-\($0.id)", WeatherLayerAPI.absolute($0.tile_url)) }, min: 0, max: 9, bounds: [25, 8, 65, 40],
                         visibleIndex: frames.count - 1)
                 if fresh {
                     /* New frames (first open or a refresh): show the newest and play. A plain
                      * re-apply (chrome/layout) must not disturb a paused or scrubbed frame. */
                     legend.playing = true
+                    #if DEBUG
+                    /* Comparison aid: `-SaryCloudPaused` freezes the newest frame (one variable per screenshot). */
+                    if ProcessInfo.processInfo.arguments.contains("-SaryCloudPaused") { legend.playing = false }
+                    #endif
                     startAnimation()
                 } else if legend.playing, timer == nil {
                     startTimer()
@@ -202,9 +223,40 @@ final class WeatherOverlay {
         guard d != drawn || !m.layerExists(withId: Self.prefix + sources[0].0) else { return }
         removeAll(m)
         let below = firstLabelLayer(m)
+        /* Clouds: dim the earth under them so white cloud tops stand out from the bright satellite basemap. */
+        if kind == .clouds {
+            var scrim = BackgroundLayer(id: Self.prefix + "scrim")
+            scrim.backgroundColor = .constant(StyleColor(.black))
+            scrim.backgroundOpacity = .constant(Self.scrimOpacity)
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-SaryNoScrim") { scrim.backgroundOpacity = .constant(0) }
+            #endif
+            do {
+                if let middle = Slot.middle, m.allSlotIdentifiers.contains(middle) {
+                    scrim.slot = middle
+                    try m.addLayer(scrim)
+                } else if let below {
+                    try m.addLayer(scrim, layerPosition: .below(below))
+                } else {
+                    try m.addLayer(scrim)
+                }
+            } catch {
+                #if DEBUG
+                print("[weather] add scrim failed: \(error)")
+                #endif
+            }
+        }
         for (i, (id, url)) in sources.enumerated() {
             var src = RasterSource(id: Self.prefix + id)
-            src.tiles = [url]
+            var tileURL = url
+            #if DEBUG
+            /* Comparison aid: `-SaryCloudTileStyle legacy` asks the server for the Build 41–43 look. */
+            if kind == .clouds, let i = ProcessInfo.processInfo.arguments.firstIndex(of: "-SaryCloudTileStyle"),
+               i + 1 < ProcessInfo.processInfo.arguments.count, ProcessInfo.processInfo.arguments[i + 1] == "legacy" {
+                tileURL += (tileURL.contains("?") ? "&" : "?") + "style=legacy"
+            }
+            #endif
+            src.tiles = [tileURL]
             src.tileSize = 256
             src.minzoom = min
             src.maxzoom = max
@@ -274,6 +326,7 @@ final class WeatherOverlay {
     /// confidence hides the row.
     private func refreshOutlook(isRetry: Bool = false) {
         var point = request.point
+        var subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me
         #if DEBUG
         /* Screenshots: `-SaryCloudPoint 17.5,44.0` pins the estimate to a point (the simulator has no real position). */
         let args = ProcessInfo.processInfo.arguments
@@ -283,22 +336,27 @@ final class WeatherOverlay {
         }
         #endif
         let kind = effectiveKind
+        /* No destination and no fix: the middle of the map being looked at, while it is over the Kingdom's box. */
+        if point == nil, kind == .clouds, let c = map?.mapboxMap.cameraState.center,
+           (16...33).contains(c.latitude), (34...56).contains(c.longitude) {
+            point = LngLat(lng: c.longitude, lat: c.latitude)
+            subject = .mapCenter
+        }
         guard kind == .clouds || kind == .rain || kind == .wind, let p = point else {
             outlookTask?.cancel(); outlookTask = nil; outlookFor = nil
             legend.outlook = nil; legend.outlookLoading = false
             return
         }
         if let last = outlookFor, last.kind == kind, Date().timeIntervalSince(last.at) < 600,
-           Self.km(last.point, p) < 25, last.destination == request.pointIsDestination { return }
+           Self.km(last.point, p) < 25, last.subject == subject { return }
         /* A new place or layer (not a refresh of the same one): never keep showing the old row. */
-        if outlookFor.map({ $0.kind != kind || Self.km($0.point, p) >= 25 || $0.destination != request.pointIsDestination }) ?? true { legend.outlook = nil }
+        if outlookFor.map({ $0.kind != kind || Self.km($0.point, p) >= 25 || $0.subject != subject }) ?? true { legend.outlook = nil }
         outlookTask?.cancel()
         /* The one-retry allowance belongs to a request: a new place or layer starts with a fresh one. */
         if !isRetry { outlookRetried = false }
-        outlookFor = (p, Date(), kind, request.pointIsDestination)
+        outlookFor = (p, Date(), kind, subject)
         legend.outlookLoading = true
         legend.outlookLoadingText = kind == .wind ? "نجيب الرياح…" : kind == .rain ? "نقدّر اتجاه المطر…" : "نقدّر اتجاه السحاب…"
-        let subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me
         outlookTask = Task { [weak self] in
             var failed = false
             let display: CloudOutlookPresenter.Display?
@@ -504,11 +562,44 @@ final class WeatherOverlay {
         guard let map, let host = legendHost else { return }
         let show = effectiveKind != .none
         host.view.isHidden = !show
+        if let flow = flowHost {
+            flow.view.frame = map.bounds
+            var off = legend.flow == nil
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-SaryNoFlow") { off = true }
+            #endif
+            flow.view.isHidden = off
+        }
         guard show else { return }
         let width = min(map.bounds.width - 24, 360)
         let size = host.sizeThatFits(in: CGSize(width: width, height: 400))
-        host.view.frame = CGRect(x: (map.bounds.width - width) / 2, y: request.chrome.top + 8, width: width, height: size.height)
+        var y = request.chrome.top + 8
+        /* Never over the bottom chrome (the trip bar, the mic): slide up on a short screen. */
+        let floor = map.bounds.height - request.chrome.bottom - 8
+        if request.chrome.bottom > 0, y + size.height > floor { y = max(8, floor - size.height) }
+        if legend.cardMode == .hidden {
+            /* Just the restore button, on the leading edge (clear of the right-hand tool column). */
+            host.view.frame = CGRect(x: 12, y: y, width: size.width, height: size.height)
+        } else {
+            host.view.frame = CGRect(x: (map.bounds.width - width) / 2, y: y, width: width, height: size.height)
+        }
     }
+}
+
+enum WeatherCardMode: String {
+    case collapsed, expanded, hidden
+
+    static let key = "sary.map.weather.card.v1"
+
+    static func stored(_ d: UserDefaults = .standard) -> WeatherCardMode {
+        #if DEBUG
+        let a = ProcessInfo.processInfo.arguments
+        if let i = a.firstIndex(of: "-SaryWeatherCard"), i + 1 < a.count, let m = WeatherCardMode(rawValue: a[i + 1]) { return m }
+        #endif
+        return d.string(forKey: key).flatMap(WeatherCardMode.init) ?? .collapsed
+    }
+
+    static func store(_ m: WeatherCardMode, _ d: UserDefaults = .standard) { d.set(m.rawValue, forKey: key) }
 }
 
 /// The legend card's state (driven by `WeatherOverlay`).
@@ -529,7 +620,17 @@ final class WeatherLegendModel: ObservableObject {
     @Published var outlook: CloudOutlookPresenter.Display?
     @Published var outlookLoading = false
     @Published var outlookLoadingText = ""
-    /// «إغلاق»: turns the weather layer off (back on from «الطبقات» → «الطقس»).
+    /// The on-map streaks: only for a confident cloud estimate that has a direction.
+    var flow: CloudFlow? {
+        guard kind == .clouds, let o = outlook, let b = o.arrowDegrees, let s = o.speedKmh else { return nil }
+        return CloudFlow(bearing: b, speedKmh: s)
+    }
+    /// The card's size: a one-line strip by default, the full card on demand, or just a small restore button.
+    /// Hiding the card never turns the layer off (that is «إيقاف الطبقة» / «الطبقات» → «الطقس»).
+    @Published var cardMode: WeatherCardMode = WeatherCardMode.stored() {
+        didSet { WeatherCardMode.store(cardMode) }
+    }
+    /// «إيقاف الطبقة»: turns the weather layer off (back on from «الطبقات» → «الطقس»).
     var onClose: () -> Void = {}
     var onTogglePlay: () -> Void = {}
     var onScrub: (Int) -> Void = { _ in }
@@ -541,8 +642,94 @@ struct WeatherLegendCard: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
+        switch model.cardMode {
+        case .hidden: restoreButton
+        case .collapsed: strip
+        case .expanded: expanded
+        }
+    }
+
+    private func chip(_ systemImage: String, id: String, label: String, action: @escaping () -> Void) -> some View {
         let p = theme.palette
-        VStack(alignment: .leading, spacing: 6) {
+        return Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
+                .frame(width: 30, height: 30).background(Circle().fill(p.sunken))
+                /* 30 pt circle, 44 pt touch area (the row keeps its height). */
+                .contentShape(Rectangle().inset(by: -7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+        .accessibilityLabel(Text(label))
+    }
+
+    /// Swipe the card down to hide it, up to open the full card.
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 18).onEnded { v in
+            if v.translation.height > 28 { model.cardMode = .hidden }
+            else if v.translation.height < -28, model.cardMode == .collapsed { model.cardMode = .expanded }
+        }
+    }
+
+    /// The default: one line — what it is, how old the picture is, play/pause, the cloud's direction.
+    private var strip: some View {
+        let p = theme.palette
+        return HStack(spacing: 8) {
+            Image(systemName: model.kind.systemImage)
+                .font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accentText)
+            Text(model.kind.label).saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+            Text(model.kind == .clouds && !model.age.isEmpty ? model.age : model.time)
+                .saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.7)
+                .accessibilityIdentifier("weather.legend.time")
+            Spacer(minLength: 2)
+            if let deg = model.outlook?.arrowDegrees {
+                Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).foregroundStyle(p.accentText)
+                    .rotationEffect(.degrees(deg)).environment(\.layoutDirection, .leftToRight)
+                    .accessibilityIdentifier("weather.legend.strip.arrow")
+                    .accessibilityLabel(Text("اتجاه الحركة"))
+            }
+            if model.kind == .clouds {
+                Button { model.onTogglePlay() } label: {
+                    Image(systemName: model.playing ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentText)
+                        .frame(width: 30, height: 30).background(Circle().fill(p.accent.opacity(0.2)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("weather.clouds.playpause")
+                .accessibilityLabel(Text(model.playing ? "إيقاف حركة السحاب" : "تشغيل حركة السحاب"))
+            }
+            chip("chevron.up", id: "weather.legend.expand", label: "تفاصيل الطبقة") { model.cardMode = .expanded }
+            chip("xmark", id: "weather.legend.hide", label: "إخفاء البطاقة (الطبقة تبقى على الخريطة)") { model.cardMode = .hidden }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .saryGlass(Capsule(), role: .chrome)
+        .environment(\.layoutDirection, .rightToLeft)
+        .gesture(swipe)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("weather.legend.strip")
+    }
+
+    /// Card hidden: only a small button, so the map is free; the layer stays on.
+    private var restoreButton: some View {
+        let p = theme.palette
+        return Button { model.cardMode = .collapsed } label: {
+            Image(systemName: model.kind.systemImage)
+                .font(.system(size: 16, weight: .semibold)).foregroundStyle(p.accentText)
+                .frame(width: 44, height: 44)
+                .saryGlass(Circle(), role: .chrome)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("weather.legend.restore")
+        .accessibilityLabel(Text("إظهار بطاقة \(model.kind.label) (الطبقة ما زالت فعّالة)"))
+    }
+
+    private var expanded: some View {
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: model.kind.systemImage)
                     .font(.system(size: 14, weight: .semibold))
@@ -627,6 +814,12 @@ struct WeatherLegendCard: View {
                 Text(model.outlookLoadingText).saryText(.caption).foregroundStyle(p.textSecondary)
                     .accessibilityIdentifier("weather.outlook.loading")
             }
+            Button { model.onClose() } label: {
+                Text("إيقاف الطبقة").saryText(.caption, weight: .bold).foregroundStyle(p.accentText)
+                    .padding(.vertical, 4).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("weather.legend.off")
             /* Data attribution over the map: 10 pt semibold, secondary (was 9 pt tertiary). */
             Text(model.attribution)
                 .saryGlyph(10, weight: .semibold, maxGrowth: SaryGlyph.tightGrowth)
@@ -640,6 +833,7 @@ struct WeatherLegendCard: View {
         .padding(.vertical, 9)
         .saryGlass(RoundedRectangle(cornerRadius: 16, style: .continuous), role: .chrome)
         .environment(\.layoutDirection, .rightToLeft)
+        .gesture(swipe)
         .accessibilityElement(children: .contain)
     }
 }

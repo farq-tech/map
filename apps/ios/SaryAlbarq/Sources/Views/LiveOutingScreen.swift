@@ -41,7 +41,7 @@ struct LiveOutingScreen: View {
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
     @State private var realistic: RealisticScene?
-    @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
+    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
 
@@ -244,18 +244,20 @@ struct LiveOutingScreen: View {
         let ended = controller.tripEnded
         /* Guiding (v2): up to four round buttons on the right, my speed and the limit bottom-left. */
         let guidingHUD = controller.nav.phase == .guiding && !exploring && !ended
-        let side = exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended))
+        let side = LiveCalmRules.withLayers(exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended)),
+                                            layers: .layers(active: controller.terrain3D))
         /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
         let showSide = controller.sheetDetent == .peek && !side.isEmpty && (!ended || !exploring)
             && LiveFit.sideWithAlertList(bellOpen: controller.bellOpen, screenHeight: full.height)
         /* iPhone SE (667 pt): the side captions drop out so the column stays above the dock (`LiveFit`). */
-        let sideCaptions = LiveFit.sideCaptions(guiding: guidingHUD, screenHeight: full.height)
+        /* Driving: bare round buttons (the name is spoken by VoiceOver), at the drive size. */
+        let sideCaptions = LiveFit.sideCaptions(guiding: guidingHUD, screenHeight: full.height) && !driving
         ZStack {
             /* TOP (Lovable): the header (or the guidance header, or the end card), then the one alert
              * with SOS on its left, then «تتبعني» / «أدوات» on the right. */
             VStack(spacing: theme.space(.s)) {
                 if exploring {
-                    ExploreTopBar(controller: controller, layers: { controller.modal = .layers }, exit: { controller.exitExplore() })
+                    ExploreTopBar(controller: controller, exit: { controller.exitExplore() })
                         .transition(SaryTransition.banner(theme))
                 }
                 if ended {
@@ -490,7 +492,8 @@ struct LiveOutingScreen: View {
 
     /// Exploring (Lovable): «درون» and «واقعي» on the right, with «أماكني ومساراتي».
     private var exploreSide: [SaryMapControlItem] {
-        [
+        if controller.idleHome { return idleSide }
+        return [
             SaryMapControlItem(id: "drone", systemImage: "airplane", label: "درون", accessibilityID: "explore-drone",
                                hint: "طيران درون استكشافي حول علامة الوسط"),
             SaryMapControlItem(id: "realistic", systemImage: visuals.cityTilt ? "building.2" : "mountain.2", label: "واقعي", accessibilityID: "explore-realistic",
@@ -498,6 +501,23 @@ struct LiveOutingScreen: View {
                                value: offersCityRealistic(exploring: true, driving: false) ? Self.cityRealisticValue : nil),
         ] + SaryMapControlItem.explore(terrain3D: controller.terrain3D, tracksShown: trackLibrary.shown.count).filter { $0.id == "places" }
             .map { var i = $0; i.label = "أماكني"; return i }
+    }
+
+    /// The idle map (EM3): «موقعي» and the compass, what fits, then ONE «المزيد» (`IdleSideRules`); the layers button is added in front.
+    private var idleSide: [SaryMapControlItem] {
+        IdleSideRules.items(compact: IdleSideRules.isCompact(screenHeight: Double(screenHeight))).map { item in
+            switch item {
+            case .locate:
+                return SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate")
+            case .qibla:
+                return SaryMapControlItem(id: "qibla", systemImage: "location.north.line.fill", label: "القبلة", accessibilityID: "idle-qibla",
+                                          isActive: showQiblaOnMap, hint: "شعاع القبلة على الخريطة")
+            case .places:
+                return SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني", accessibilityID: "explore-places")
+            case .more:
+                return SaryMapControlItem(id: "idleMore", systemImage: "ellipsis", label: "المزيد", accessibilityID: "idle-more")
+            }
+        }
     }
 
     @ViewBuilder
@@ -551,6 +571,8 @@ struct LiveOutingScreen: View {
         case "layers": controller.modal = .layers
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
+        case "qibla": showQiblaOnMap.toggle()
+        case "idleMore": controller.idleMoreOpen = true
         case "tracks": controller.modal = .tracks
         case "realistic": openRealistic(atMapCamera: offersCityRealistic(exploring: controller.exploreActive, driving: false))
         case "drone": if let c = controller.exploreReading.reading?.center { MapVisualsHub.shared.fly(to: c) }

@@ -67,7 +67,10 @@ struct MapHomeScreen: View {
     /// Where I am before any trip (the live sharer only runs during one).
     @StateObject private var locator = OneShotLocator()
     @ObservedObject private var saved = SavedPlacesStore.shared
-    @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
+    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
+    /// S6: the base map the person chose in «الطبقات» (the same stored choice the outing map uses; satellite on a first launch).
+    @State private var baseLayer: MapLayer = MapLayer.saved
+    @State private var layersOpen = false
     /// «دروب البر» opened from here: drawn on this map while its sheet is open.
     @ObservedObject private var desertRoutes = DesertRoutesHub.shared
 
@@ -94,7 +97,7 @@ struct MapHomeScreen: View {
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin", desert: true)) },
                             desert: desertOverlay,
                             onDesertTap: { id in pinTapped(id) },
-                            qiblaOrigin: qiblaMapOrigin)
+                            qiblaOrigin: qiblaMapOrigin, baseLayer: baseLayer)
                     .ignoresSafeArea()
                     .accessibilityIdentifier("home.map")
                 VStack(spacing: theme.space(.s)) {
@@ -102,6 +105,7 @@ struct MapHomeScreen: View {
                     HStack {
                         Spacer()
                         VStack(spacing: theme.space(.s)) {
+                            layersMapButton
                             locateButton
                             qiblaMapButton
                         }
@@ -118,6 +122,8 @@ struct MapHomeScreen: View {
         .onAppear {
             recent = RecentPlaces.load()
             shortcuts = HomeShortcutStore.load()
+            /* A layer chosen on the outing map is the one the home map shows next (one stored choice). */
+            baseLayer = MapLayer.saved
             locator.request()
             if camera == nil { recenter(zoom: 12) }
             if autoFocusSearch {
@@ -131,6 +137,11 @@ struct MapHomeScreen: View {
         .onChange(of: locator.fix) { old, fix in if old == nil, fix != nil, selected == nil { recenter(zoom: 12) } }
         .onChange(of: voice.text) { _, t in if !t.isEmpty { query = t } }
         .onChange(of: query) { _, q in schedule(q) }
+        .sheet(isPresented: $layersOpen, onDismiss: { baseLayer = MapLayer.saved }) {
+            MapLayersSheet(controller: nil, mode: .home, close: { layersOpen = false }, onBaseChosen: { baseLayer = $0 })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $profileOpen) {
             ProfileSheet(open: { r in
                 profileOpen = false
@@ -232,6 +243,20 @@ struct MapHomeScreen: View {
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text("موقعي"))
         .accessibilityIdentifier("home.locate")
+    }
+
+    /// THE layers button (`map.layers`, the same icon as on the outing map). Qibla stays its own shortcut beside it (owner decision 2).
+    private var layersMapButton: some View {
+        Button { layersOpen = true } label: {
+            Image(systemName: "square.3.layers.3d").font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(theme.palette.accentText)
+                .frame(width: 46, height: 46)
+                .background(Circle().fill(theme.palette.elevated))
+                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text("الطبقات"))
+        .accessibilityIdentifier("map.layers")
     }
 
     private var qiblaMapButton: some View {

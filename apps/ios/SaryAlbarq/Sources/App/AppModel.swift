@@ -28,6 +28,8 @@ final class AppModel: ObservableObject {
     private var parkedSink: AnyCancellable?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
+    /// EM2: the idle navigation map is on screen. Its live sheet is always presented, so an invite is shown from inside it (`LiveSheet`), not from the root.
+    @Published var idleMapShown = false
     /// Join was tapped and iOS is resolving location permission. Keep this across a sheet
     /// recreation when the system permission alert takes the app inactive.
     @Published private var pendingInviteJoinAttempt: String?

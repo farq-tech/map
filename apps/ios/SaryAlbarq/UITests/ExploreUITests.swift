@@ -40,7 +40,7 @@ final class ExploreUITests: XCTestCase {
         /* «تخفيف الزحمة» ٤: «أدوات» → «استكشاف وطبقات» (the binoculars left the header). */
         XCTAssertTrue(app.openTool("outing-explore"), "«استكشاف» two taps from the trip map")
         /* Lovable: the layer bar and coordinates on top, «درون» / «واقعي» / «أماكني» on the right, SOS on the left. */
-        for id in ["explore.header", "explore-exit", "explore-layers", "explore-places", "explore-drone", "explore-realistic",
+        for id in ["explore.header", "explore-exit", "map.layers", "explore-places", "explore-drone", "explore-realistic",
                    "explore.readout", "explore-copy", "explore-save", "outing-sos", "explore.hint", "explore.camp", "explore.desertRoute", "outing-ptt"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in exploration")
         }
@@ -64,8 +64,8 @@ final class ExploreUITests: XCTestCase {
         let entry = any(app, "outing-explore")
         XCTAssertTrue(entry.waitForExistence(timeout: 5), "«+» → الخريطة → استكشاف")
         entry.tap()
-        XCTAssertTrue(app.buttons["explore-layers"].waitForExistence(timeout: 5))
-        app.buttons["explore-layers"].tap()
+        XCTAssertTrue(app.buttons["map.layers"].waitForExistence(timeout: 5))
+        app.buttons["map.layers"].tap()
         for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-terrain3d", "explore-offline"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in «الطبقات»")
         }
@@ -75,7 +75,7 @@ final class ExploreUITests: XCTestCase {
         XCTAssertTrue(any(app, "explore.layerName").waitForExistence(timeout: 5))
         XCTAssertTrue(any(app, "explore.layerName").label.contains("طبوغرافي"))
         /* Offline entry from the layer sheet. */
-        app.buttons["explore-layers"].tap()
+        app.buttons["map.layers"].tap()
         any(app, "explore-offline").tap()
         XCTAssertTrue(any(app, "offline.add").waitForExistence(timeout: 6), "«الخرائط بلا إنترنت» opens")
         any(app, "page-back").tap()
@@ -87,7 +87,7 @@ final class ExploreUITests: XCTestCase {
         let entry = any(app, "outing-explore")
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
         entry.tap()
-        let layersButton = app.buttons["explore-layers"]
+        let layersButton = app.buttons["map.layers"]
         XCTAssertTrue(layersButton.waitForExistence(timeout: 5))
         layersButton.tap()
 
@@ -164,7 +164,7 @@ final class ExploreUITests: XCTestCase {
         XCTAssertTrue(any(app, "tracks.import").exists, "import a GPX / KML")
         any(app, "page-close").tap()
         /* «تخفيف الزحمة» ١٠: 3D terrain is a switch in «الطبقات»; the layers button lights up. */
-        let layers = app.buttons["explore-layers"]
+        let layers = app.buttons["map.layers"]
         XCTAssertTrue(layers.waitForExistence(timeout: 5))
         layers.tap()
         let t = app.buttons["explore-terrain3d"].firstMatch

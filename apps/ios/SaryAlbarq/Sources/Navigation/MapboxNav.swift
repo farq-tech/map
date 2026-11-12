@@ -183,15 +183,16 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
                 let preferred = s.intersections?.first?.preferredApproachLanes ?? IndexSet()
                 return ind.enumerated().map { j, l in NavLane(directions: laneDirections(l), valid: usable.contains(j), preferred: preferred.contains(j)) }
             } ?? []
-            var stepUnpaved = false
+            var marks: [(at: LngLat, unpaved: Bool)] = []
             for x in s.intersections ?? [] {
-                if x.outletRoadClasses?.contains(.unpaved) == true { unpaved = true; stepUnpaved = true }
+                let isUnpaved = x.outletRoadClasses?.contains(.unpaved) == true
+                if isUnpaved { unpaved = true }
                 if x.outletRoadClasses?.contains(.toll) == true || x.tollCollection != nil { tolls = true }
+                marks.append((LngLat(lng: x.location.longitude, lat: x.location.latitude), isUnpaved))
             }
             let stepCoordinates = (s.shape?.coordinates ?? []).map { LngLat(lng: $0.longitude, lat: $0.latitude) }
-            if stepCoordinates.count >= 2 {
-                surfaceRuns.append(NavSurfaceRun(kind: stepUnpaved ? .unpaved : .paved, coordinates: stepCoordinates))
-            }
+            /* Split inside the step where the road class changes (a long step used to be all dirt or all asphalt). */
+            surfaceRuns += Self.stepSurfaceRuns(shape: stepCoordinates, marks: marks)
             if let n = s.names?.first, !n.isEmpty { names[n, default: 0] += s.distance }
             /* Directions speaks the NEXT maneuver along a step; ours hangs off the maneuver itself. */
             let spokenForThis = i > 0 ? (msteps[i - 1].instructionsSpokenAlongStep ?? []).map { NavSpoken(distanceBeforeManeuver: $0.distanceAlongStep, text: $0.text) } : []
@@ -211,9 +212,63 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
         let via = names.sorted { $0.value > $1.value }.prefix(1).map(\.key).first
         return NavRoute(id: id, coordinates: coords, distanceM: route.distance, durationS: route.expectedTravelTime,
                         steps: steps, hasUnpaved: unpaved, hasTolls: tolls, via: via, congestion: congestion(route),
-                        /* Keep live traffic tinting for ordinary paved routes. Surface overlays
-                         * are needed when Directions reports at least one unpaved step. */
-                        surfaceRuns: unpaved ? surfaceRuns : [])
+                        /* Directions names a surface only for unpaved roads, so a route with none
+                         * keeps no runs (all asphalt by the provider's own account; its km are
+                         * unknown to `NavSurfaceKm`, never counted as asphalt). Live traffic tinting
+                         * stays for such routes; a route with dirt draws its surface split. */
+                        surfaceRuns: unpaved ? Self.mergedRuns(surfaceRuns) : [])
+    }
+
+    /// One step's shape cut where the outlet road class changes. `marks[i]` is the class of the road
+    /// leaving the i-th intersection, valid up to the next intersection (the last one's road belongs
+    /// to the next step). Each mark is matched to the nearest shape vertex, never going backwards.
+    nonisolated static func stepSurfaceRuns(shape: [LngLat], marks: [(at: LngLat, unpaved: Bool)]) -> [NavSurfaceRun] {
+        guard shape.count >= 2 else { return [] }
+        guard marks.count >= 2 else {
+            return [NavSurfaceRun(kind: (marks.first?.unpaved ?? false) ? .unpaved : .paved, coordinates: shape)]
+        }
+        var index: [Int] = []
+        var from = 0
+        for m in marks {
+            var best = from, bestD = Double.infinity
+            for j in from..<shape.count {
+                let d = Vehicle.distanceMeters(shape[j], m.at)
+                if d < bestD { bestD = d; best = j }
+            }
+            index.append(best)
+            from = best
+        }
+        var runs: [NavSurfaceRun] = []
+        /* The stretch before the first intersection (normally none) takes the first road's class. */
+        var cuts: [(from: Int, to: Int, unpaved: Bool)] = []
+        if index[0] > 0 { cuts.append((0, index[0], marks[0].unpaved)) }
+        for i in 0..<marks.count {
+            let to = i + 1 < marks.count ? index[i + 1] : shape.count - 1
+            if to > index[i] { cuts.append((index[i], to, marks[i].unpaved)) }
+        }
+        for c in cuts {
+            let kind: NavSurfaceKind = c.unpaved ? .unpaved : .paved
+            let pts = Array(shape[c.from...c.to])
+            if let last = runs.last, last.kind == kind {
+                runs[runs.count - 1].coordinates += pts.dropFirst()
+            } else {
+                runs.append(NavSurfaceRun(kind: kind, coordinates: pts))
+            }
+        }
+        return runs
+    }
+
+    /// Neighbouring runs of one kind (across steps) joined into one.
+    nonisolated static func mergedRuns(_ runs: [NavSurfaceRun]) -> [NavSurfaceRun] {
+        var out: [NavSurfaceRun] = []
+        for r in runs where r.coordinates.count >= 2 {
+            if let last = out.last, last.kind == r.kind, last.coordinates.last == r.coordinates.first {
+                out[out.count - 1].coordinates += r.coordinates.dropFirst()
+            } else {
+                out.append(r)
+            }
+        }
+        return out
     }
 
     /// Per-segment traffic from the `driving-traffic` annotations (numeric, else the named levels).

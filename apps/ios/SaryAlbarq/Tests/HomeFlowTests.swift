@@ -324,3 +324,29 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertEqual(NavSurfaceLegend.hiddenKey, "sary.nav.surfaceLegend.hidden.v1")
     }
 }
+
+/// S6: the home map's base layer follows the stored choice (satellite until one is made).
+final class HomeBaseLayerTests: XCTestCase {
+    func testPlanMapViewDefaultsToSatelliteSoEveryOtherUseIsUnchanged() {
+        XCTAssertEqual(PlanMapView(route: []).baseLayer, .satellite)
+    }
+
+    func testFirstLaunchIsSatelliteThenTheChosenLayerIsRemembered() {
+        let domain = "HomeBaseLayerTests.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: domain)!
+        defer { suite.removePersistentDomain(forName: domain) }
+        let r = MapLayerRegistry(defaults: suite)
+        XCTAssertEqual(r.activeBase, MapLayerCatalog.baseID(.satellite), "first launch: satellite, as the home map always was")
+        r.setActive(MapLayerCatalog.baseID(.topo))
+        // What `MapLayer.saved` (read by the home map on appear) sees is the very key the registry wrote.
+        XCTAssertEqual(suite.string(forKey: MapLayer.key).flatMap(MapLayer.init), .topo)
+        XCTAssertEqual(MapLayerRegistry(defaults: suite).activeBase, MapLayerCatalog.baseID(.topo), "kept across launches")
+    }
+
+    func testHomeSheetOffersTheBaseLayersAndOnlyTheDataLayersTheHomeMapDraws() {
+        let suite = UserDefaults(suiteName: "HomeBaseLayerTests.rows.\(UUID().uuidString)")!
+        let r = MapLayerRegistry(defaults: suite)
+        XCTAssertEqual(MapLayersSheetModel.baseRows(registry: r, mode: .home, areas: 0, topoAreas: 0).count, 3)
+        XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).flatMap(\.rows).map(\.id), ["data.qibla"])
+    }
+}
