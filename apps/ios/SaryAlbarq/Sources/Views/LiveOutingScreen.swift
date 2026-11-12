@@ -390,8 +390,8 @@ struct LiveOutingScreen: View {
                         ptt: pttPill ? (pttBig ? LiveFit.bigPTTWidth : LiveFit.pillPTTWidth) : 0,
                         speed: showsSpeedBubble ? LiveFit.speedBubbleWidth : 0,
                         cta: pttPill && hasCTA && ctaCompact ? flow.primary.map { LiveFit.compactCTAWidth(title: $0.title, textScale: LiveFit.textScale(typeSize)) } : nil,
-                        cluster: guidingHUD && controller.speed.everRead
-                            ? LiveFit.navSpeedClusterWidth(drive: theme.drive, limit: controller.nav.progress?.speedLimitKmh != nil) : 0,
+                        cluster: LiveFit.guidingSpeedWidth(guiding: guidingHUD, everRead: controller.speed.everRead, drive: theme.drive,
+                                                           limit: controller.nav.progress?.speedLimitKmh != nil),
                         spacing: theme.space(.s))
                     let ctaOwnRow = dockFit.ctaOwnRow && hasCTA && ctaCompact
                     if ctaOwnRow {
@@ -444,18 +444,16 @@ struct LiveOutingScreen: View {
                             NavSpeedCluster(ui: controller.speedometerUI, limit: controller.nav.progress?.speedLimitKmh)
                                 .chromeFrame("speed")
                                 .transition(.opacity)
+                        } else if guidingHUD, let k = controller.nav.progress?.speedLimitKmh {
+                            /* Guiding with no speed read yet: the posted limit alone, in the speed's own slot of
+                             * the row (budgeted by `LiveFit.guidingSpeedWidth`). It used to be an overlay pinned
+                             * to the row's trailing corner — where the compact «وصلنا» sits — and covered it. */
+                            NavSpeedLimitSign(kmh: k)
+                                .chromeFrame("speedlimit")
+                                .transition(SaryTransition.chipPop(theme))
                         }
                         /* No side row at the sheet's middle height (UI-AUDIT م3): the camera is on the map,
                          * «طريق الرجعة» is the side shortcut or «المزيد» → «الطريق». */
-                    }
-                    .overlay(alignment: .topTrailing) {
-                        /* Guiding with no speed read yet: the posted limit alone, where the speed will be. */
-                        if guidingHUD, !controller.speed.everRead, let k = controller.nav.progress?.speedLimitKmh {
-                            NavSpeedLimitSign(kmh: k)
-                                .chromeFrame("speedlimit")
-                                .alignmentGuide(.top) { $0[.bottom] + 8 }
-                                .transition(SaryTransition.chipPop(theme))
-                        }
                     }
                     /* The primary morphs between states («ابدأ الطلعة» → «وين رايحين؟» → «وصلنا»): the dock
                      * re-lays out in the same transaction, so the talk pill gives way smoothly. */
