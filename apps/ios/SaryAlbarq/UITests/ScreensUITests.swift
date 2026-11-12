@@ -55,13 +55,13 @@ final class ScreensUITests: XCTestCase {
                       "the dedicated handle still collapses the sheet")
     }
 
-    /// The Qibla button and the dashed line were removed from the map (owner, 2026-11-13); the compass stays in «البر».
+    /// The Qibla button and the dashed line were removed from the map (owner, 2026-11-13); the compass stays in the
+    /// tools: the «القبلة» tile on the Home V2 card (and a row of «البر»).
     func testHomeMapHasNoQiblaButtonAndTheCompassIsInTheTools() {
         let app = launch(["-demo", "-SaryScreen", "home"])
         XCTAssertTrue(app.buttons["home.locate"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["home.qibla.toggle"].exists, "no Qibla button on the map")
-        app.buttons["home.tools.open"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["home.tools.qibla"].waitForExistence(timeout: 10), "the compass is a row of «البر»")
+        XCTAssertTrue(app.descendants(matching: .any)["home.tile.qibla"].waitForExistence(timeout: 10), "the compass is a tile on the card")
     }
 
     func testSettingsReachEveryPage() {
@@ -192,7 +192,7 @@ final class CategoryPinsUITests: XCTestCase {
         let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
         XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
         sleep(2)
-        any("home.category.restaurants").tap()
+        app.tapHomeCategory("restaurants")
         XCTAssertTrue(any("home.result").waitForExistence(timeout: 20), "the list has places")
         sleep(2)
         /* Lower the sheet: the map with its markers. */
