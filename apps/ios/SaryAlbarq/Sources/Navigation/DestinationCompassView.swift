@@ -269,6 +269,7 @@ struct DestinationCompassView: View {
     /// The target list (a popover, not a `Menu`: a Menu label gets the system's capsule background on
     /// iOS 26, which squeezed the round dial into a pill and clipped «غ» / «ق» — owner report, Build 46).
     @State private var choosing = false
+    @State private var listHeight: CGFloat = 300
 
     static let dial: CGFloat = 120
 
@@ -280,7 +281,7 @@ struct DestinationCompassView: View {
     private static let letters = [Letter(text: "ش", deg: 0), Letter(text: "ق", deg: 90), Letter(text: "ج", deg: 180), Letter(text: "غ", deg: 270)]
 
     var body: some View {
-        Button { choosing = true } label: {
+        Button { withAnimation(theme.animation(.snappy)) { choosing.toggle() } } label: {
             VStack(spacing: 6) {
                 dialView
                 chip
@@ -298,16 +299,25 @@ struct DestinationCompassView: View {
             }
             .contentShape(Rectangle())
         }
-        .popover(isPresented: $choosing, arrowEdge: .bottom) {
-            targetList
-                .presentationCompactAdaptation(.popover)
-        }
         .buttonStyle(SaryPressStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibility))
         .accessibilityHint(Text("اضغط تختار وين تأشر البوصلة: الوجهة، الرجعة، القبلة، أقرب مطر، أقرب ربيع"))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("live.compass")
+        /* The list is a card over the map, just above the dial. (A `.popover` presented from here dismissed the live
+         * sheet under it and never appeared on the simulator.) */
+        .overlay(alignment: .topTrailing) {
+            if choosing {
+                /* Trailing edges meet (the dial is at the screen's left in Arabic, the card grows to the right). */
+                targetList
+                    .saryGlass(RoundedRectangle(cornerRadius: 18, style: .continuous), role: .chrome)
+                    .background(GeometryReader { g in Color.clear.preference(key: CompassListHeightKey.self, value: g.size.height) })
+                    .offset(y: -(listHeight + 10))
+                    .transition(.opacity)
+            }
+        }
+        .onPreferenceChange(CompassListHeightKey.self) { listHeight = $0 }
         .onChange(of: reading.roseDegrees) { _, v in
             withAnimation(theme.animation(.smooth)) { rose = DestinationCompass.unwrap(previous: rose ?? v, next: v) }
         }
@@ -453,4 +463,10 @@ private struct CompassNeedleShape: Shape {
         p.closeSubpath()
         return p
     }
+}
+
+
+private struct CompassListHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 300
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

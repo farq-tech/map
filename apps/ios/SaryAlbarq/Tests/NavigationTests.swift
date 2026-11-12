@@ -1262,8 +1262,18 @@ final class NavDriveLayoutTests: XCTestCase {
         XCTAssertEqual(NavDriveLayout.friendsLabel(3), "٣ معك")
     }
 
-    func testTheRedesignIsOnByDefault() {
-        /* `-SaryDriveV1` (DEBUG) brings the previous layout back; the unit tests run without it. */
-        XCTAssertEqual(NavDriveLayout.v2, !ProcessInfo.processInfo.arguments.contains("-SaryDriveV1"))
+    func testTheRedesignFollowsTheNewUISwitch() {
+        XCTAssertEqual(NavDriveLayout.v2, NewUI.enabled, "off by default: the previous driving layout")
+    }
+
+    func testProgressCountsTheOffRoadLegInTheTotal() {
+        /* A route whose last part is off-road without a road: `remainingMeters` counts that leg, so the total must too,
+         * or the bar stays at zero until the road left is shorter than the leg. */
+        XCTAssertEqual(NavDriveLayout.tripTotal(roadM: 10_000, offRoadM: 4_000), 14_000)
+        XCTAssertEqual(NavDriveLayout.tripTotal(roadM: 10_000, offRoadM: nil), 10_000)
+        XCTAssertNil(NavDriveLayout.tripTotal(roadM: nil, offRoadM: 4_000))
+        let total = NavDriveLayout.tripTotal(roadM: 10_000, offRoadM: 4_000)
+        XCTAssertEqual(NavDriveLayout.progress(totalM: total, remainingM: 13_000) ?? -1, 1.0 / 14.0, accuracy: 0.0001, "1 km driven: not zero")
+        XCTAssertEqual(NavDriveLayout.progress(totalM: 10_000, remainingM: 13_000), 0, "the old total: stuck at zero")
     }
 }

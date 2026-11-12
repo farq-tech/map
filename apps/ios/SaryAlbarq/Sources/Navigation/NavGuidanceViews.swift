@@ -227,6 +227,11 @@ enum NavDriveLayout {
     /// The thin progress bar's row on an all-asphalt route, with the spacing above it.
     static let progressExtra: CGFloat = progressBarHeight + barSpacing
 
+    /// The trip's whole length: the road plus a final off-road leg (`remainingMeters` counts that leg too).
+    static func tripTotal(roadM: Double?, offRoadM: Double?) -> Double? {
+        roadM.map { $0 + (offRoadM ?? 0) }
+    }
+
     /// Share of the trip already driven (0…1), for the thin bar on a route without dirt.
     static func progress(totalM: Double?, remainingM: Double?) -> Double? {
         guard let t = totalM, t > 0, let r = remainingM else { return nil }
@@ -857,7 +862,7 @@ struct NavBottomBar: View {
                  * until the road left was shorter than that leg. */
                 if surfaces, let ahead = nav.surfaceAhead {
                     NavSurfaceAheadStrip(ui: ahead)
-                } else if let done = NavDriveLayout.progress(totalM: nav.active.map { $0.distanceM + (nav.offRoad?.distanceM ?? 0) },
+                } else if let done = NavDriveLayout.progress(totalM: NavDriveLayout.tripTotal(roadM: nav.active?.distanceM, offRoadM: nav.offRoad?.distanceM),
                                                              remainingM: nav.remainingMeters) {
                     progressBar(done)
                 }

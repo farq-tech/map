@@ -385,10 +385,11 @@ enum LiveFit {
 
     /// The guiding speed slot at the dock row's end: the speed cluster once a speed was read, the
     /// posted limit sign alone before that (it sits in the row, never over the compact primary).
-    static func guidingSpeedWidth(guiding: Bool, everRead: Bool, drive: Bool, limit: Bool) -> CGFloat {
+    /// `signSlot` false (the previous design): the sign is an overlay, no slot in the row.
+    static func guidingSpeedWidth(guiding: Bool, everRead: Bool, drive: Bool, limit: Bool, signSlot: Bool = true) -> CGFloat {
         guard guiding else { return 0 }
         if everRead { return navSpeedClusterWidth(drive: drive, limit: limit) }
-        return limit ? speedLimitSignWidth(drive: drive) : 0
+        return limit && signSlot ? speedLimitSignWidth(drive: drive) : 0
     }
 
     /// The compact primary pill (`OutingPrimaryCTA(compact: true)`): 16 pt icon, 6 pt gap, 2 × 16 pt

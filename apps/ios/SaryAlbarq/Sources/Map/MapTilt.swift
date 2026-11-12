@@ -163,14 +163,19 @@ final class MapTiltBinding {
 extension SaryMapControlItem {
     /// THE camera-angle button (docs/ONE-MAP-UNIFICATION.md §6): one glyph, one identifier (`map.tilt`), second in the
     /// side column after the layers button on every map. `is3D` is the current choice; the glyph names the view a tap leads to.
-    static func cameraTilt(is3D: Bool, settledPitch: Int? = nil) -> SaryMapControlItem {
+    static func cameraTilt(is3D: Bool, settledPitch: Int? = nil, newUI: Bool = NewUI.enabled) -> SaryMapControlItem {
         var value = CameraTiltRules.value(is3D: is3D)
         #if DEBUG
         if let settledPitch { value += " pitch=\(settledPitch)" }
         #endif
         /* An icon, not «٢د» / «٣د»: beside the guidance bar's «٢ د» (minutes) the text read as a second ETA (owner, Build 46). */
-        return SaryMapControlItem(id: "tilt", systemImage: CameraTiltRules.symbol(is3D: is3D), label: CameraTiltRules.label, accessibilityID: "map.tilt",
-                                  isActive: false, hint: CameraTiltRules.hint(is3D: is3D), value: value)
+        if newUI {
+            return SaryMapControlItem(id: "tilt", systemImage: CameraTiltRules.symbol(is3D: is3D), label: CameraTiltRules.label, accessibilityID: "map.tilt",
+                                      isActive: false, hint: CameraTiltRules.hint(is3D: is3D), value: value)
+        }
+        /* The previous design (flag off): the «٢د» / «٣د» glyph, unchanged. */
+        return SaryMapControlItem(id: "tilt", systemImage: "view.3d", label: CameraTiltRules.label, accessibilityID: "map.tilt",
+                                  isActive: false, hint: CameraTiltRules.hint(is3D: is3D), value: value, glyph: CameraTiltRules.glyph(is3D: is3D))
     }
 }
 
