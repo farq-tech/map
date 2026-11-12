@@ -487,7 +487,7 @@ private struct TripPlanCardContent: View {
             HStack(spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: "flag.checkered")
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(d.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(d.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     if let fix, fresh {
                         let me = LngLat(lng: fix.lng, lat: fix.lat)
                         Text("\(SaryFormat.distance(meters: PlanGeo.meters(me, dest))) خط مستقيم · \(Geo.directionLabel(PlanGeo.bearing(me, dest)))")

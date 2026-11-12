@@ -103,7 +103,7 @@ struct PlanEditorView: View {
             SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "plan.close", action: close)
             VStack(alignment: .leading, spacing: 0) {
                 Text("خطة الطلعة").saryText(.headline).foregroundStyle(theme.palette.textPrimary)
-                Text(outingName).saryText(.caption).foregroundStyle(theme.palette.textSecondary).lineLimit(1)
+                Text(outingName).saryText(.caption).foregroundStyle(theme.palette.textSecondary).lineLimit(1).minimumScaleFactor(0.85)
             }
             Spacer()
             SaryIconButton(systemImage: "magnifyingglass", label: "ابحث أو أدخل إحداثية", id: "plan.search") { searchOpen = true }

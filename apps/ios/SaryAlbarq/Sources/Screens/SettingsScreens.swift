@@ -609,7 +609,7 @@ struct BlockedUsersView: View {
                     if i > 0 { SaryDivider() }
                     HStack(spacing: theme.space(.m)) {
                         SaryAvatar(name: b.display_name ?? "؟", color: 0x9AA5AD, size: 36)
-                        Text(b.display_name ?? "عضو").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(b.display_name ?? "عضو").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Button { Task { await unblock(b) } } label: {
                             Group {

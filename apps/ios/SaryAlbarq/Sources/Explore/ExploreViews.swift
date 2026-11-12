@@ -348,7 +348,7 @@ struct SavedPlacesSheet: View {
                 HStack(spacing: theme.space(.m)) {
                     SaryRowIcon(systemImage: place.icon.systemImage)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(place.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(place.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         Text(CoordinateShare.displayDecimal(place.position)).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -519,7 +519,7 @@ struct TracksSheet: View {
                 HStack(spacing: theme.space(.m)) {
                     SaryRowIcon(systemImage: t.origin == .imported ? "square.and.arrow.down" : "square.and.arrow.up")
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(t.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(t.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         Text("\(t.origin == .imported ? "مستورد" : "مصدَّر") · \(SaryFormat.distance(meters: t.lengthM)) · \(SaryFormat.number(t.points.count)) نقطة")
                             .saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                     }

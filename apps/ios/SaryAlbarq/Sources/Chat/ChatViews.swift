@@ -193,7 +193,7 @@ struct ChatHomeView: View {
                         .frame(width: 40, height: 40)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).saryText(.body, weight: n > 0 ? .bold : .medium).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(title).saryText(.body, weight: n > 0 ? .bold : .medium).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     Text(subtitle).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
@@ -332,7 +332,7 @@ struct ChatThreadView: View {
                 SaryAvatar(name: title, color: context.color(peer), size: 32)
             }
             VStack(alignment: .leading, spacing: 0) {
-                Text(title).saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                Text(title).saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                 Text(with.isGroup ? "\(SaryFormat.digits(String(context.members.count))) أعضاء" : "رسالة خاصة")
                     .saryText(.caption).foregroundStyle(p.textSecondary)
             }

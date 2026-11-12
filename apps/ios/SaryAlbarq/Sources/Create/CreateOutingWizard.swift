@@ -384,7 +384,7 @@ private struct DestinationStep: View {
                     if number {
                         Text(title).saryNumber(.body, weight: .bold).foregroundStyle(p.textPrimary)
                     } else {
-                        Text(title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     }
                     if let detail { Text(detail).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                 }
@@ -640,7 +640,7 @@ private struct WeatherStep: View {
             HStack(spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: "flag.checkered", color: p.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(d.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(d.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     Text(CoordinateShare.displayDecimal(LngLat(lng: d.lng, lat: d.lat))).saryNumber(.footnote).foregroundStyle(p.textSecondary)
                 }
                 Spacer()
