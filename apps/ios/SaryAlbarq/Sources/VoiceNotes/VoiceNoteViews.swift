@@ -259,8 +259,7 @@ struct VoiceNoteSection: View {
     var body: some View {
         Section {
             if center.list.isEmpty {
-                Text("ما فيه رسائل صوتية على هذا التردد للحين")
-                    .foregroundStyle(theme.palette.textSecondary)
+                SaryInlineState(systemImage: "waveform", text: "ما فيه رسائل صوتية على هالتردد للحين. اضغط «اضغط وتكلم» وسجّل أول رسالة.")
                     .accessibilityIdentifier("voice-notes-empty")
             } else {
                 ForEach(center.list.prefix(20)) { n in row(n) }
@@ -292,7 +291,7 @@ struct VoiceNoteSection: View {
             .accessibilityLabel(Text(isPlaying ? "أوقف رسالة \(name)" : "شغّل رسالة \(name)"))
             .accessibilityIdentifier("voice-note-play")
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary)
+                Text(name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                 Text("\(SaryFormat.clock(seconds: n.seconds)) · \(Self.when(n.recorded_at))")
                     .font(.sary(12, .regular)).monospacedDigit().foregroundStyle(p.textSecondary)
             }
@@ -306,9 +305,7 @@ struct VoiceNoteSection: View {
 
     static func when(_ iso: String) -> String {
         guard let d = ISODate.parse(iso) else { return "" }
-        let m = Int(Date().timeIntervalSince(d) / 60)
-        if m < 1 { return "الحين" }
-        if m < 60 { return "قبل \(SaryFormat.number(m)) د" }
-        return "قبل \(SaryFormat.number(m / 60)) س"
+        /* The app's one «قبل ٤ د» (was a local copy that said «الحين» where everything else says «الآن»). */
+        return SaryFormat.elapsed(since: d, now: Date())
     }
 }

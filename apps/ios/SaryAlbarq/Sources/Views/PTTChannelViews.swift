@@ -314,7 +314,7 @@ struct PTTPrivateChannelEditor: View {
                 }
                 Section {
                     if members.isEmpty {
-                        Text("ما فيه أحد ثاني من الأصدقاء في الطلعة بعد").foregroundStyle(.secondary)
+                        SaryInlineState(systemImage: "person.2.slash", text: "ما فيه أحد ثاني من الأصدقاء في الطلعة بعد. ادعُهم من «المجموعة» وارجع هنا.")
                     }
                     ForEach(members) { p in
                         Button {
