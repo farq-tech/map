@@ -301,6 +301,8 @@ struct LiveOutingScreen: View {
                         /* The hint in the middle; a small walkie-talkie stays reachable (UI-AUDIT م3). */
                         HStack(alignment: .center, spacing: theme.space(.s)) {
                             Spacer(minLength: 0)
+                            VStack(spacing: 6) {
+                                IdleHiResHint(controller: controller, reading: controller.exploreReading, ui: ui)
                             Text("اضغط على أي مكان بالخريطة عشان تشوف بريفه")
                                 .saryText(.caption, weight: .medium)
                                 .foregroundStyle(theme.palette.textSecondary)
@@ -309,6 +311,7 @@ struct LiveOutingScreen: View {
                                 .padding(.horizontal, 16).padding(.vertical, 8)
                                 .saryGlass(Capsule(), role: .chrome)
                                 .accessibilityIdentifier("explore.hint")
+                            }
                                 .chromeFrame("dock")
                             Spacer(minLength: 0)
                             /* A solo outing has no walkie-talkie (`LiveScreenRules.solo`). */

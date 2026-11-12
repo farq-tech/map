@@ -211,6 +211,54 @@ final class OneMapIdleUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["الإعدادات"].firstMatch.waitForExistence(timeout: 10), "the settings page is pushed")
     }
 
+    // MARK: idle polish: queued explainer, opening zoom, «قرّب لصور أوضح»
+
+    /// A sheet never stacks over the idle sheet: the explainer waits behind the search and shows once it is closed.
+    func testTheNotificationExplainerWaitsBehindAnOpenIdleSheet() {
+        let app = launch(["-SaryOfferNotify", "40"])
+        XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
+        app.allowLocationIfAsked(within: 3)
+        el(app, "idle.search").tap()
+        XCTAssertTrue(el(app, "live.search.field").waitForExistence(timeout: 10))
+        sleep(45)   // the offer arrived 40 s after launch
+        let explainer = app.staticTexts["نبّهك إذا احتاجك أحد؟"]
+        XCTAssertFalse(explainer.exists, "queued behind the open search")
+        shot("idle-notify-queued")
+        el(app, "live.search.close").tap()
+        XCTAssertTrue(explainer.waitForExistence(timeout: 15), "shown once the search is closed")
+        shot("idle-notify-shown")
+    }
+
+    /// In a city the idle map opens at 15, below the enhancement gate (18, not lowered): the chip says so and takes you there.
+    func testTheHiResHintAppearsInACityAndTakesYouToTheGate() {
+        let on = launch(["-SaryHiRes", "on", "-SaryHiResRemote", "on"])
+        let chip = el(on, "idle.hires.hint")
+        XCTAssertTrue(chip.waitForExistence(timeout: 40), "«قرّب لصور أوضح» at the opening zoom in Riyadh")
+        shot("idle-hires-hint")
+        chip.tap()
+        sleep(6)
+        shot("idle-hires-hint-after-tap")
+        XCTAssertTrue(chip.waitForNonExistence(timeout: 20), "at the gate the chip is gone")
+        on.terminate()
+        let off = launch(["-SaryHiRes", "off"], reset: false)
+        XCTAssertTrue(el(off, "idle.search").waitForExistence(timeout: 30))
+        sleep(10)
+        XCTAssertFalse(el(off, "idle.hires.hint").exists, "switched off: nothing to promise")
+    }
+
+    /// Opt-in (`TEST_RUNNER_SARY_OPEN_LAND=1`, with `xcrun simctl location <udid> set 25.12,46.10`): on open land the idle
+    /// map opens at 16, inside the gate, so no hint and the «مُحسّنة» badge comes by itself.
+    func testOpenLandOpensInsideTheEnhancementGate() throws {
+        guard ProcessInfo.processInfo.environment["SARY_OPEN_LAND"] != nil else { throw XCTSkip("set TEST_RUNNER_SARY_OPEN_LAND=1 and put the simulator on open land") }
+        let app = launch(["-SaryHiRes", "on", "-SaryHiResRemote", "on"])
+        XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
+        app.allowLocationIfAsked(within: 3)
+        XCTAssertTrue(el(app, "hires.badge").waitForExistence(timeout: 150), "«مُحسّنة» at the opening zoom on open land")
+        XCTAssertFalse(el(app, "idle.hires.hint").exists)
+        sleep(60)
+        shot("openland-opening")
+    }
+
     // MARK: R01: high-res imagery where it exists
 
     /// The enhancement draws only from z16 in the desert and z18 in a city (`HiResZoom`); the home map's z15 never reached it.

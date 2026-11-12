@@ -118,4 +118,40 @@ final class IdleMapTests: XCTestCase {
         XCTAssertEqual(OneMapFlag.settingsTitle, "الخريطة الواحدة (تجريبي)")
         XCTAssertTrue(OneMapFlag.restartNote.contains("بعد إغلاق التطبيق"), "the restart note")
     }
+
+    func testTheNotificationExplainerIsQueuedBehindIdleSheets() {
+        XCTAssertTrue(IdleMapRules.rootShowsNotifyExplainer(hasSession: false, idleMapShown: false, offer: true, pendingInvite: false))
+        XCTAssertFalse(IdleMapRules.rootShowsNotifyExplainer(hasSession: false, idleMapShown: true, offer: true, pendingInvite: false), "not from the root over the idle map")
+        XCTAssertFalse(IdleMapRules.rootShowsNotifyExplainer(hasSession: false, idleMapShown: false, offer: true, pendingInvite: true), "an invite goes first")
+        XCTAssertTrue(IdleMapRules.idlePresentsNotifyExplainer(offer: true, pendingInvite: false, idleSheetOpen: false, liveModalOpen: false))
+        XCTAssertFalse(IdleMapRules.idlePresentsNotifyExplainer(offer: true, pendingInvite: false, idleSheetOpen: true, liveModalOpen: false), "queued behind the search/tools/profile…")
+        XCTAssertFalse(IdleMapRules.idlePresentsNotifyExplainer(offer: true, pendingInvite: false, idleSheetOpen: false, liveModalOpen: true), "queued behind a live sheet")
+        XCTAssertFalse(IdleMapRules.idlePresentsNotifyExplainer(offer: true, pendingInvite: true, idleSheetOpen: false, liveModalOpen: false))
+        XCTAssertFalse(IdleMapRules.idlePresentsNotifyExplainer(offer: false, pendingInvite: false, idleSheetOpen: false, liveModalOpen: false))
+    }
+
+    func testTheIdleCameraOpensWhereTheBestImageryIsForTheContext() {
+        XCTAssertEqual(IdleMapRules.openingZoom(lat: 24.7136, lng: 46.6753), 15, "Riyadh: a city, its enhancement needs 18 (gate not lowered)")
+        XCTAssertEqual(IdleMapRules.openingZoom(lat: 21.5, lng: 39.2), 15, "Jeddah")
+        XCTAssertEqual(IdleMapRules.openingZoom(lat: 25.12, lng: 46.10), 16, "open land: where the enhancement already draws")
+        XCTAssertEqual(IdleMapRules.openingZoom(lat: 28.0, lng: 41.5), 16, "the Nafud")
+        XCTAssertTrue(HiResZoom.wantsLayer(zoom: IdleMapRules.openingZoom(lat: 25.12, lng: 46.10), lat: 25.12, lng: 46.10), "open land opens inside the gate")
+        XCTAssertFalse(HiResZoom.wantsLayer(zoom: IdleMapRules.openingZoom(lat: 24.7136, lng: 46.6753), lat: 24.7136, lng: 46.6753), "a city opens outside it, by design")
+    }
+
+    func testTheHiResHintShowsOnlyWhenItIsAvailableAndNotDrawnAtThisZoom() {
+        // Riyadh z15: allowed, not drawn at this zoom -> hint.
+        XCTAssertTrue(IdleMapRules.showsHiResHint(decision: .on, zoom: 15, lat: 24.7136, lng: 46.6753))
+        // Riyadh z18: drawn -> no hint.
+        XCTAssertFalse(IdleMapRules.showsHiResHint(decision: .on, zoom: 18, lat: 24.7136, lng: 46.6753))
+        // Open land z16: drawn; z14: hint.
+        XCTAssertFalse(IdleMapRules.showsHiResHint(decision: .on, zoom: 16, lat: 25.12, lng: 46.10))
+        XCTAssertTrue(IdleMapRules.showsHiResHint(decision: .on, zoom: 14, lat: 25.12, lng: 46.10))
+        // Not available (off / paused by low power or heat): never a hint that promises it.
+        XCTAssertFalse(IdleMapRules.showsHiResHint(decision: .off(.userOff), zoom: 15, lat: 24.7136, lng: 46.6753))
+        XCTAssertFalse(IdleMapRules.showsHiResHint(decision: .paused, zoom: 15, lat: 24.7136, lng: 46.6753))
+        XCTAssertFalse(IdleMapRules.showsHiResHint(decision: .off(.notSatellite), zoom: 15, lat: 24.7136, lng: 46.6753))
+        XCTAssertTrue(HiResZoom.wantsLayer(zoom: IdleMapRules.hiResTargetZoom(lat: 24.7136, lng: 46.6753), lat: 24.7136, lng: 46.6753), "the chip lands inside the gate, not a rounding error short of it")
+        XCTAssertTrue(HiResZoom.wantsLayer(zoom: IdleMapRules.hiResTargetZoom(lat: 25.12, lng: 46.10), lat: 25.12, lng: 46.10))
+    }
 }

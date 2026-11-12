@@ -91,6 +91,10 @@ struct MapCameraRequest: Equatable {
         case fitTrack([LngLat])
         /// Tilt to this pitch in degrees (the idle map's 3D look); the centre and zoom stay.
         case tilt(Double)
+        /// Go to this zoom in place (the idle map's «قرّب لصور أوضح»).
+        case zoom(Double)
+        /// The idle map's opening view: me at this zoom, tilted.
+        case idleOpen(zoom: Double, pitch: Double)
     }
 
     var kind: Kind
@@ -260,6 +264,10 @@ struct OutingMapboxView: UIViewRepresentable {
                 c.fit(pts, maxZoom: SatelliteLabels.trackMaxZoom)
             case let .tilt(deg):
                 c.tilt(to: deg)
+            case let .zoom(z):
+                c.zoomTo(z)
+            case let .idleOpen(z, pitch):
+                c.openIdle(zoom: z, pitch: pitch)
             }
         }
     }
@@ -704,6 +712,24 @@ struct OutingMapboxView: UIViewRepresentable {
             if styleReady { try? map.mapboxMap.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": terrainExaggeration]) }
             let cam = CameraOptions(pitch: on ? 62 : 0)
             ease(map, to: cam, .tilt)
+        }
+
+        func zoomTo(_ z: Double) {
+            guard let map else { return }
+            /* A programmatic move may never reach «map idle» (animated effects keep it rendering): report the settled view ourselves. */
+            ease(map, to: CameraOptions(zoom: min(z, layer.maxZoom)), .focus) { [weak self] in self?.reportCenter(force: true) }
+        }
+
+        /// Me at `zoom`, tilted to `pitch`: one move, so neither request replaces the other.
+        func openIdle(zoom: Double, pitch: Double) {
+            guard let map else { return }
+            keepGroup = false
+            if let me = lastCars.first(where: \.isMe) {
+                let at = recs[me.id]?.shown ?? me.position
+                ease(map, to: CameraOptions(center: at.coordinate, zoom: min(zoom, layer.maxZoom), pitch: terrain3D ? nil : pitch), .recenter) { [weak self] in self?.reportCenter(force: true) }
+            } else {
+                tilt(to: pitch)
+            }
         }
 
         func tilt(to degrees: Double) {
@@ -1941,6 +1967,7 @@ struct OutingMapboxView: UIViewRepresentable {
             gesturesRunning = max(0, gesturesRunning - 1)
             guard gesturesRunning == 0, let start = gestureStartCamera, let map else { return }
             gestureStartCamera = nil
+            reportCenter(force: true)
             let now = map.mapboxMap.cameraState
             let a = map.mapboxMap.point(for: start.center), b = map.mapboxMap.point(for: now.center)
             let shift = Double(hypot(a.x - b.x, a.y - b.y))
