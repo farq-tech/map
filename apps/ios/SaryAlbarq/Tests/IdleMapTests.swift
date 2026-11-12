@@ -86,4 +86,24 @@ final class IdleMapTests: XCTestCase {
         XCTAssertFalse(c.handOffToSolo(NavTarget(source: .point, name: "x", position: LngLat(lng: 46, lat: 24))))
         s.close()
     }
+
+    func testSideColumnNeverGrowsPastTheEssentialsOnAShortPhone() {
+        XCTAssertTrue(IdleSideRules.isCompact(screenHeight: 667), "iPhone SE")
+        XCTAssertFalse(IdleSideRules.isCompact(screenHeight: 852), "iPhone Pro")
+        XCTAssertFalse(IdleSideRules.isCompact(screenHeight: 1366), "iPad")
+        XCTAssertEqual(IdleSideRules.items(compact: true), [.locate, .qibla, .more])
+        XCTAssertEqual(IdleSideRules.items(compact: false), [.locate, .qibla, .places, .more])
+        XCTAssertEqual(IdleSideRules.columnCount(compact: true), 4, "layers + locate + compass + more")
+        XCTAssertEqual(IdleSideRules.columnCount(compact: false), 5)
+        XCTAssertLessThanOrEqual(IdleSideRules.columnCount(compact: false), 5)
+    }
+
+    func testEverythingTheColumnDropsIsUnderMore() {
+        for compact in [true, false] {
+            let inColumn = Set(IdleSideRules.items(compact: compact).map(\.rawValue))
+            let inMore = Set(IdleSideRules.moreActions(compact: compact).map(\.rawValue))
+            for a in IdleMoreAction.allCases { XCTAssertTrue(inColumn.contains(a.rawValue) || inMore.contains(a.rawValue), "\(a) stays reachable (compact=\(compact))") }
+            XCTAssertTrue(inColumn.isDisjoint(with: inMore.subtracting(["drone", "realistic"])), "«أماكني» is in one place only")
+        }
+    }
 }

@@ -17,6 +17,15 @@ final class OneMapIdleUITests: XCTestCase {
 
     private func el(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
 
+    /// Drag the idle sheet up to its half height (the outings, «طلعة جديدة» and «انضم برابط» live there).
+    private func pullSheetUp(_ app: XCUIApplication) {
+        let h = app.windows.firstMatch.frame.height
+        let sheet = el(app, "idle.sheet").frame
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: max(0.02, (sheet.minY - 14) / h)))
+        start.press(forDuration: 0.15, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)))
+        shot("idle-half")
+    }
+
     private func shot(_ name: String) {
         let s = XCUIScreen.main.screenshot()
         let a = XCTAttachment(screenshot: s); a.name = name; a.lifetime = .keepAlways; add(a)
@@ -103,8 +112,9 @@ final class OneMapIdleUITests: XCTestCase {
         let app = launch()
         XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
         app.allowLocationIfAsked(within: 3)
+        pullSheetUp(app)
         let row = app.buttons["outing-row"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 15), "the active outing is on the idle sheet")
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "the active outing is on the idle sheet at half height")
         row.tap()
         XCTAssertTrue(el(app, "idle.search").waitForNonExistence(timeout: 20), "the outing's screen replaced the idle map")
         shot("idle-opened-outing")
@@ -130,5 +140,74 @@ final class OneMapIdleUITests: XCTestCase {
         go.tap()
         XCTAssertTrue(el(app, "idle.search").waitForNonExistence(timeout: 25), "the solo outing replaced the idle map")
         shot("idle-navigate-solo")
+    }
+
+    // MARK: EM3: the home's overlays on the idle map
+
+    /// The chips are the home's: «البر» + the everyday and desert categories. A chip opens the search already asking for it.
+    func testCategoryChipsOpenTheSearchAndTheToolsHandleOpensTheTools() {
+        let app = launch()
+        XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
+        app.allowLocationIfAsked(within: 3)
+        for id in ["idle.tools.open", "idle.category.restaurants", "idle.category.cafes", "idle.category.mosques", "idle.category.fuel"] {
+            XCTAssertTrue(el(app, id).waitForExistence(timeout: 10), "\(id) is a chip on the idle sheet")
+        }
+        shot("idle-chips")
+        el(app, "idle.category.cafes").tap()
+        let field = el(app, "live.search.field")
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertEqual(field.value as? String, "مقهى", "the chip's query is already in the field")
+        el(app, "live.search.close").tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 10))
+        el(app, "idle.tools.open").tap()
+        XCTAssertTrue(el(app, "home.tools").waitForExistence(timeout: 10), "«البر» opens the desert tools")
+        for id in ["home.tools.weather", "home.tools.qibla", "home.tools.camp"] { XCTAssertTrue(el(app, id).exists, id) }
+        shot("idle-tools")
+    }
+
+    /// «موقعي», the compass and «المزيد» sit with the one layers button, and no overlap with each other or the sheet.
+    func testSideColumnHasLocateCompassMoreAndNeverOverlaps() {
+        for (tag, size) in [("normal", nil), ("axxl", "UICTContentSizeCategoryAccessibilityXXL")] as [(String, String?)] {
+            let app = launch(text: size)
+            XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30), tag)
+            app.allowLocationIfAsked(within: 3)
+            let ids = ["map.layers", "outing-locate", "idle-qibla", "idle-more"]
+            for id in ids { XCTAssertTrue(el(app, id).waitForExistence(timeout: 15), "\(tag): \(id)") }
+            let compact = app.windows.firstMatch.frame.height < 760
+            XCTAssertEqual(el(app, "explore-places").exists, !compact, "\(tag): «أماكني» is in the column only when it fits, else under «المزيد»")
+            let frames = (ids + (compact ? [] : ["explore-places"])).map { (id: $0, f: el(app, $0).frame) }
+            for (i, a) in frames.enumerated() {
+                for b in frames.dropFirst(i + 1) {
+                    XCTAssertTrue(a.f.intersection(b.f).isEmpty, "\(tag): \(a.id) and \(b.id) do not overlap")
+                }
+            }
+            let sheet = el(app, "idle.sheet").frame
+            for a in frames { XCTAssertLessThanOrEqual(a.f.maxY, sheet.minY + 1, "\(tag): \(a.id) is above the sheet") }
+            if size == nil { shot("idle-side") }
+            el(app, "idle-more").tap()
+            XCTAssertTrue(app.buttons["درون"].waitForExistence(timeout: 5), "\(tag): «المزيد» holds the drone")
+            XCTAssertTrue(app.buttons["الوضع الواقعي"].exists)
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
+            app.terminate()
+        }
+    }
+
+    /// «انضم برابط» (the paste sheet) and the profile with the home's pages behind it.
+    func testJoinByLinkAndTheProfileFlowWork() {
+        let app = launch()
+        XCTAssertTrue(el(app, "idle.search").waitForExistence(timeout: 30))
+        app.allowLocationIfAsked(within: 3)
+        pullSheetUp(app)
+        XCTAssertTrue(el(app, "idle.join").waitForExistence(timeout: 10))
+        XCTAssertTrue(el(app, "idle.new").exists)
+        el(app, "idle.join").tap()
+        XCTAssertTrue(el(app, "paste.paste").waitForExistence(timeout: 10), "the paste-a-link sheet")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+        XCTAssertTrue(el(app, "paste.paste").waitForNonExistence(timeout: 10), "the sheet is dismissed")
+        el(app, "idle.profile").tap()
+        XCTAssertTrue(el(app, "profile.sheet.settings").waitForExistence(timeout: 10), "the profile sheet")
+        shot("idle-profile")
+        el(app, "profile.sheet.settings").tap()
+        XCTAssertTrue(app.staticTexts["الإعدادات"].firstMatch.waitForExistence(timeout: 10), "the settings page is pushed")
     }
 }
