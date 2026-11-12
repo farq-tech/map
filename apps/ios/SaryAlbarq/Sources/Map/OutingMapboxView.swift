@@ -1660,7 +1660,7 @@ struct OutingMapboxView: UIViewRepresentable {
             mineDrawer.update(m, line: trails.mineTrack, style: TrackLineStyle(width: w, color: myColor, speedColours: true,
                                                                                 casing: Self.casing(for: myColor), showEnds: false,
                                                                                 glow: trails.highlight), below: below())
-            followDrawer.update(m, line: trails.followed, style: TrackLineStyle(width: TrackLineStyle.width + 1, glow: true),
+            followDrawer.update(m, line: trails.followed, style: .gpsTrack,
                                 below: below())
             placeStart(trails.start)
             placeGapLabels(trails.gapLabels)
