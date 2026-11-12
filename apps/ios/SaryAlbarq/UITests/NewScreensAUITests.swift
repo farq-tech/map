@@ -189,7 +189,7 @@ final class NewScreensAUITests: XCTestCase {
         if rows.count > 0 {
             XCTAssertGreaterThanOrEqual(rows.firstMatch.frame.height, 55, "rows have one fixed minimum height")
         } else {
-            XCTAssertTrue(app.staticTexts["ما فيه طلعات منتهية"].exists)
+            XCTAssertTrue(el(app, "state-empty").exists, "the kit's empty state: one sentence, no extra button")
         }
         shot("history")
     }

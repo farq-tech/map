@@ -117,10 +117,14 @@ struct OutingDetailsView: View {
         NewUIPage(title: title, back: back, content: {
             switch phase {
             case .loading:
-                SaryStateView(kind: .loading("نجيب تفاصيل الطلعة…"))
+                SarySkeletonList(rows: 4)
             case .failed(let m):
-                SaryStateView(kind: model.online ? .error(title: "تعذّر التحميل", message: m) : .offline(message: nil),
-                              actionTitle: "حاول مرة ثانية", actionID: "details.retry") { Task { await load() } }
+                if model.online {
+                    SaryScreenState(kind: .error, systemImage: nil, message: "تعذّر التحميل. \(m)",
+                                    actionTitle: "حاول مرة ثانية", actionID: "details.retry") { Task { await load() } }
+                } else {
+                    SaryStateView(kind: .offline(message: nil), actionTitle: "حاول مرة ثانية", actionID: "details.retry") { Task { await load() } }
+                }
             case .loaded(let s):
                 loadedSections(s)
                 Button { confirmLeave = true } label: { SaryButtonLabel(title: "غادر الطلعة", systemImage: "rectangle.portrait.and.arrow.right") }
@@ -316,23 +320,26 @@ struct TripSummaryView: View {
             .accessibilityIdentifier("summary.shareText")
     }
 
-    private func stateViews() -> some View {
-        Group {
-            switch phase {
-            case .loading:
-                SaryStateView(kind: .loading("نجهّز الملخص…"))
-            case .failed(let m):
+    @ViewBuilder private func stateViews(modern: Bool) -> some View {
+        switch phase {
+        case .loading:
+            if modern { SarySkeletonList(rows: 4) } else { SaryStateView(kind: .loading("نجهّز الملخص…")) }
+        case .failed(let m):
+            if modern, model.online {
+                SaryScreenState(kind: .error, systemImage: nil, message: "تعذّر التحميل. \(m)",
+                                actionTitle: "حاول مرة ثانية", actionID: "summary.retry") { Task { await load() } }
+            } else {
                 SaryStateView(kind: model.online ? .error(title: "تعذّر التحميل", message: m) : .offline(message: nil),
                               actionTitle: "حاول مرة ثانية", actionID: "summary.retry") { Task { await load() } }
-            case .loaded:
-                EmptyView()
             }
+        case .loaded:
+            EmptyView()
         }
     }
 
     @ViewBuilder private var legacyPage: some View {
         SaryPage(title: "ملخص الطلعة", subtitle: subtitle, back: back) {
-            stateViews()
+            stateViews(modern: false)
             if case .loaded(let s) = phase {
                 loadedContent(s)
                 if s.outing.status == .ended {
@@ -352,7 +359,7 @@ struct TripSummaryView: View {
     /// «طلعة الرجعة» and «شارك الملخص كنص» keep their place in the page as secondaries.
     @ViewBuilder private var newPage: some View {
         NewUIPage(title: "ملخص الطلعة", subtitle: subtitle, back: back, content: {
-            stateViews()
+            stateViews(modern: true)
             if case .loaded(let s) = phase {
                 loadedContent(s)
                 if s.outing.status == .ended { endedExtras(s) }

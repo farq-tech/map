@@ -272,26 +272,35 @@ struct InviteJoinSheet: View {
         }
     }
 
-    /// The non-ready phases, shared by both skins.
+    /// The non-ready phases in the new skin: the shared kit's skeleton while loading and `SaryScreenState`
+    /// (icon in a circle, one sentence that says what happened and what to do, ONE button) for the dead ends.
     @ViewBuilder private var stateView: some View {
         switch phase {
         case .loading:
-            SaryStateView(kind: .loading("نقرأ الدعوة…"))
+            SarySkeletonList(rows: 3)
         case .expired:
-            SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من أمير الطلعة رابطًا جديدًا. الروابط تنتهي أو يلغيها أمير الطلعة."),
-                          actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
+            SaryScreenState(kind: .error, systemImage: nil,
+                            message: "انتهت صلاحية الدعوة. اطلب من أمير الطلعة رابطًا جديدًا (الروابط تنتهي أو يلغيها أمير الطلعة).",
+                            actionTitle: "حسنًا", actionID: "invite.close", action: close)
                 .accessibilityIdentifier("invite.expired")
         case .taken:
-            SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «ملفي» وافتح الرابط مرة ثانية، أو اطلب من أمير الطلعة دعوة جديدة باسمك."),
-                          actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
+            SaryScreenState(kind: .error, systemImage: nil,
+                            message: "هذه الدعوة لشخص آخر، انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «ملفي» وافتح الرابط مرة ثانية، أو اطلب من أمير الطلعة دعوة جديدة باسمك.",
+                            actionTitle: "حسنًا", actionID: "invite.close", action: close)
                 .accessibilityIdentifier("invite.taken")
         case .invalid:
-            SaryStateView(kind: .error(title: "الرابط ناقص أو فيه خطأ", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الطلعة."),
-                          actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
+            SaryScreenState(kind: .error, systemImage: nil,
+                            message: "الرابط ناقص أو فيه خطأ. تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الطلعة.",
+                            actionTitle: "حسنًا", actionID: "invite.close", action: close)
                 .accessibilityIdentifier("invite.invalid")
         case .error(let m):
-            SaryStateView(kind: model.online ? .error(title: "تعذّر قراءة الدعوة", message: m) : .offline(message: "نقرأ الدعوة أول ما يرجع الاتصال."),
-                          actionTitle: "حاول مرة ثانية", actionID: "invite.retry") { Task { await load() } }
+            if model.online {
+                SaryScreenState(kind: .error, systemImage: nil, message: "تعذّر قراءة الدعوة. \(m)",
+                                actionTitle: "حاول مرة ثانية", actionID: "invite.retry") { Task { await load() } }
+            } else {
+                SaryStateView(kind: .offline(message: "نقرأ الدعوة أول ما يرجع الاتصال."),
+                              actionTitle: "حاول مرة ثانية", actionID: "invite.retry") { Task { await load() } }
+            }
         case .ready:
             EmptyView()
         }
