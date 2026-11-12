@@ -1828,7 +1828,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 cars.append(MotionFX.Car(id: r.item.id, layer: Vehicle.ids(r.key).layer, isMe: r.item.isMe, pose: pose,
                                          offRoad: r.matcher.road == nil, drawn: styleReady && r.layersReady && r.model))
             }
-            fx.exploring = exploreDrawer.last.active
+            fx.exploring = exploreDrawer.last.active || exploreDrawer.last.capabilities
             fx.drive = theme.drive
             fx.night = theme.night
             fx.exaggeration = terrainExaggeration
