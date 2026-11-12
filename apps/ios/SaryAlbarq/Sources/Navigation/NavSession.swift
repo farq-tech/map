@@ -65,6 +65,17 @@ final class NavSession: ObservableObject {
     @Published private(set) var rerouting = false
     /// When the current off-route began (`rerouteHoldS`).
     private var reroutingSince: Date?
+    /// Our own check of the raw GPS fix against the route (`RouteAdherence`): a parallel carriageway
+    /// the SDK still counts as «on the route» (owner, build 46) must not keep a stale instruction.
+    private(set) var adherence = RouteAdherence()
+    private var routeLine: RouteLine?
+    private var adherenceHold = false
+    private var forceTask: Task<Void, Never>?
+    private var forcedAt: [Date] = []
+    /// Our own reroutes: at most this many in `forceWindowS`, at least `forceGapS` apart.
+    static let forceMax = 3
+    static let forceWindowS = 300.0
+    static let forceGapS = 20.0
     @Published private(set) var offRoad: NavOffRoadLeg?
     /// Live remainder in the off-road phase.
     @Published private(set) var offRoadNow: (distanceM: Double, bearing: Double)?
@@ -620,6 +631,7 @@ final class NavSession: ObservableObject {
         openingVoicePending = auto
         active = r
         routeRevision += 1
+        setRouteLine(r)
         phase = .guiding
         offRoad = NavOffRoad.lastLeg(routeEnd: r.end, target: t.position)
         let e = makeEngine(plan)
@@ -727,6 +739,8 @@ final class NavSession: ObservableObject {
                 rerouting = false
                 reroutingSince = nil
             }
+            /* The raw fix says I am on another road than the route: its numbers are stale. */
+            if adherence.state == .off { return }
             noteProgress(p)
             progress = p
             progressRevision = routeRevision
@@ -749,6 +763,8 @@ final class NavSession: ObservableObject {
             let refresh = Self.isRefresh(of: active, r)
             active = r
             routeRevision += 1
+            /* A traffic refresh of the same route says nothing new about which road I am on. */
+            if !refresh { setRouteLine(r, near: myFix()) }
             if refresh {
                 /* The same road with fresh traffic: the last progress still describes it. */
                 progressRevision = routeRevision
@@ -838,6 +854,7 @@ final class NavSession: ObservableObject {
         switch phase {
         case .guiding:
             engine?.ingest(f)
+            checkAdherence(f)
         case .offRoad:
             guard let leg = offRoad else { return }
             let r = NavOffRoad.remaining(leg, me: LngLat(lng: f.lng, lat: f.lat))
@@ -848,11 +865,98 @@ final class NavSession: ObservableObject {
         }
     }
 
+    // MARK: route adherence (parallel carriageways)
+
+    /// The new route's line, and how far the car already is from it: a router that put it on the
+    /// other carriageway keeps that offset as an allowance instead of being flagged again and again.
+    private func setRouteLine(_ r: NavRoute, near fix: DeviceFix? = nil) {
+        let line = RouteLine(r.coordinates)
+        routeLine = line
+        adherenceHold = false
+        var allowance = 0.0
+        if let f = fix, let s = RouteAdherence.measure(f, on: line) {
+            allowance = RouteAdherence.allowance(forCrossM: s.crossM, accuracy: f.accuracy)
+        }
+        adherence.reset(allowanceM: allowance)
+    }
+
+    /// Where along the route the car should be (from the last progress on THIS route), metres.
+    private func expectedAlongM(_ line: RouteLine) -> Double? {
+        guard let p = progress, progressRevision == routeRevision, let r = active, r.distanceM > 0 else { return nil }
+        return line.length * max(0, min(1, 1 - p.distanceRemainingM / r.distanceM))
+    }
+
+    private func checkAdherence(_ f: DeviceFix) {
+        guard let line = routeLine, !(engine is LocalGuidanceEngine) else { return }
+        let change = adherence.note(f, on: line, expectedAlongM: expectedAlongM(line))
+        #if DEBUG
+        if change != nil { NavLog.log("adherence %@ cross=%.0f", String(describing: change!), adherence.last?.crossM ?? -1) }
+        #endif
+        if change == .on, adherenceHold, forceTask == nil {
+            /* Back on the route by itself: the engine's numbers are good again. */
+            adherenceHold = false
+            rerouting = false
+            reroutingSince = nil
+        }
+        if adherence.state == .off { forceReroute(from: f) }
+    }
+
+    /// The raw fix has been on another road than the route for a while: ask for a route from where the
+    /// car is, with its course (so the carriageway it drives is the one chosen) and start it.
+    private func forceReroute(from f: DeviceFix) {
+        guard phase == .guiding, forceTask == nil, let t = target, let e = engine else { return }
+        let now = Date()
+        /* The SDK's own reroute is on its way: give it its few seconds first. */
+        if !adherenceHold, let s = reroutingSince, now.timeIntervalSince(s) < Self.rerouteHoldS { return }
+        forcedAt = forcedAt.filter { now.timeIntervalSince($0) < Self.forceWindowS }
+        if let l = forcedAt.last, now.timeIntervalSince(l) < Self.forceGapS { return }
+        if forcedAt.count >= Self.forceMax {
+            /* Three tries and the router still puts the route there: accept it, never loop. */
+            let cross = adherence.last?.crossM ?? 0
+            adherence.reset(allowanceM: min(60, cross + 8))
+            adherenceHold = false
+            rerouting = false
+            reroutingSince = nil
+            return
+        }
+        forcedAt.append(now)
+        adherenceHold = true
+        if !rerouting { reroutingSince = now }
+        rerouting = true
+        let origin = LngLat(lng: f.lng, lat: f.lat)
+        let heading = HeadingChooser.course(f)
+        forceTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.forceTask = nil }
+            let p = try? await self.provider.routes(NavRouteRequest(origin: origin, heading: heading, target: t, options: self.options))
+            guard !Task.isCancelled, self.phase == .guiding, self.engine === e else { return }
+            guard let p, let r = NavRouteChoice.order(p.routes, options: self.options).first else {
+                /* No new route (offline, server): say so; the next fix tries again after the gap. */
+                self.rerouting = false
+                self.reroutingSince = nil
+                self.toast("تعذّر حساب طريق جديد")
+                return
+            }
+            self.plan = p
+            do { try await e.start(route: r, plan: p, target: t) } catch {
+                guard self.engine === e else { return }
+                self.rerouting = false
+                self.reroutingSince = nil
+                return
+            }
+            guard !Task.isCancelled, self.phase == .guiding, self.engine === e else { return }
+            self.progress = nil
+            self.handle(.rerouted(r))
+        }
+    }
+
     /// Our own location stream (`NavLocator`) is running (tests: it must stop with the guidance).
     var isLocating: Bool { locator.running }
 
     func end() {
         fetchTask?.cancel()
+        forceTask?.cancel()
+        forceTask = nil
         retryTask?.cancel()
         stopEngine()
         locator.stop()
@@ -868,6 +972,10 @@ final class NavSession: ObservableObject {
 
     private func reset() {
         phase = .idle
+        routeLine = nil
+        adherence.reset()
+        adherenceHold = false
+        forcedAt = []
         lastIngested = nil
         reroutingSince = nil
         progressRevision = 0
