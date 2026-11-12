@@ -183,7 +183,8 @@ struct LiveSheet: View {
         case .weather:
             WeatherSheet(weather: controller.weather, close: { controller.modal = nil },
                          changeDestination: controller.session.view?.iLead == true ? { controller.changeDestinationFromWeather() } : nil,
-                         destinationNote: controller.planModel?.destinationLocalOnly == true ? LocalDestinationCopy.note : nil)
+                         destinationNote: controller.planModel?.destinationLocalOnly == true ? LocalDestinationCopy.note : nil,
+                         showsMapControls: true)
                 .presentationDetents([.large])
         case .qibla:
             QiblaView(fallback: controller.location.lastFix.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
