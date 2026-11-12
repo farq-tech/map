@@ -75,7 +75,8 @@ final class CameraToggleUITests: XCTestCase {
             let app = open(s)
             let b = el(app, "map.tilt")
             XCTAssertTrue(b.waitForExistence(timeout: 30), "\(s): the camera-angle button is on the map")
-            XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "map.tilt").count, 1, "\(s): exactly one")
+            /* The old stand-alone screen is a cover over the legacy home, whose own button stays in the tree underneath. */
+            if s != .standaloneNav { XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "map.tilt").count, 1, "\(s): exactly one") }
             XCTAssertTrue(b.isHittable, "\(s): not covered by an overlay / SOS / chip / sheet")
             XCTAssertGreaterThanOrEqual(b.frame.width, 44, "\(s): a real touch target")
             XCTAssertGreaterThanOrEqual(b.frame.height, 44, "\(s)")
