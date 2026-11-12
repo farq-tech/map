@@ -180,6 +180,11 @@ struct OutingMapboxView: UIViewRepresentable {
         map.ornaments.options.scaleBar.visibility = .hidden
         /* «تخفيف الزحمة» ١٦ (Lovable has no compass): the north lives in the camera button. */
         map.ornaments.options.compass.visibility = .hidden
+        /* Owner (Build 45): no tilting by touch; the «٣د / ٢د» button does it. Pan, pinch zoom and rotation stay. */
+        map.gestures.options.pitchEnabled = false
+        #if DEBUG
+        map.accessibilityValue = "pitchEnabled=\(map.gestures.options.pitchEnabled)"
+        #endif
         /* No over-zoom past what the layer's tiles resolve (pinch, follow, fits all clamp to it). */
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme
@@ -422,9 +427,17 @@ struct OutingMapboxView: UIViewRepresentable {
             var key: String { item.isMe ? "" : Vehicle.carKey(item.id) }
         }
 
+        /// Keeps the pitch on the «٣د / ٢د» choice. While a follow camera drives the pitch every frame, that camera takes the change.
+        private var tiltBinding: MapTiltBinding?
+
         func attach(_ map: MapView) {
             self.map = map
             map.gestures.delegate = self
+            tiltBinding = MapTiltBinding(map: map, mode: { MapTiltModel.shared.lookingMode }, external: { [weak self] in
+                guard let self, self.followMode != .free else { return false }
+                self.startLink()
+                return true
+            })
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
             map.mapboxMap.onMapIdle.observe { [weak self] _ in
@@ -697,6 +710,7 @@ struct OutingMapboxView: UIViewRepresentable {
 
         func tilt(to degrees: Double) {
             guard let map, !terrain3D else { return }
+            /* The idle map's 3D look is the person's remembered choice (`MapTiltModel`), 2D included. */
             ease(map, to: CameraOptions(pitch: degrees), .tilt)
         }
 
@@ -725,7 +739,7 @@ struct OutingMapboxView: UIViewRepresentable {
             guard styleReady, let map, !visuals.ownsLight else { return }
             let at = lastCars.first(where: \.isMe)?.position ?? lastCars.first?.position
             /* Night mode (forced or after sunset) is the night light; otherwise the sun decides. */
-            let preset: SunLight.Preset = theme.night ? .night : (at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
+            let preset: SunLight.Preset = theme.night ? .night : SunLook.preset(at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
             guard preset != light else { return }
             light = preset
             try? map.mapboxMap.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: preset.rawValue)
@@ -1080,11 +1094,12 @@ struct OutingMapboxView: UIViewRepresentable {
                 let bearing = headingSource.update(speedKmh: kmh, course: r.heading, compass: c?.heading, compassError: c?.error)
                     ?? followSmoother.shown?.bearing ?? m.cameraState.bearing
                 let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: FollowZoom.carScreenShare)
-                target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: FollowZoom.headingPitch,
+                target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: MapTiltModel.shared.pitch(.navigation),
                                           topPadding: pad.top, bottomPadding: pad.bottom)
             default:
                 let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: 0.5)
-                target = FollowCameraPose(center: r.shown, zoom: northZoom, bearing: 0, pitch: 0, topPadding: pad.top, bottomPadding: pad.bottom)
+                target = FollowCameraPose(center: r.shown, zoom: northZoom, bearing: 0, pitch: MapTiltModel.shared.pitch(MapTiltModel.shared.lookingMode),
+                                          topPadding: pad.top, bottomPadding: pad.bottom)
             }
             let (p, settling) = followSmoother.step(target: target, at: now, reduceMotion: UIAccessibility.isReduceMotionEnabled)
             let cam = CameraOptions(center: p.center.coordinate, padding: UIEdgeInsets(top: p.topPadding, left: 0, bottom: p.bottomPadding, right: 0),

@@ -45,6 +45,7 @@ struct PlanEditorView: View {
                         .background(RoundedRectangle(cornerRadius: SaryRadius.s).fill(p.surface))
                         .accessibilityIdentifier("plan.drawHint")
                 }
+                MapTiltButton().frame(maxWidth: .infinity, alignment: .trailing)
                 Spacer()
                 if let toast {
                     SaryToast(text: toast).accessibilityIdentifier("plan.toast").transition(.opacity)

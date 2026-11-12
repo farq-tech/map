@@ -274,6 +274,8 @@ struct AreaPickerMap: UIViewRepresentable {
         SandGrade.follow(map)
         map.ornaments.options.scaleBar.visibility = .visible
         map.ornaments.options.compass.visibility = .hidden
+        /* The area is what the flat map shows: no tilting by touch here, and no 2D / 3D button (a tilted view has no rectangle). */
+        map.gestures.options.pitchEnabled = false
         map.ornaments.options.logo.position = .bottomLeft
         map.ornaments.options.attributionButton.position = .bottomLeft
         map.ornaments.options.logo.margins = CGPoint(x: 12, y: 300)
