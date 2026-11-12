@@ -170,6 +170,78 @@ enum NavBarLayout {
     static func showsStaleNote(peek: Bool) -> Bool { !peek }
 }
 
+/// The live screen while guiding, owner-approved redesign («الطلعة وقت القيادة»): a big navBlue
+/// maneuver card on top with «ثم …» as a chip under it, a compact «طوارئ» under the card, and ONE
+/// bottom bar (time left big, the trip line and the destination, the surfaces or a progress bar,
+/// then the friends, the walkie-talkie, «المزيد» and «أوقف التوجيه»). Pure, unit-tested in
+/// `NavigationTests`. The previous layout stays reachable in DEBUG with `-SaryDriveV1`.
+enum NavDriveLayout {
+    /// The redesign is on (DEBUG `-SaryDriveV1`: the previous driving layout).
+    static var v2: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-SaryDriveV1") { return false }
+        #endif
+        return true
+    }
+
+    /// What the bar's footer row holds, in reading order (right to left in Arabic).
+    enum FooterItem: String, Equatable {
+        case friends, talk, more, stop
+    }
+
+    /// The footer: «٣ معك» only with friends in the outing (never in a solo outing), the walkie-talkie
+    /// only where the outing has one (`LiveScreenRules.GroupUI.walkieTalkie`), «المزيد» always, and
+    /// «أوقف التوجيه» until arrival (then the arrival card has its own button).
+    static func footer(friends: Bool, friendCount: Int, talk: Bool, arrived: Bool) -> [FooterItem] {
+        var items: [FooterItem] = []
+        if friends && friendCount > 0 { items.append(.friends) }
+        if talk { items.append(.talk) }
+        items.append(.more)
+        if !arrived { items.append(.stop) }
+        return items
+    }
+
+    /// The footer's controls: one height for all, never under 44 pt.
+    static func footerControl(drive: Bool) -> CGFloat { drive ? 56 : 52 }
+
+    /// «طوارئ» while the maneuver card is up: a compact fixed disc (still ≥ 44 pt); otherwise the
+    /// sizes the live screen already used.
+    static func sosSize(card: Bool, driving: Bool) -> CGFloat {
+        card ? 48 : (driving ? 60 : 52)
+    }
+
+    /// The bar's peek: the numbers row, the surfaces strip (or the thin progress bar), the footer.
+    static func peekHeight(drive: Bool, surfaces: Bool) -> CGFloat {
+        let base: CGFloat = drive ? 164 : 150
+        return base + (surfaces ? SheetDetentUI.surfacesExtra(drive: drive) : progressExtra)
+    }
+
+    /// The thin progress bar's row on an all-asphalt route.
+    static let progressExtra: CGFloat = 12
+
+    /// Share of the trip already driven (0…1), for the thin bar on a route without dirt.
+    static func progress(totalM: Double?, remainingM: Double?) -> Double? {
+        guard let t = totalM, t > 0, let r = remainingM else { return nil }
+        return min(1, max(0, 1 - r / t))
+    }
+
+    /// «١٨ كم · وصول ٥:٤٢ م».
+    static func tripLine(meters: Double?, eta: Date?) -> String {
+        [meters.map { SaryFormat.distance(meters: $0) }, eta.map { "وصول \(NavText.clock($0))" }].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// The time left split for the big number: («٢٥», «د»), («١ س ٥», «د»); under a minute the
+    /// words whole («أقل من دقيقة», no unit).
+    static func timeParts(seconds: Double) -> (value: String, unit: String) {
+        let s = NavText.remaining(seconds: seconds)
+        guard seconds >= 60, let i = s.lastIndex(of: " ") else { return (s, "") }
+        return (String(s[..<i]), String(s[s.index(after: i)...]))
+    }
+
+    /// «٣ معك»: the friends in the outing with me.
+    static func friendsLabel(_ count: Int) -> String { "\(SaryFormat.number(count)) معك" }
+}
+
 /// Top banner (v2): a big arrow with the distance under it, the road on one big line beside them,
 /// lanes near the turn, and «ثم …» only when the next turn is close. Time and distance left are in the
 /// bottom bar now.
@@ -177,6 +249,9 @@ struct NavManeuverBanner: View {
     @ObservedObject var nav: NavSession
     /// The per-surface km strip under the maneuver; off where the guidance bar lists the surfaces in order.
     var showsSurfaceStrip = true
+    /// The live screen's maneuver card (`NavDriveLayout`): navBlue, the distance big, «ثم …» as a chip
+    /// under it. Off (the default): the classic dark banner, as on «اتجه» from the home map.
+    var card = false
     @StateObject private var pip = NavPictureInPicture()
     @Environment(\.sary) private var theme
     @Environment(\.layoutDirection) private var layoutDirection
@@ -191,9 +266,188 @@ struct NavManeuverBanner: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            if card {
+                cardPanel
+                cardChips
+            } else {
+                classicPanel
+            }
+        }
+        /* A reroute gets one soft tap (silent in drive mode by `SaryHaptics.allows`; the voice says it). */
+        .saryHaptic(.confirm, trigger: nav.rerouting) { was, now in now && !was }
+        .background(alignment: .bottomTrailing) {
+            NavPiPLayerHost(displayLayer: pip.displayLayer)
+                .frame(width: 160, height: 90)
+                .opacity(0.01)
+                .accessibilityHidden(true)
+        }
+        .onAppear { pip.update(NavPiPSnapshot.make(nav: nav), guiding: nav.phase == .guiding) }
+        .onChange(of: NavPiPSnapshot.make(nav: nav)) { _, snapshot in
+            pip.update(snapshot, guiding: nav.phase == .guiding)
+        }
+        .onChange(of: nav.phase) { _, phase in
+            pip.update(NavPiPSnapshot.make(nav: nav), guiding: phase == .guiding)
+        }
+        .alert("تعذر فتح النافذة العائمة", isPresented: Binding(
+            get: { pip.startError != nil },
+            set: { if !$0 { pip.startError = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { pip.startError = nil }
+        } message: {
+            Text(pip.startError ?? "")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("nav.banner")
+    }
+
+    /// «نافذة الملاحة العائمة»: a 40 pt circle in a 44 pt touch area.
+    private func pipButton(ink: Color, fill: Color) -> some View {
+        Button { pip.start() } label: {
+            Image(systemName: pip.active ? "pip.exit" : "pip.enter")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(ink)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(fill))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .disabled(!pip.supported)
+        .accessibilityLabel(Text("نافذة الملاحة العائمة"))
+        .accessibilityValue(Text(pip.active ? "مفتوحة" : "مغلقة"))
+        .accessibilityIdentifier("nav.pip")
+    }
+
+    // MARK: the maneuver card (`NavDriveLayout`)
+
+    /// The navBlue card: the arrow in its tile, the distance big, the instruction bold under it (two
+    /// lines at most, never shrunk: UI-AUDIT 0.6; a long road name ends in «…»).
+    private var cardPanel: some View {
+        let p = theme.palette
+        let tile: CGFloat = theme.drive ? 76 : 68
+        return Group {
+            if nav.rerouting {
+                HStack(spacing: theme.space(.m)) {
+                    ProgressView().tint(p.onNavBlue).frame(width: tile, height: tile)
+                    Text("نعيد حساب الطريق…").saryText(.title2, weight: .heavy).foregroundStyle(p.onNavBlue)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("nav.rerouting")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(theme.space(.m))
+                .transition(.opacity)
+            } else if let step = nav.currentStep {
+                let d = nav.maneuverDistanceM ?? step.distanceM
+                let parts = NavHUD.distanceParts(d)
+                let key = NavMotion.stepKey(route: nav.active?.geometryRevision, stepIndex: nav.shownProgress?.stepIndex)
+                HStack(alignment: .top, spacing: theme.space(.m)) {
+                    NavManeuverGlyph(maneuver: step.maneuver, size: tile * 0.78, tint: .clear, ink: p.onNavBlue)
+                        .frame(width: tile, height: tile)
+                        .background(RoundedRectangle(cornerRadius: tile * 0.3, style: .continuous).fill(p.onNavBlue.opacity(0.16)))
+                    ZStack(alignment: .leading) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text(parts.value).saryNumber(.display, weight: .heavy)
+                                    .contentTransition(SaryTransition.number(d, theme))
+                                    .animation(theme.animation(.snappy), value: parts.value)
+                                Text(parts.unit).saryText(.title2, weight: .bold)
+                            }
+                            .foregroundStyle(p.onNavBlue)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("nav.distance")
+                            Text(NavText.instruction(step, targetName: nav.target?.name))
+                                .saryText(.title2, weight: .heavy)
+                                .foregroundStyle(p.onNavBlue)
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
+                                .accessibilityIdentifier("nav.instruction")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .id(key)
+                        .transition(instructionSwap)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    pipButton(ink: p.onNavBlue, fill: p.onNavBlue.opacity(0.16))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 14)
+                .animation(theme.animation(theme.drive ? .snappy : .smooth), value: key)
+                .transition(.opacity)
+            }
+        }
+        /* The two lines and the big number follow Dynamic Type only this far (never shrunk). */
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .animation(theme.animation(.smooth), value: nav.rerouting)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { RoundedRectangle(cornerRadius: 22, style: .continuous).fill(p.navBlue) }
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+    }
+
+    /// Under the card, each its own small chip: the lanes near the turn and «ثم …» when the next turn
+    /// is close; the per-surface km strip when the bar does not list the surfaces.
+    @ViewBuilder
+    private var cardChips: some View {
+        let p = theme.palette
+        if !nav.rerouting, let step = nav.currentStep {
+            let d = nav.maneuverDistanceM ?? step.distanceM
+            let lanes = !step.lanes.isEmpty && d < 1500
+            let next = nav.nextStep.flatMap { NavHUD.showsThen(step, next: $0) ? $0 : nil }
+            if lanes || next != nil {
+                HStack(spacing: theme.space(.s)) {
+                    if let next { thenChip(next) }
+                    if lanes {
+                        NavLanesView(lanes: step.lanes)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .navPanel(theme)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        if showsSurfaceStrip, !nav.rerouting, let km = nav.remainingSurfaces {
+            NavSurfaceKmStrip(km: km, labels: false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(p.chromeOpaque.opacity(0.92)))
+        }
+    }
+
+    /// «ثم ↰ يسار»: a small navBlue chip under the card (one line, not shrunk).
+    private func thenChip(_ next: NavStep) -> some View {
+        let p = theme.palette
+        return HStack(spacing: 6) {
+            Text("ثم").saryText(.callout, weight: .bold)
+            NavManeuverGlyph(maneuver: next.maneuver, size: theme.drive ? 28 : 24, tint: .clear, ink: p.onNavBlue)
+            Text(NavHUD.headline(next, targetName: nav.target?.name)).saryText(.callout, weight: .heavy)
+                .lineLimit(1)
+        }
+        .foregroundStyle(p.onNavBlue)
+        .padding(.horizontal, 14)
+        .frame(minHeight: 40)
+        .background(Capsule().fill(p.navBlue))
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("ثم \(NavText.instruction(next, targetName: nav.target?.name))"))
+        .accessibilityIdentifier("nav.next")
+    }
+
+    // MARK: the classic banner
+
+    /// The previous banner (`-SaryDriveV1`, and «اتجه» from the home map): a dark panel with the arrow
+    /// and the distance, the direction in words and «ثم …» inside it.
+    private var classicPanel: some View {
         let p = theme.palette
         let glyph: CGFloat = theme.drive ? 64 : 56
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             if nav.rerouting {
                 HStack(spacing: theme.space(.m)) {
                     ProgressView().tint(p.textPrimary).frame(width: glyph, height: glyph)
@@ -283,49 +537,11 @@ struct NavManeuverBanner: View {
         /* «نعيد حساب الطريق…» and back: a crossfade, so the reroute reads as one change. */
         .animation(theme.animation(.smooth), value: nav.rerouting)
         .navPanel(theme)
-        /* A reroute gets one soft tap (silent in drive mode by `SaryHaptics.allows`; the voice says it). */
-        .saryHaptic(.confirm, trigger: nav.rerouting) { was, now in now && !was }
         .overlay(alignment: .topLeading) {
-            Button { pip.start() } label: {
-                Image(systemName: pip.active ? "pip.exit" : "pip.enter")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(p.textPrimary)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(p.sunken.opacity(0.85)))
-                    /* 40 pt circle, 44 pt touch area (same circle position as before). */
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(SaryPressStyle())
-            .disabled(!pip.supported)
-            .accessibilityLabel(Text("نافذة الملاحة العائمة"))
-            .accessibilityValue(Text(pip.active ? "مفتوحة" : "مغلقة"))
-            .accessibilityIdentifier("nav.pip")
-            .padding(6)
+            /* 40 pt circle, 44 pt touch area (same circle position as before). */
+            pipButton(ink: p.textPrimary, fill: p.sunken.opacity(0.85))
+                .padding(6)
         }
-        .background(alignment: .bottomTrailing) {
-            NavPiPLayerHost(displayLayer: pip.displayLayer)
-                .frame(width: 160, height: 90)
-                .opacity(0.01)
-                .accessibilityHidden(true)
-        }
-        .onAppear { pip.update(NavPiPSnapshot.make(nav: nav), guiding: nav.phase == .guiding) }
-        .onChange(of: NavPiPSnapshot.make(nav: nav)) { _, snapshot in
-            pip.update(snapshot, guiding: nav.phase == .guiding)
-        }
-        .onChange(of: nav.phase) { _, phase in
-            pip.update(NavPiPSnapshot.make(nav: nav), guiding: phase == .guiding)
-        }
-        .alert("تعذر فتح النافذة العائمة", isPresented: Binding(
-            get: { pip.startError != nil },
-            set: { if !$0 { pip.startError = nil } }
-        )) {
-            Button("حسنًا", role: .cancel) { pip.startError = nil }
-        } message: {
-            Text(pip.startError ?? "")
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("nav.banner")
     }
 
     /// «ثم ↰ طريق العليا»: one small strip, only when that turn comes right after.
@@ -592,13 +808,143 @@ struct NavBottomBar: View {
     /// The route's surfaces in driving order under the numbers (`NavSurfaceAheadStrip`); the live screen's
     /// peek is taller for it (`LiveSheetShape.surfaces`).
     var surfaces = false
+    /// The live screen's one bar while guiding (`NavDriveLayout`): the time left big, the trip line and
+    /// the destination, the surfaces (or a thin progress bar), then the footer row. Off (the default):
+    /// the classic row, as on «اتجه» from the home map. «غيّر الوجهة» is in the raised sheet then.
+    var v2 = false
+    /// v2 footer: «٣ معك» with the friends' avatars (nil in a solo outing).
+    var friends: AnyView? = nil
+    /// v2 footer: the walkie-talkie (nil where the outing has none).
+    var talk: AnyView? = nil
     @Environment(\.sary) private var theme
     @Environment(\.saryWidthClass) private var widthClass
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        if v2 { v2Body } else { classicBody }
+    }
+
+    // MARK: v2 (`NavDriveLayout`)
+
+    private var v2Body: some View {
+        let arrived = nav.phase == .arrived
+        let items = NavDriveLayout.footer(friends: friends != nil, friendCount: friends == nil ? 0 : 1, talk: talk != nil, arrived: arrived)
+        return VStack(alignment: .leading, spacing: 8) {
+            if arrived {
+                HStack(spacing: theme.space(.m)) {
+                    Text(nav.auto ? "وصلتوا إلى \(nav.target?.name ?? "وجهتكم")" : "وصلت إلى \(nav.target?.name ?? "وجهتك")")
+                        .saryText(.headline).foregroundStyle(theme.palette.textPrimary).lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+            } else {
+                v2Numbers
+                if surfaces, let ahead = nav.surfaceAhead {
+                    NavSurfaceAheadStrip(ui: ahead)
+                } else if let done = NavDriveLayout.progress(totalM: nav.active?.distanceM, remainingM: nav.remainingMeters) {
+                    progressBar(done)
+                }
+            }
+            HStack(spacing: theme.space(.s)) {
+                if items.contains(.friends), let friends { friends }
+                Spacer(minLength: 0)
+                if items.contains(.talk), let talk { talk }
+                if items.contains(.more), let more { morePill(more) }
+                if items.contains(.stop) { stopButton(compact: true) }
+            }
+            .dynamicTypeSize(...NavBarLayout.numbersTypeCap)
+        }
+        .padding(.horizontal, theme.space(.l))
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("nav.bottomBar")
+    }
+
+    /// «١٨ كم · وصول ٥:٤٢ م» and the destination on the right, the time left big on the left.
+    private var v2Numbers: some View {
         let p = theme.palette
-        VStack(alignment: .leading, spacing: 6) {
+        let trip = NavDriveLayout.tripLine(meters: nav.remainingMeters, eta: nav.etaDate)
+        let time = nav.remainingSeconds.map { NavDriveLayout.timeParts(seconds: $0) }
+        return HStack(alignment: .center, spacing: theme.space(.m)) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(trip)
+                    .saryNumber(.headline, weight: .bold)
+                    .foregroundStyle(p.textPrimary)
+                    .lineLimit(1)
+                    .contentTransition(NavMotion.countdownRoll(theme))
+                    .animation(theme.animation(.snappy), value: trip)
+                    .accessibilityIdentifier("nav.eta")
+                if let name = nav.target?.name, !name.isEmpty {
+                    Text(NavText.arabicDigitsOnly(name))
+                        .saryText(.subhead, weight: .medium)
+                        .foregroundStyle(p.textSecondary)
+                        .lineLimit(1)
+                }
+                if NavBarLayout.showsStaleNote(peek: peek), let note = nav.target?.staleNote() {
+                    Text(note).saryText(.caption, weight: .bold).foregroundStyle(p.warningText).lineLimit(1)
+                        .accessibilityIdentifier("nav.target.stale")
+                }
+            }
+            Spacer(minLength: theme.space(.s))
+            if let time {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(time.value)
+                        .saryNumber(.display, weight: .heavy)
+                        .contentTransition(SaryTransition.number(nav.remainingSeconds ?? 0, theme))
+                        .animation(theme.animation(.snappy), value: time.value)
+                    if !time.unit.isEmpty {
+                        Text(time.unit).saryText(.title2, weight: .bold)
+                    }
+                }
+                .foregroundStyle(p.liveText)
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityIdentifier("nav.remainingTime")
+            }
+        }
+        .dynamicTypeSize(...NavBarLayout.numbersTypeCap)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(label))
+        .accessibilityIdentifier("nav.banner.eta")
+    }
+
+    /// The trip so far on an all-asphalt route: a thin bar, the driven part in the live colour.
+    private func progressBar(_ done: Double) -> some View {
+        let p = theme.palette
+        return GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(p.sunken)
+                Capsule().fill(p.liveText).frame(width: g.size.width * CGFloat(done))
+            }
+        }
+        .frame(height: 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("قطعت \(SaryFormat.number(Int((done * 100).rounded())))٪ من الطريق"))
+        .accessibilityIdentifier("nav.progress")
+    }
+
+    /// «المزيد»: the existing actions entry, a capsule with its word (UI-AUDIT م3).
+    private func morePill(_ action: @escaping () -> Void) -> some View {
+        let p = theme.palette
+        return Button(action: action) {
+            Text("المزيد")
+                .saryText(.headline, weight: .heavy)
+                .foregroundStyle(p.textPrimary)
+                .lineLimit(1)
+                .padding(.horizontal, 16)
+                .frame(minHeight: NavDriveLayout.footerControl(drive: theme.drive))
+                .background(Capsule().fill(p.sunken))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text("المزيد"))
+        .accessibilityIdentifier("nav.more")
+    }
+
+    // MARK: classic
+
+    private var classicBody: some View {
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: 6) {
         Group {
             if nav.phase == .arrived {
                 HStack(spacing: theme.space(.m)) {
@@ -749,6 +1095,8 @@ struct NavTripOptions: View {
     var cameraMode = ""
     /// «غيّر الوجهة»: a tile here only when the compact guidance bar has no room for it (`NavBarLayout`).
     var changeDestination: (() -> Void)? = nil
+    /// «غيّر الوجهة» is a tile here whatever the width: the v2 guidance bar has no room for it (`NavDriveLayout`).
+    var changeInSheet = false
     @Environment(\.sary) private var theme
     @Environment(\.saryWidthClass) private var widthClass
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -756,7 +1104,7 @@ struct NavTripOptions: View {
     var body: some View {
         let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
         LazyVGrid(columns: cols, spacing: 10) {
-            if let changeDestination, NavBarLayout.changeDestinationInSheet(width: widthClass, typeSize: typeSize) {
+            if let changeDestination, changeInSheet || NavBarLayout.changeDestinationInSheet(width: widthClass, typeSize: typeSize) {
                 tile("arrow.triangle.swap", "غيّر الوجهة", id: "nav.changeDestination", action: changeDestination)
             }
             if let routes {
