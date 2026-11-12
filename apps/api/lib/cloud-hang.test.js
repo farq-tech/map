@@ -171,7 +171,7 @@ test('warm stops after repeated upstream failures instead of queueing the rest',
   assert.ok(out.done < 20, `done ${out.done}`);
 });
 
-test('HTTP: /clouds/tiles and /clouds/outlook answer 503 {ok:false,error:"timeout"} within the route deadline when the upstream hangs', async () => {
+test('HTTP: /clouds/tiles and /clouds/outlook answer within the route deadline when the upstream hangs (tiles 503 timeout, outlook cold 202 warming)', async () => {
   fetcher.setFetch(never); // every upstream call hangs for ever (worst case: ignores any timeout)
   const createWeatherRouter = require('../routes/weather');
   const app = express();
@@ -179,13 +179,15 @@ test('HTTP: /clouds/tiles and /clouds/outlook answer 503 {ok:false,error:"timeou
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
-    for (const path of ['/api/weather/clouds/tiles', '/api/weather/clouds/outlook?lat=24.7&lng=46.7']) {
+    /* Tiles: 503 timeout. Outlook with nothing last-good yet (cold cell): 202 `warming` (the window keeps loading
+     * in the background), never a bare 503 (production, 2026-11-13). */
+    for (const [path, status, error] of [['/api/weather/clouds/tiles', 503, 'timeout'], ['/api/weather/clouds/outlook?lat=24.7&lng=46.7', 202, 'warming']]) {
       const t0 = Date.now();
       const r = await fetch(base + path);
       const j = await r.json();
-      assert.equal(r.status, 503, path);
+      assert.equal(r.status, status, path);
       assert.equal(j.ok, false);
-      assert.equal(j.error, 'timeout');
+      assert.equal(j.error, error);
       assert.ok(Date.now() - t0 < 2500, `${path} took ${Date.now() - t0} ms`);
     }
   } finally {

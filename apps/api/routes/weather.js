@@ -89,6 +89,13 @@ function createWeatherRouter() {
     try {
       body = await deadline(cloudOutlook.outlook(pt.lat, pt.lng));
     } catch (e) {
+      /* Cold cell (nothing last-good yet): the window keeps loading in the background (the in-flight read is not
+       * cancelled by the route deadline), so ask the app to come back shortly instead of failing with a 503. */
+      if (e && e.code === 'ROUTE_TIMEOUT') {
+        console.warn(`[clouds] outlook cold: window still loading (${ROUTE_DEADLINE_MS} ms)`);
+        res.set('Cache-Control', 'no-store').set('Retry-After', '30');
+        return res.status(202).json({ ok: false, error: 'warming', retry_after_s: 30, message_ar: 'نجهّز حركة السحاب لمنطقتك، جرّب بعد شوي.' });
+      }
       return timeout503(res, e);
     }
     if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نقدّر حركة السحاب الحين.' });
@@ -182,4 +189,10 @@ module.exports.startWarm = () => {
   const runClouds = () => clouds.warm().catch(() => {});
   setTimeout(runClouds, 5_000).unref();
   setInterval(runClouds, 5 * 60_000).unref();
+  /* «السحاب يمشي وين؟»: keep a last-good window for the key cells (Qassim first), so no request is ever cold. */
+  if (process.env.CLOUD_OUTLOOK_WARM !== '0') {
+    const runOutlook = () => cloudOutlook.warmOutlook().catch(() => {});
+    setTimeout(runOutlook, 15_000).unref();
+    setInterval(runOutlook, 15 * 60_000).unref();
+  }
 };
