@@ -8,7 +8,9 @@ final class WeatherCardUITests: XCTestCase {
     private func launch(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0",
-                               "-SaryContext", "stopped", "-SaryExplore", "-SaryWeather", "clouds"] + extra
+                               "-SaryContext", "stopped", "-SaryExplore", "-SaryWeather", "clouds",
+                               /* The timeline (scrubber) needs the frame list: fixed here, not fetched from the live API. */
+                               "-SaryCloudFramesStub"] + extra
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -45,7 +47,7 @@ final class WeatherCardUITests: XCTestCase {
         shot(app, "card-strip")
 
         any(app, "weather.legend.expand").tap()
-        XCTAssertTrue(any(app, "weather.clouds.scrubber").waitForExistence(timeout: 5), "the full card has the timeline")
+        XCTAssertTrue(any(app, "weather.clouds.scrubber").waitForExistence(timeout: 5), "the full card has the timeline (frames are stubbed: no network needed)")
         XCTAssertTrue(any(app, "weather.legend.off").exists, "turning the layer off is its own, named button")
         shot(app, "card-expanded")
 

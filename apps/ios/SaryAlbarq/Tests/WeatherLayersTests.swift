@@ -58,6 +58,17 @@ final class WeatherLayersTests: XCTestCase {
         XCTAssertEqual(r.maxzoom, 9)
     }
 
+    #if DEBUG
+    func testStubCloudFramesGiveAScrubbableTimeline() {
+        let r = WeatherLayerAPI.stubCloudFrames()
+        XCTAssertTrue(r.ok)
+        XCTAssertGreaterThan(r.frames.count, 1, "the card shows the scrubber only for more than one frame")
+        XCTAssertEqual(Set(r.frames.map(\.id)).count, r.frames.count, "unique ids: each frame is its own map source")
+        XCTAssertEqual(WeatherOverlay.ageLabel(r.frames.last!.time), "الآن")
+        XCTAssertTrue(r.frames.allSatisfy { $0.tile_url.hasPrefix("http://127.0.0.1:") }, "never a real host")
+    }
+    #endif
+
     func testDaysLabels() {
         XCTAssertEqual(WeatherLayers.daysLabel(1), "آخر يوم")
         XCTAssertEqual(WeatherLayers.daysLabel(3), "آخر ٣ أيام")
