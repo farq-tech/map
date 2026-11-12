@@ -106,7 +106,10 @@ final class NavigationUITests: XCTestCase {
                 shot(app, "nav-steps-light")
                 app.buttons["nav.steps.close"].tap()
                 app.buttons["nav.end"].tap()
-                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«أوقف التوجيه» ends guidance")
+                /* «إنهاء الرحلة» opens the end sheet; its first row stops the guidance only. */
+                XCTAssertTrue(el(app, "end.sheet").waitForExistence(timeout: 5), "the end sheet")
+                el(app, "end.action.endTrip").tap()
+                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«إنهاء الرحلة» ends guidance")
             }
             app.terminate()
         }
@@ -164,9 +167,9 @@ final class NavigationUITests: XCTestCase {
             XCTAssertTrue(remaining.waitForExistence(timeout: 5), "the time left")
             XCTAssertTrue(el(app, "nav.eta").label.contains("كم"), "«١٩ كم · ١٢:٥٦ ص»: \(el(app, "nav.eta").label)")
             let end = app.buttons["nav.end"]
-            XCTAssertTrue(end.exists && end.isHittable, "a clear «أوقف التوجيه»")
-            XCTAssertTrue(end.label.contains("أوقف التوجيه"), end.label)
-            XCTAssertGreaterThan(end.frame.minY, app.frame.height * 0.75, "«أوقف التوجيه» is in the bottom bar")
+            XCTAssertTrue(end.exists && end.isHittable, "a clear «إنهاء الرحلة»")
+            XCTAssertTrue(end.label.contains("إنهاء الرحلة"), end.label)
+            XCTAssertGreaterThan(end.frame.minY, app.frame.height * 0.75, "«إنهاء الرحلة» is in the bottom bar")
             /* UI-AUDIT م3: «المزيد» and «غيّر الوجهة» in the guidance bar too. */
             XCTAssertTrue(app.buttons["nav.more"].isHittable, "«المزيد» while guiding")
             XCTAssertTrue(app.buttons["nav.changeDestination"].isHittable, "«غيّر الوجهة» while guiding")

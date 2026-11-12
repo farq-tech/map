@@ -63,6 +63,7 @@ struct TrackFollowScreen: View {
                     Spacer()
                     HStack {
                         Spacer()
+                        MapTiltButton()
                         Button {
                             followMe = true
                             fitKey += 1

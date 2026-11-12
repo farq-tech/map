@@ -161,7 +161,13 @@ extension LiveOutingController {
     /// The live sheet's detent shape (`LiveSheetShape`): the peek height from the context the screen
     /// has AT PEEK, so raising / lowering the sheet never changes its own detent set.
     func sheetShape(drive: Bool) -> LiveSheetShape {
-        guard !tripEnded, !nav.isActive else { return LiveSheetShape(drive: drive, trip: false) }
+        guard !tripEnded, !nav.isActive else {
+            /* Guiding on a route with dirt or off-road: room for «زفلت … ← ترابي …» under the numbers. */
+            let surfaces = !tripEnded && nav.isActive && nav.phase != .arrived && nav.surfaceAhead != nil
+            return LiveSheetShape(drive: drive, trip: false, surfaces: surfaces, guide: navBarV2)
+        }
+        /* The idle sheet holds the search field at peek: the taller peek the quick row used. */
+        if idleHome { return LiveSheetShape(drive: drive, trip: true) }
         let f = focusFacts
         let trip = LiveScreenRules.peekShowsQuickRow(override: contextOverride, navigating: false, moving: motion.moving,
                                                      driveMode: drive, exploring: exploreActive, ended: false,
@@ -186,6 +192,10 @@ extension LiveOutingController {
     var showsBackTrackAfterEnd: Bool {
         tripEnded && (backTrack != nil || session.trail.points.count >= 2)
     }
+
+    /// Guiding with the redesigned live screen (`NavDriveLayout`): the maneuver card on top, the one
+    /// bottom bar with the friends and the walkie-talkie in its footer (DEBUG `-SaryDriveV1`: the old layout).
+    var navBarV2: Bool { NavDriveLayout.v2 && nav.isActive }
 
     /// A solo outing («اتجه» on my own): one member, on this phone only.
     var isSolo: Bool { session.isSolo }

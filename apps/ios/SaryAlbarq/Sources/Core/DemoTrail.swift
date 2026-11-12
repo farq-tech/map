@@ -57,7 +57,20 @@ extension DemoTrail {
     /// 1 Hz raw fixes with their own speeds (15–60 km/h), a three-minute stop, one inaccurate
     /// fix and one GPS jump (both rejected by `TrackDisplay`). Clearly demo data; never mixed
     /// with a real outing.
-    static let dunesStart = LngLat(lng: 40.9620, lat: 28.1700)
+    static let defaultDunesStart = LngLat(lng: 40.9620, lat: 28.1700)
+
+    /// Screenshots only: `-SaryTrackStart lat,lng` puts the demo GPS track elsewhere (a city street, a desert dirt track),
+    /// `-SaryTrackHeading deg` makes it a straight line that way, `-SaryTrackLenM m` shortens it.
+    private static func arg(_ name: String) -> String? {
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: name), i + 1 < a.count else { return nil }
+        return a[i + 1]
+    }
+    static var dunesStart: LngLat {
+        guard let v = arg("-SaryTrackStart") else { return defaultDunesStart }
+        let p = v.split(separator: ",").compactMap { Double($0) }
+        return p.count == 2 ? LngLat(lng: p[1], lat: p[0]) : defaultDunesStart
+    }
 
     static func dunesRaw(t0: Double = 1_799_990_000_000) -> [RawFix] {
         var out: [RawFix] = []
@@ -68,11 +81,13 @@ extension DemoTrail {
             seed = seed &* 6364136223846793005 &+ 1442695040888963407
             return Double((seed >> 33) % 1000) / 1000 - 0.5
         }
-        while s < 13_300 {
+        let straight = arg("-SaryTrackHeading").flatMap(Double.init)
+        let length = arg("-SaryTrackLenM").flatMap(Double.init) ?? 13_300
+        while s < length {
             let stopped = t >= 600 && t < 780
             /* 15–60 km/h over the dunes: slower on the climbs, faster on the flats. */
             let v = stopped ? 0 : 4.2 + 6.2 * (1 + sin(s / 820)) * (0.75 + 0.25 * sin(s / 260))
-            let heading = (48 + 38 * sin(s / 1150) + 22 * sin(s / 180)) * .pi / 180
+            let heading = (straight ?? (48 + 38 * sin(s / 1150) + 22 * sin(s / 180))) * .pi / 180
             x += sin(heading) * v
             y += cos(heading) * v
             s += v

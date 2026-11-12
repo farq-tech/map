@@ -39,6 +39,12 @@ struct RootView: View {
                     } message: {
                         Text(model.accountNotice?.notice?.message ?? "")
                     }
+            } else if OneMapFlag.isOn(), let user = model.identity?.user {
+                /* EM1: the navigation map as the first screen (internal flag, off by default). */
+                IdleMapHost(user: user, model: model, appearance: appearance)
+                    .id(user.id)
+                    .transition(.opacity)
+                    .onAppear { if authorization != .notDetermined { OnboardingProgress.done = true } }
             } else {
                 HomeView()
                     .transition(.opacity)
@@ -61,10 +67,10 @@ struct RootView: View {
         .onReceive(model.location.$authorization.removeDuplicates()) { locationAuthorization = $0 }
         /* During a trip the live sheet is always presented: the invite is shown from inside it
          * (`LiveSheet`), never from here, where a second sheet would silently not appear. */
-        .sheet(item: Binding(get: { model.session == nil ? model.pendingInvite.map(InviteToken.init) : nil }, set: { model.pendingInvite = $0?.id })) { inv in
+        .sheet(item: Binding(get: { IdleMapRules.rootShowsInvite(hasSession: model.session != nil, idleMapShown: model.idleMapShown) ? model.pendingInvite.map(InviteToken.init) : nil }, set: { model.pendingInvite = $0?.id })) { inv in
             InviteJoinSheet(token: inv.id).saryPresented(appearance)
         }
-        .sheet(isPresented: Binding(get: { model.offerNotifications && model.session == nil && model.pendingInvite == nil },
+        .sheet(isPresented: Binding(get: { IdleMapRules.rootShowsNotifyExplainer(hasSession: model.session != nil, idleMapShown: model.idleMapShown, offer: model.offerNotifications, pendingInvite: model.pendingInvite != nil) },
                                     set: { if !$0 { model.offerNotifications = false } })) {
             NotifyExplainerSheet(done: { model.offerNotifications = false }).saryPresented(appearance)
         }

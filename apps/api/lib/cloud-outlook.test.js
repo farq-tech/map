@@ -115,6 +115,7 @@ test('HTTP: /weather/clouds/outlook — bad point 400; fake WMS gives a motion e
     assert.equal(j.ok, true);
     assert.equal(j.image_time, '2026-11-11T19:00:00.000Z');
     assert.equal(j.image_age_min, 59);
+    assert.equal(j.stale, false);
     assert.equal(j.dt_minutes, 30);
     assert.equal(j.compared_with.length, 2);
     /* 10 px / 30 min at 2.5 km/px = 50 km/h toward the east. */

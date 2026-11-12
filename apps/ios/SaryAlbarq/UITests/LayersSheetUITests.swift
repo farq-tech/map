@@ -35,6 +35,39 @@ final class LayersSheetUITests: XCTestCase {
         XCTAssertFalse(el(app, "layer.topo").isSelected)
     }
 
+    /// «ألوان الصور»: three choices in the sheet, «طبيعي» by default; choosing one changes the stored value and the map still loads.
+    func testImageryGradeSettingChangesTheStoredValueAndTheMapStillLoads() {
+        let app = open()
+        let natural = el(app, "imagery.grade.natural")
+        let page = app.scrollViews.firstMatch
+        for _ in 0..<4 where !natural.exists || !natural.isHittable { page.swipeUp() }
+        XCTAssertTrue(natural.waitForExistence(timeout: 5))
+        XCTAssertTrue(natural.isSelected, "طبيعي is the default")
+        for id in ["imagery.grade.warm", "imagery.grade.strong"] { XCTAssertTrue(el(app, id).exists, id); XCTAssertFalse(el(app, id).isSelected, id) }
+        el(app, "imagery.grade.strong").tap()
+        XCTAssertTrue(el(app, "imagery.grade.strong").isSelected)
+        XCTAssertFalse(natural.isSelected)
+        shot("imagery-grade-strong-chosen")
+        app.terminate()
+        /* The stored value is read at the next launch, and the map is drawn with it. */
+        let again = XCUIApplication()
+        again.launchArguments = ["-demo", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryDrive", "0", "-SaryContext", "stopped", "-SaryExplore", "-SaryLiveModal", "layers"]
+        again.launch()
+        again.allowLocationIfAsked()
+        XCTAssertTrue(el(again, "explore.layers.sheet").waitForExistence(timeout: 20))
+        let strong = el(again, "imagery.grade.strong")
+        for _ in 0..<4 where !strong.exists || !strong.isHittable { again.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(strong.waitForExistence(timeout: 5))
+        XCTAssertTrue(strong.isSelected, "the choice is stored")
+        el(again, "imagery.grade.warm").tap()
+        XCTAssertTrue(el(again, "imagery.grade.warm").isSelected)
+        let sat = el(again, "layer.satellite")
+        for _ in 0..<6 where !sat.exists || !sat.isHittable { again.scrollViews.firstMatch.swipeDown() }
+        XCTAssertTrue(sat.waitForExistence(timeout: 5), "the sheet is still alive after regrading")
+        sat.tap()
+        XCTAssertTrue(sat.isSelected, "the map still takes a base-layer change after regrading")
+    }
+
     private func assertRowsLaidOut(_ app: XCUIApplication, step: String) {
         let ids = ["layer.satellite", "layer.standard", "layer.topo"]
         let screen = app.frame
@@ -104,12 +137,12 @@ final class LayersSheetUITests: XCTestCase {
 
     // MARK: S3 — the data layers come from the registry and each toggle still works
 
-    /// Every id the old sheet had for its data rows is still there (same identifiers), plus the new Qibla switch.
+    /// Every id the old sheet had for its data rows is still there (same identifiers); the Qibla switch was removed with the ray (owner, 2026-11-13).
     func testDataLayersAreListedWithTheOldIdentifiers() {
         let app = open()
         let page = app.scrollViews.firstMatch
         for id in ["weather.layer.none", "weather.layer.clouds", "weather.layer.rain", "weather.layer.wind", "weather.layer.green",
-                   "explore-camp-sites", "explore-osm-tracks", "explore-qibla", "explore-hires", "explore-terrain3d", "explore-offline"] {
+                   "explore-camp-sites", "explore-osm-tracks", "explore-hires", "explore-terrain3d", "explore-offline"] {
             var found = el(app, id).exists
             for _ in 0..<10 where !found { page.swipeUp(velocity: .slow); found = el(app, id).exists }
             XCTAssertTrue(found, "\(id) is listed")
@@ -120,7 +153,7 @@ final class LayersSheetUITests: XCTestCase {
     func testEveryDataSwitchFlipsAndPersistsAcrossRelaunch() {
         var app = open()
         sleep(1)
-        let ids = ["explore-camp-sites", "explore-osm-tracks", "explore-qibla", "explore-hires"]
+        let ids = ["explore-camp-sites", "explore-osm-tracks", "explore-hires"]
         var flipped: [String: String] = [:]
         for id in ids {
             let sw = app.switches[id].firstMatch

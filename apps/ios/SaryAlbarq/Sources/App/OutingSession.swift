@@ -1252,7 +1252,8 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// What the outbox heard back for this outing.
     private func outboxReport(_ r: OutingActionOutbox.Report) {
-        guard closedReason == nil, r.action.user == myUserId else { return }
+        /* An end is applied at once, so the session is already closed when its first failure arrives: that line is still owed. */
+        guard closedReason == nil || r.action.kind == .endOuting, r.action.user == myUserId else { return }
         switch r.outcome {
         case .sent:
             break
@@ -1263,7 +1264,7 @@ final class OutingSession: ObservableObject, Identifiable {
             onDeferredNotice(e?.arabic ?? SaryCopy.genericError)
             /* Refused for good: the server's picture wins again. Except «أخفِ موقعي»: a refusal
              * never shows my location again on its own (privacy; I can press «أظهر موقعي»). */
-            guard r.action.kind != .hide else { return }
+            guard r.action.kind != .hide, r.action.kind != .endOuting else { return }
             Task { [weak self, api, id] in
                 if let snap = try? await api.poll(id) { self?.applySnapshot(snap) }
             }
@@ -1294,7 +1295,7 @@ final class OutingSession: ObservableObject, Identifiable {
             case .note:
                 let t = a.text ?? ""
                 v.apply(.memberNote(userId: myUserId, note: t.isEmpty ? nil : MemberNote(text: t, at: at)))
-            case .leave:
+            case .leave, .endOuting:
                 break
             }
         }
@@ -1361,6 +1362,32 @@ final class OutingSession: ObservableObject, Identifiable {
         sendLater(.leave, trace: t)
         return true
     }
+
+    /// «إنهاء الطلعة للجميع» (the owner). Instant, like `leave()` (owner's Build 44 report: it «takes a long time and sometimes does not respond»,
+    /// because the screen used to wait for the server — a slow or stalled network froze it on «جاري الإنهاء…»):
+    /// sharing stops on this phone now, the screen shows the ended outing now, and `POST /status {end}` goes through the persisted outbox
+    /// (retried with backoff, again when the network is back; the first failure says «تعذّر إبلاغ الخادم، نعيد المحاولة»).
+    /// If the server never agrees, the others keep their outing until it does; this phone is out of sharing either way (privacy first).
+    /// Local sessions (demo, solo) end on this phone and queue nothing.
+    @discardableResult
+    func endOuting() -> Bool {
+        let started = Date()
+        let t = ActionTrace.begin("end")
+        guard closedReason == nil else { ActionTrace.uiShown(t); ActionTrace.acked(t, ok: true); return false }
+        mesh.stop(farewell: .stop)
+        view?.apply(.outingStatus(.ended))
+        closed(.outingEnded)
+        reconcileSharing()
+        ActionTrace.uiShown(t)
+        let ms = Int(Date().timeIntervalSince(started) * 1000)
+        PTTDiagnosticsLog.shared.add("session", "end_latency_ms=\(ms)")
+        endLatencyMs = ms
+        sendLater(.endOuting, trace: t)
+        return true
+    }
+
+    /// The last «إنهاء الطلعة» tap-to-screen time (ms), for diagnostics and tests.
+    private(set) var endLatencyMs: Int?
 
     // MARK: «أخفِ موقعي»
 

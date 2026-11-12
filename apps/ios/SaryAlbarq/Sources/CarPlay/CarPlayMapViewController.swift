@@ -99,7 +99,7 @@ final class CarPlayMapViewController: UIViewController {
         guard styleReady, let map = mapView else { return }
         let at = content.cars.first(where: \.isMe)?.position
         let sun = at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day
-        let preset: SunLight.Preset = night ? .night : (sun == .night ? .dusk : sun)
+        let preset: SunLight.Preset = night ? .night : SunLook.preset(sun == .night ? .dusk : sun)
         guard preset != light else { return }
         light = preset
         try? map.mapboxMap.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: preset.rawValue)

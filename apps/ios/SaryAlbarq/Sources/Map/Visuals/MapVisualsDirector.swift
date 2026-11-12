@@ -1,3 +1,4 @@
+import Combine
 @_spi(Experimental) import MapboxMaps
 import os
 import UIKit
@@ -60,6 +61,8 @@ final class MapVisualsDirector: NSObject {
     private var appliedBuildingsOpacity: Double?
     /// `SandGrade`'s `sarySand` last set on the imported satellite basemap.
     private var appliedSand: Double?
+    /// «ألوان الصور»: follows the setting live (`SandGrade.gradeChanges`).
+    private var gradeWatch: AnyCancellable?
     /// The `line-gradient` each glow layer was last given (the map goes idle after every source
     /// update, and re-setting an unchanged speed-gradient expression each time was wasted work).
     private var glowGradients: [String: NSObject] = [:]
@@ -87,8 +90,7 @@ final class MapVisualsDirector: NSObject {
     /// Line layers that get the glow, and the layer that means "already glowing" (skip then).
     static let glowTargets: [(id: String, skipIf: String?)] = [
         ("sary-track-mine-line", "sary-track-mine-glow"),
-        ("sary-track-follow-line", "sary-track-follow-glow"),
-        ("sary-explore-tracks-line", nil),
+        /* GPS tracks («أثري (GPS)», `GPSTrackStyle`) never glow: thin, nothing wide over the streets. */
         ("sary-nav-main", nil),
         ("sary-plan-line", nil),
     ]
@@ -101,7 +103,7 @@ final class MapVisualsDirector: NSObject {
     }
 
     /// The light preset and sky are ours (the coordinator's own `applyLight` stands aside).
-    var ownsLight: Bool { effective.managed && effective.sky }
+    var ownsLight: Bool { !SunLook.enabled || (effective.managed && effective.sky) }
 
     /// The terrain exaggeration in force (the coordinator undoes it for real elevations).
     func exaggeration(legacy: Double) -> Double { appliedExaggeration ?? legacy }
@@ -216,6 +218,10 @@ final class MapVisualsDirector: NSObject {
         appliedSand = nil
         glowGradients = [:]
         let m: MapboxMap = map.mapboxMap
+        SandGrade.pushGrade(m)
+        if gradeWatch == nil {
+            gradeWatch = SandGrade.gradeChanges.sink { [weak self] _ in if let m = self?.map?.mapboxMap { SandGrade.pushGrade(m) } }
+        }
         /* Terrain changes glide (none with Reduce Motion). */
         try? m.setTerrainProperty("exaggeration-transition", value: ["duration": UIAccessibility.isReduceMotionEnabled ? 0 : 400, "delay": 0])
         refresh(force: true)
@@ -364,17 +370,17 @@ final class MapVisualsDirector: NSObject {
             /* Handed back: Standard's own lights for the preset the coordinator sets. */
             if appliedScene != nil, let s = skySun {
                 appliedScene = nil
-                setScene(SceneLight.standard(lastInputs.night ? .night : s.preset), m)
+                setScene(SceneLight.standard(lastInputs.night ? .night : SunLook.preset(s.preset)), m)
             }
             return
         }
-        let p = s.preset
+        let p = SunLook.preset(s.preset)
         if p != appliedPreset {
             appliedPreset = p
             /* The preset still themes Standard's roads, labels and 3D objects; the light itself is ours. */
             try? m.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: p.rawValue)
         }
-        let scene = SceneLight.from(s)
+        let scene = SunLook.enabled ? SceneLight.from(s) : SceneLight.standard(p)
         guard scene != appliedScene else { return }
         appliedScene = scene
         setScene(scene, m)
@@ -394,7 +400,7 @@ final class MapVisualsDirector: NSObject {
         d.intensityTransition = t
         d.direction = .constant(l.direction)
         d.directionTransition = t
-        d.castShadows = .constant(true)
+        d.castShadows = .constant(SunLook.castShadows)
         d.shadowIntensity = .constant(l.shadowIntensity)
         try? m.setLights(ambient: a, directional: d)
     }
@@ -402,7 +408,7 @@ final class MapVisualsDirector: NSObject {
     private func applyHillshade() {
         guard styleReady, let map else { return }
         let m: MapboxMap = map.mapboxMap
-        guard effective.hillshade, let sunNow = sun else {
+        guard SunLook.sunLitRelief, effective.hillshade, let sunNow = sun else {
             for id in [Self.hillshadeLayer, Self.hillshadeBroadLayer] where m.layerExists(withId: id) { try? m.removeLayer(withId: id) }
             appliedHillshade = nil
             return
@@ -494,7 +500,7 @@ final class MapVisualsDirector: NSObject {
             return
         }
         /* The sun alone when «السماء والإضاءة» is off but the weather is on: a neutral day sky. */
-        let alt = effective.sky ? s.altitudeDeg : 30
+        let alt = effective.sky ? SunLook.skyAltitude(s.altitudeDeg) : 30
         var sky = SkyAtmosphere.make(sunAltitude: alt, weather: effective.atmosphere ? weather : nil, now: clock)
         if !effective.stars { sky.starIntensity = 0 }
         if sky != appliedSky {

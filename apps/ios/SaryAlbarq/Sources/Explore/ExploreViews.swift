@@ -654,7 +654,7 @@ struct ExploreTopBar: View {
         let p = theme.palette
         VStack(spacing: 8) {
             HStack(spacing: 4) {
-                round(SaryIcon.back, label: "ارجع للطلعة", id: "explore-exit", action: exit)
+                if !controller.idleHome { round(SaryIcon.back, label: "ارجع للطلعة", id: "explore-exit", action: exit) }
                 HStack(spacing: 0) {
                     ForEach([MapLayer.satellite, .topo, .standard], id: \.self) { l in
                         let on = controller.mapLayer == l

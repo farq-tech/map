@@ -181,6 +181,38 @@ struct SceneLight: Equatable {
     }
 }
 
+/// Owner request (Build 45): no sun-like look on the map. Day is plain even daylight and night is night:
+/// no warm dawn / dusk cast, no sun-directed light or cast shadows, no sun-lit relief (hillshade) and no
+/// golden / orange horizon in the sky. The sun maths above stays (sunset times, the night switch, car
+/// lights); only what the map RENDERS from it is flattened here, in one place.
+enum SunLook {
+    /// false = the owner's flat look. One switch to bring the old look back for comparison shots.
+    static let enabled: Bool = {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-SaryOldSunLook")
+        #else
+        return false
+        #endif
+    }()
+
+    /// The basemap preset actually applied: dawn and dusk are plain day (their orange cast is the sun look).
+    static func preset(_ p: SunLight.Preset) -> SunLight.Preset {
+        enabled ? p : (p == .night ? .night : .day)
+    }
+
+    /// The altitude the sky is drawn for: the real one at night (deep blue and stars), a fixed neutral
+    /// noon otherwise (no golden horizon at sunrise / sunset).
+    static func skyAltitude(_ real: Double) -> Double {
+        enabled || real <= -6 ? real : 30
+    }
+
+    /// Cast shadows from the scene's directional light (3D buildings): off.
+    static var castShadows: Bool { enabled }
+
+    /// Terrain shading lit from the sun's azimuth: off (the 3D terrain geometry stays).
+    static var sunLitRelief: Bool { enabled }
+}
+
 /// A colour as Mapbox reads it ("rgba(r, g, b, a)"), with mixing for smooth sky changes.
 struct RGBA: Equatable {
     var r: Double, g: Double, b: Double, a: Double
