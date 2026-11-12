@@ -10,6 +10,9 @@ struct PersonalInvitesSection<Legacy: View>: View {
     @ObservedObject var model: PersonalInvitesModel
     var canLead: Bool
     var ended: Bool = false
+    /// «اختر من جهات الاتصال» is the accent button; false where the screen already has its primary
+    /// (the create wizard's pinned «ابدأ الطلعة»).
+    var pickIsPrimary = true
     @ViewBuilder var legacy: Legacy
     @Environment(\.sary) private var theme
     @State private var picking = false
@@ -30,7 +33,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                     Button {
                         if let s = ContactPicker.stub { adding = s } else { picking = true }
                     } label: { SaryButtonLabel(title: "اختر من جهات الاتصال", systemImage: "person.crop.circle.badge.plus") }
-                        .buttonStyle(.sary(.primary))
+                        .buttonStyle(.sary(pickIsPrimary ? .primary : .secondary))
                         .accessibilityIdentifier("invite.pickContact")
                     Button { adding = PickedContact(name: "", phone: nil) } label: {
                         SaryButtonLabel(title: "اكتب الاسم والرقم", systemImage: "keyboard")
