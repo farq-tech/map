@@ -193,4 +193,31 @@ final class NewScreensAUITests: XCTestCase {
         }
         shot("history")
     }
+
+    func testDetailsHasOnePinnedPrimary() {
+        let app = launch("details")
+        assertPrimary(app, "details.open")
+        XCTAssertTrue(el(app, "page-back").exists)
+        app.swipeUp(); app.swipeUp()
+        XCTAssertTrue(el(app, "details.leave").waitForExistence(timeout: 5), "«غادر الطلعة» is still reachable at the end of the page")
+        shot("details")
+    }
+
+    func testSummaryHasOnePinnedPrimary() {
+        let app = launch("summary")
+        assertPrimary(app, "summary.story")
+        XCTAssertTrue(el(app, "summary.stats").waitForExistence(timeout: 10))
+        for _ in 0..<6 where !el(app, "summary.shareText").isHittable { app.swipeUp() }
+        XCTAssertTrue(el(app, "summary.shareText").exists, "the text share is kept")
+        if el(app, "summary.shareMine").exists {
+            XCTAssertLessThan(el(app, "summary.shareMine").frame.height, 57.5, "«شارك ملخصي» is a secondary now")
+        }
+        shot("summary")
+    }
+
+    func testDetailsAndSummaryAreUnchangedWithTheFlagOff() {
+        let app = launch("summary", newUI: false)
+        XCTAssertTrue(el(app, "summary.story").waitForExistence(timeout: 15), "legacy: the story button sits in the page")
+        XCTAssertTrue(el(app, "page-back").exists)
+    }
 }
