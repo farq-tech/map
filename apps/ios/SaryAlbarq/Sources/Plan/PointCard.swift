@@ -108,6 +108,7 @@ struct PointCard: View {
             HStack(alignment: .top, spacing: theme.space(.s)) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title(now: now)).saryText(.headline).foregroundStyle(p.textPrimary)
+                        .lineLimit(2).minimumScaleFactor(0.85)
                         .accessibilityIdentifier("point.title")
                     if briefOn, let d = PlaceBriefRules.distanceText(from: brief?.me, to: point) {
                         Text(d).saryNumber(.footnote).foregroundStyle(p.textSecondary).accessibilityIdentifier("point.distance")
@@ -121,7 +122,7 @@ struct PointCard: View {
                 if let close { SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "point.close", action: close) }
             }
             if case let .me(f) = subject, !CoordinateShare.isFresh(f, now: now) {
-                SaryBanner(text: "هذا ليس موقعك الحالي: \(CoordinateShare.headline(f, now: now)). يُرسل كذلك في النص.", tone: .warning)
+                SaryBanner(text: "هذا مو موقعك الحالي: \(CoordinateShare.headline(f, now: now)). ويوصل كذا في النص.", tone: .warning)
             }
             if briefOn {
                 /* The brief's header already carries the coordinates when there is no name. */
@@ -160,7 +161,7 @@ struct PointCard: View {
                     .accessibilityIdentifier("point.share")
             }
             if case .me = subject {
-                Text("«شارك» يرسل موقعك الحالي مرة وحدة، عن طريق التطبيق اللي تختاره. التطبيق نفسه لا يرسل شيئًا.")
+                Text("«شارك» يرسل موقعك الحالي مرة وحدة، عن طريق التطبيق اللي تختاره. سَرى البارق نفسه ما يرسل شي.")
                     .saryText(.footnote).foregroundStyle(p.textTertiary)
             }
             let extra = extraActions
@@ -287,7 +288,8 @@ struct CoordinateSearchSheet: View {
                                     Text(CoordinateShare.displayDMS(parsed.point)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
                                 }
                                 Spacer()
-                                Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
+                                Image(systemName: SaryIcon.disclosure).saryGlyph(13, weight: .bold, relativeTo: .footnote).foregroundStyle(p.textTertiary)
+                                    .accessibilityHidden(true)
                             }
                             .frame(minHeight: theme.minTarget)
                             .contentShape(Rectangle())
@@ -312,7 +314,7 @@ struct CoordinateSearchSheet: View {
                                     HStack(spacing: theme.space(.m)) {
                                         SaryRowIcon(systemImage: r.icon)
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(r.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                                            Text(r.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85)
                                             if let d = r.subtitle { Text(d).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                                         }
                                         Spacer()
@@ -326,7 +328,7 @@ struct CoordinateSearchSheet: View {
                             }
                         }
                     } else if !searching && searchError == nil && text.count >= 2 {
-                        Text("ما لقينا مكان بهذا الاسم. جرّب كلمة ثانية مثل «مطعم» أو «شاليهات» أو اسم الحي.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        SaryInlineState(systemImage: "magnifyingglass", text: "ما لقينا مكان بهالاسم. جرّب كلمة ثانية مثل «مطعم» أو «شاليهات» أو اسم الحي.")
                     }
                 }
                 if myFix != nil {
@@ -336,6 +338,8 @@ struct CoordinateSearchSheet: View {
                                 SaryRowIcon(systemImage: SaryIcon.locate)
                                 Text("إحداثياتي — انسخ أو شارك").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
                                 Spacer()
+                                Image(systemName: SaryIcon.disclosure).saryGlyph(13, weight: .bold, relativeTo: .footnote).foregroundStyle(p.textTertiary)
+                                    .accessibilityHidden(true)
                             }
                             .frame(minHeight: theme.minTarget)
                             .contentShape(Rectangle())
