@@ -35,6 +35,8 @@ struct TrackMapView: UIViewRepresentable {
         map.ornaments.options.logo.margins = CGPoint(x: 8, y: padding.bottom + 4)
         /* The imagery's sharp maximum: no blurry over-zoom. */
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: zoomCap))
+        /* Owner (Build 45): no tilting by touch; the «٣د / ٢د» button does it. Pan, pinch zoom and rotation stay. */
+        map.gestures.options.pitchEnabled = false
         if !interactive {
             map.gestures.options.panEnabled = false
             map.gestures.options.pinchEnabled = false
@@ -80,7 +82,9 @@ struct TrackMapView: UIViewRepresentable {
             props = p
             map.gestures.delegate = self
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
+            if p.interactive { tiltBinding = MapTiltBinding(map: map, mode: { .overview }) }
         }
+        private var tiltBinding: MapTiltBinding?
 
         func gestureManager(_ gestureManager: GestureManager, didBegin gestureType: GestureType) {
             userMoved = true
@@ -160,7 +164,7 @@ struct TrackMapView: UIViewRepresentable {
             guard let b = GroupFraming.bounds(pts) else { return }
             let coords = [CLLocationCoordinate2D(latitude: b.south, longitude: b.west), CLLocationCoordinate2D(latitude: b.north, longitude: b.east)]
             let pad = UIEdgeInsets(top: p.padding.top + 36, left: 36, bottom: p.padding.bottom + 36, right: 36)
-            guard let cam = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(bearing: 0, pitch: 0), coordinatesPadding: pad,
+            guard let cam = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(bearing: 0, pitch: p.interactive ? MapTiltModel.shared.pitch(.overview) : 0), coordinatesPadding: pad,
                                                       maxZoom: SatelliteLabels.trackMaxZoom, offset: nil) else { return }
             map.mapboxMap.setCamera(to: cam)
         }

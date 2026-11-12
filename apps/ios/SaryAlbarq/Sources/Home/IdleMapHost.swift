@@ -27,10 +27,11 @@ struct IdleMapHost: View {
             .task { await model.refresh() }
             .onAppear {
                 model.idleMapShown = true
+                MapTiltModel.shared.idleHome = true
                 session.open()
-                /* The navigation map's 3D look, centred on me (R02); the person can change it with two fingers. */
-                let hot = ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
-                let pitch = IdleMapRules.idlePitch(lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled, thermalHot: hot)
+                /* The navigation map's 3D look, centred on me (R02); the «٣د / ٢د» button changes it (no touch tilt). */
+                /* The remembered «٣د / ٢د» choice of this map (3D at 40° until the person flattens it). */
+                let pitch = MapTiltModel.shared.pitch(.idle)
                 #if DEBUG
                 /* `-SaryHiResCam lat,lng,zoom` puts the camera on a test spot itself: the idle map must not race it. */
                 if ProcessInfo.processInfo.arguments.contains("-SaryHiResCam") { return }
@@ -42,6 +43,7 @@ struct IdleMapHost: View {
             }
             .onDisappear {
                 model.idleMapShown = false
+                MapTiltModel.shared.idleHome = false
                 session.close()
             }
     }

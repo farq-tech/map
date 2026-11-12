@@ -44,6 +44,7 @@ struct LiveOutingScreen: View {
     @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
+    @ObservedObject private var tilt = MapTiltModel.shared
 
     var body: some View {
         /* One presenter pass per render: the map's members and the edge arrows reuse it. */
@@ -244,8 +245,11 @@ struct LiveOutingScreen: View {
         let ended = controller.tripEnded
         /* Guiding (v2): up to four round buttons on the right, my speed and the limit bottom-left. */
         let guidingHUD = controller.nav.phase == .guiding && !exploring && !ended
-        let side = LiveCalmRules.withLayers(exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended)),
-                                            layers: .layers(active: controller.terrain3D))
+        let tiltMode = CameraTiltRules.mode(heading: controller.mapFollowMode == .heading, idle: controller.idleHome)
+        let side = LiveCalmRules.withTilt(
+            LiveCalmRules.withLayers(exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended)),
+                                     layers: .layers(active: controller.terrain3D)),
+            tilt: .cameraTilt(is3D: tilt.is3D(tiltMode), settledPitch: tilt.settledPitch))
         /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
         let sideShown = LiveCalmRules.sideItems(side, detent: controller.sheetDetent)
         let showSide = !sideShown.isEmpty && (!ended || !exploring)
@@ -570,6 +574,7 @@ struct LiveOutingScreen: View {
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         case "actions": controller.modal = .actions
         case "layers": controller.modal = .layers
+        case "tilt": tilt.toggle(CameraTiltRules.mode(heading: controller.mapFollowMode == .heading, idle: controller.idleHome))
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
         case "qibla": showQiblaOnMap.toggle()

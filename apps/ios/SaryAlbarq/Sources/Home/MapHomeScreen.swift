@@ -106,6 +106,7 @@ struct MapHomeScreen: View {
                         Spacer()
                         VStack(spacing: theme.space(.s)) {
                             layersMapButton
+                            MapTiltButton()
                             locateButton
                             qiblaMapButton
                         }
