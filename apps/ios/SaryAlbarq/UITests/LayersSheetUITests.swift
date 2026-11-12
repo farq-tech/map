@@ -79,4 +79,26 @@ final class LayersSheetUITests: XCTestCase {
         el(app, "layer.standard").tap()
         XCTAssertTrue(el(app, "layer.standard").isSelected)
     }
+
+    /// The sheet grows to its large detent and the base rows stay laid out; with SARY_SHOTS set, saves the
+    /// large-detent shot (`<prefix>-large-<light|dark>.png`) for the before/after comparison.
+    private func largeDetent(_ extra: [String], prefix: String, scheme: String) {
+        let app = open(extra, scheme: scheme)
+        let before = el(app, "layer.satellite").frame.minY
+        let grab = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: (before - 62) / app.frame.height))
+        grab.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)))
+        sleep(1)
+        XCTAssertLessThan(el(app, "layer.satellite").frame.minY, before - 40, "the sheet grew to the large detent")
+        assertRowsLaidOut(app, step: "large detent")
+        let s = XCUIScreen.main.screenshot()
+        shot("\(prefix)-large-\(scheme)")
+        if let dir = ProcessInfo.processInfo.environment["SARY_SHOTS"] {
+            try? s.pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(prefix)-large-\(scheme).png"))
+        }
+    }
+
+    func testLargeDetentLight() { largeDetent([], prefix: "after", scheme: "light") }
+    func testLargeDetentDark() { largeDetent([], prefix: "after", scheme: "dark") }
+    func testLargeDetentLegacyLight() { largeDetent(["-SaryLegacyLayersSheet"], prefix: "legacy", scheme: "light") }
+    func testLargeDetentLegacyDark() { largeDetent(["-SaryLegacyLayersSheet"], prefix: "legacy", scheme: "dark") }
 }
