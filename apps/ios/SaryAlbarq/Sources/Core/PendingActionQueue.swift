@@ -26,6 +26,8 @@ struct PendingOutingAction: Codable, Equatable, Identifiable {
         case removeMember
         /// «رسالة فوق سيارتي»: `POST /:id/note` (empty text clears it).
         case note
+        /// «إنهاء الطلعة للجميع»: `POST /:id/status {end}` (the owner). Applied here at once; idempotent on the server.
+        case endOuting
     }
 
     var id: String = UUID().uuidString
@@ -69,7 +71,7 @@ struct PendingActionQueue: Codable, Equatable {
     /// How long `kind` may wait. A leave and a hide keep for days: dropping either before the
     /// server heard it would let the next snapshot share my location again without my say.
     static func maxAgeMs(for kind: PendingOutingAction.Kind) -> Double {
-        kind == .leave || kind == .hide ? leaveMaxAgeMs : maxAgeMs
+        kind == .leave || kind == .hide || kind == .endOuting ? leaveMaxAgeMs : maxAgeMs
     }
 
     private(set) var items: [PendingOutingAction] = []
@@ -87,9 +89,13 @@ struct PendingActionQueue: Codable, Equatable {
     mutating func enqueue(_ a: PendingOutingAction) -> Bool {
         func same(_ x: PendingOutingAction) -> Bool { x.user == a.user && x.outing == a.outing }
         if a.kind != .leave, items.contains(where: { same($0) && $0.kind == .leave }) { return false }
+        /* An end already waiting makes everything else for that outing moot, like a leave. */
+        if a.kind != .leave, a.kind != .endOuting, items.contains(where: { same($0) && $0.kind == .endOuting }) { return false }
         switch a.kind {
         case .leave:
             items.removeAll { same($0) }
+        case .endOuting:
+            items.removeAll { same($0) && $0.kind != .leave }
         case .setRally, .clearRally:
             items.removeAll { same($0) && ($0.kind == .setRally || $0.kind == .clearRally) }
         case .removeMember:
@@ -182,6 +188,9 @@ struct PendingActionQueue: Codable, Equatable {
             return .done
         case .removeMember:
             return e.status == 404 ? .done : .drop
+        case .endOuting:
+            /* The outing is gone (404) or already ended (409): it is over, which is what ending wanted. */
+            return e.status == 404 || e.status == 409 ? .done : .drop
         default:
             return .drop
         }
@@ -278,6 +287,8 @@ final class OutingActionOutbox: ObservableObject {
             try await api.removeMember(a.outing, member: m)
         case .note:
             _ = try await api.note(a.outing, text: a.text ?? "")
+        case .endOuting:
+            _ = try await api.setStatus(a.outing, action: "end")
         }
     }
 
@@ -475,6 +486,7 @@ enum PendingActionCopy {
         case .hide: return "موقعك مخفي عندك، ونبلّغ الخادم لما يرجع النت"
         case .coLeader, .removeMember: return "نكمل التغيير لما يرجع النت"
         case .note: return "نكمل إرسال رسالتك لما يرجع النت"
+        case .endOuting: return "تعذّر إبلاغ الخادم، نعيد المحاولة"
         }
     }
 }

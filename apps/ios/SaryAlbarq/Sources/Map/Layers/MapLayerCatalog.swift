@@ -33,13 +33,13 @@ enum MapLayerCatalog {
     /// The weather kind of a weather layer (nil for any other layer).
     static func weatherKind(_ id: MapLayerID) -> WeatherOverlayKind? { weatherKinds.first { weatherID($0) == id } }
 
-    /// Weather overlays are drawn by the exploration map only (`WeatherOverlayRequest.active`), so the sheet offers them there.
+    /// Weather overlays are drawn on the live map in every mode (exploration, the outing, guidance: `WeatherOverlayRequest.active`), so the sheet offers them there.
     static let weather: [MapLayerDescriptor] = weatherKinds.map { k in
         MapLayerDescriptor(
             id: weatherID(k), title: k.label, detail: k.detail, systemImage: k.systemImage, category: .overlay,
             conflicts: Set(weatherKinds.filter { $0 != k }.map(weatherID)),
             persistence: .optionalChoice(key: weatherKey, value: k.rawValue, off: WeatherOverlayKind.none.rawValue),
-            availableIn: [.explore], needsNetwork: true, groupTitle: "الطقس", accessibilityID: "weather.layer.\(k.rawValue)")
+            availableIn: [.explore, .outing, .navigate], needsNetwork: true, groupTitle: "الطقس", accessibilityID: "weather.layer.\(k.rawValue)")
     }
 
     static let camp = MapLayerDescriptor(

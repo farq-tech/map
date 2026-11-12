@@ -23,6 +23,17 @@ enum LiveCalmRules {
         [layers] + items.filter { $0.id != layers.id }
     }
 
+    /// The side column per sheet height. Peek: everything. Half: the layers button alone (owner's Build 44 report: «خلال الطلعة لا يمكنني
+    /// الضغط على الطبقات» — with the sheet raised the whole column, layers included, was gone, so there was nothing to press).
+    /// Full: nothing (the sheet covers the map).
+    static func sideItems(_ items: [SaryMapControlItem], detent: SheetDetentUI) -> [SaryMapControlItem] {
+        switch detent {
+        case .peek: return items
+        case .half: return items.filter { $0.id == "layers" }
+        default: return []
+        }
+    }
+
     /// The round buttons on the map's side (stopped): «تتبعني» and «أدوات» only, plus «طريق العودة»
     /// when it fits the moment; after the end, the camera alone. Driving: none.
     static func sideItems(camera: SaryMapControlItem, backTrack: SaryMapControlItem?, plusBadge: Int?,

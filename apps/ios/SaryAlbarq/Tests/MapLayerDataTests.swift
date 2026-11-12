@@ -67,7 +67,7 @@ final class MapLayerDataTests: XCTestCase {
 
     func testAvailabilityMatchesWhereTheLayerIsDrawn() {
         let r = registry()
-        XCTAssertEqual(r.descriptor("weather.rain")?.availableIn, [.explore], "the weather overlay is drawn by the exploration map")
+        XCTAssertEqual(r.descriptor("weather.rain")?.availableIn, [.explore, .outing, .navigate], "the weather overlay is drawn on the live map in every mode, guidance included")
         XCTAssertTrue(MapLayerCatalog.qibla.availableIn.contains(.home), "the home map draws the Qibla ray")
         XCTAssertFalse(MapLayerCatalog.qibla.availableIn.contains(.navigate), "the ray hides during guidance")
         XCTAssertTrue(MapLayerCatalog.camp.availableIn.contains(.outing))
@@ -227,7 +227,12 @@ final class MapLayerDataTests: XCTestCase {
 
         XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home).map(\.id), ["group.ألوان الصور", "category.data"], "home offers only what its map draws (it draws the graded satellite)")
         XCTAssertEqual(MapLayersSheetModel.sections(registry: r, mode: .home)[1].rows.map(\.id), ["data.qibla"])
-        XCTAssertFalse(MapLayersSheetModel.sections(registry: r, mode: .outing).contains { $0.id == "group.الطقس" })
+        for m in [MapLayerMode.outing, .navigate] {
+            let sections = MapLayersSheetModel.sections(registry: r, mode: m)
+            XCTAssertEqual(sections.first?.id, "group.الطقس", "\(m): the weather is the first section, right after the base maps")
+            XCTAssertEqual(MapLayersSheetModel.quickWeather(registry: r, mode: m).map(\.testID), ["weather.quick.clouds", "weather.quick.rain", "weather.quick.wind"], "\(m): quick chips")
+        }
+        XCTAssertTrue(MapLayersSheetModel.quickWeather(registry: r, mode: .home).isEmpty, "home draws no weather")
     }
 
     func testEveryDescriptorAppearsInSomeSheet() {

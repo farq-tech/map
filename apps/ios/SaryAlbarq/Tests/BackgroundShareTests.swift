@@ -562,6 +562,67 @@ final class BackgroundSessionTests: XCTestCase {
         XCTAssertTrue(PendingActionQueue.load(defaults: defaults).isEmpty)
     }
 
+    // MARK: «إنهاء الطلعة للجميع» is instant too (owner's Build 44 report: «ياخذ وقت، ومرات ما يستجيب»)
+
+    /// The server stalls (answers after 30 s): the screen still shows the ended outing within 100 ms, sharing is stopped on this phone,
+    /// and the end waits in the persisted outbox. Before this, `setStatus("end")` awaited the server, so the screen sat on «جاري الإنهاء…».
+    func testEndOutingChangesTheScreenAtOnceEvenWhenTheServerStalls() async {
+        let server = SlowServer()
+        server.delay = 30_000_000_000
+        let outbox = heldOutbox(server)
+        defer { outbox.stop() }
+        let s = await sharingInBackground(outbox: outbox)
+        let tap = Date()
+        XCTAssertTrue(s.endOuting())
+        XCTAssertLessThan(Date().timeIntervalSince(tap), 0.1, "< 100 ms: nothing waits for the network")
+        XCTAssertLessThan(s.endLatencyMs ?? 9_999, 100, "end_latency_ms is recorded")
+        XCTAssertEqual(s.closedReason, .outingEnded)
+        XCTAssertEqual(s.view?.status, .ended)
+        XCTAssertFalse(s.wantsToShare)
+        XCTAssertFalse(location.isSharing, "my location stops at once")
+        XCTAssertNil(ShareMemory.activeShare(user: "u1", defaults: defaults), "no resume after a relaunch")
+        XCTAssertEqual(outbox.queue.items.map(\.kind), [.endOuting])
+        XCTAssertTrue(server.done.isEmpty, "the server has not answered")
+        await assertStopped(s, "ended, the server stalled")
+    }
+
+    /// No network at all: the end is kept (on disk too), retried, the first failure is said once, and sharing never comes back.
+    func testEndOutingOfflineIsQueuedRetriedAndSaidOnce() async {
+        let server = SlowServer()
+        server.delay = 20_000_000
+        server.failuresLeft = 1
+        let outbox = slowOutbox(server)
+        var outcomes: [OutingActionOutbox.Outcome] = []
+        let sink = outbox.reports.sink { outcomes.append($0.outcome) }
+        defer { sink.cancel() }
+        let s = await sharingInBackground(outbox: outbox)
+        var notices: [String] = []
+        s.onDeferredNotice = { notices.append($0) }
+        s.endOuting()
+        XCTAssertEqual(s.closedReason, .outingEnded, "ended on this phone with no network")
+        await waitUntil { outcomes.contains(.willRetry) }
+        XCTAssertEqual(notices, ["تعذّر إبلاغ الخادم، نعيد المحاولة"], "said once, without blocking anything")
+        XCTAssertFalse(PendingActionQueue.load(defaults: defaults).isEmpty, "survives the app being killed")
+        XCTAssertFalse(s.wantsToShare)
+        XCTAssertFalse(location.isSharing)
+        await waitUntil { outcomes.contains(.sent) }
+        XCTAssertEqual(server.done.map(\.kind), [.endOuting])
+        XCTAssertTrue(outbox.queue.isEmpty)
+        XCTAssertFalse(s.wantsToShare)
+    }
+
+    func testAnEndWaitingMakesLaterActionsMootAndSecondEndIsIgnored() async {
+        var q = PendingActionQueue()
+        let end = PendingOutingAction(user: "u1", outing: "o1", kind: .endOuting, createdMs: 1)
+        XCTAssertTrue(q.enqueue(PendingOutingAction(user: "u1", outing: "o1", kind: .note, text: "x", createdMs: 0)))
+        XCTAssertTrue(q.enqueue(end))
+        XCTAssertEqual(q.items.map(\.kind), [.endOuting], "the note is moot once the outing ends")
+        XCTAssertFalse(q.enqueue(PendingOutingAction(user: "u1", outing: "o1", kind: .note, text: "y", createdMs: 2)))
+        XCTAssertEqual(PendingActionQueue.maxAgeMs(for: .endOuting), PendingActionQueue.leaveMaxAgeMs, "kept for days, like a leave")
+        XCTAssertEqual(PendingActionQueue.verdict(OutingAPIError(code: "outing_ended", status: 409), kind: .endOuting), .done)
+        XCTAssertEqual(PendingActionQueue.verdict(OutingAPIError(code: "network", status: 0), kind: .endOuting), .retry)
+    }
+
     func testAFailedLeaveIsQueuedAndRetriedWithoutEverResumingSharing() async {
         let server = SlowServer()
         server.failuresLeft = 1

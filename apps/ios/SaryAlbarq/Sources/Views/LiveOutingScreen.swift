@@ -247,7 +247,8 @@ struct LiveOutingScreen: View {
         let side = LiveCalmRules.withLayers(exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended)),
                                             layers: .layers(active: controller.terrain3D))
         /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
-        let showSide = controller.sheetDetent == .peek && !side.isEmpty && (!ended || !exploring)
+        let sideShown = LiveCalmRules.sideItems(side, detent: controller.sheetDetent)
+        let showSide = !sideShown.isEmpty && (!ended || !exploring)
             && LiveFit.sideWithAlertList(bellOpen: controller.bellOpen, screenHeight: full.height)
         /* iPhone SE (667 pt): the side captions drop out so the column stays above the dock (`LiveFit`). */
         /* Driving: bare round buttons (the name is spoken by VoiceOver), at the drive size. */
@@ -274,7 +275,7 @@ struct LiveOutingScreen: View {
                              sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger,
                                                                    countdown: controller.groupUI.serverSOS)),
                              /* My SOS on (focused mode): no side buttons — the strip, the walkie-talkie and the map. */
-                             side: showSide && !controller.sosFocused ? AnyView(sideView(side, exploring: exploring, captions: sideCaptions).chromeFrame("cluster")) : nil)
+                             side: showSide && !controller.sosFocused ? AnyView(sideView(sideShown, exploring: exploring, captions: sideCaptions).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
                 if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
                     /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. */
