@@ -123,8 +123,8 @@ extension WeatherLayerAPI {
     static func cloudOutlook(lat: Double, lng: Double, base: URL = Endpoints.apiBase, session: URLSession = .shared) async throws -> CloudOutlook {
         var c = URLComponents(url: base.appendingPathComponent("api/weather/clouds/outlook"), resolvingAgainstBaseURL: false)!
         c.queryItems = [.init(name: "lat", value: String(format: "%.3f", lat)), .init(name: "lng", value: String(format: "%.3f", lng))]
-        /* The server reads three slow satellite pictures the first time for a 1° cell. */
-        var req = URLRequest(url: c.url!, timeoutInterval: 150)
+        /* The server reads three slow satellite pictures the first time for a 1° cell (measured 50–170 s). */
+        var req = URLRequest(url: c.url!, timeoutInterval: 240)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, resp) = try await session.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }

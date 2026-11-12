@@ -31,6 +31,8 @@ const { createRateLimiter } = require('./rate-limit');
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_LOCATIONS = 10;
+const MAX_EXCLUDE_RINGS = 4;
+const MAX_EXCLUDE_POINTS = 400;
 /* Generous GCC box: Yemen/Oman in the south, Kuwait/north Saudi in the north. */
 const GCC_BOX = Object.freeze({ minLat: 12, maxLat: 33, minLng: 34, maxLng: 60 });
 const COSTINGS = new Set(['auto', 'truck']);
@@ -133,7 +135,27 @@ function parseRouteRequest(raw, { now = Date.now() } = {}) {
     departAt = t;
   }
 
-  return { ok: true, value: { locations, costing, options, alternates, language, departAt } };
+  /* Rings the route must not enter (the app's restricted airports / military zones, issue #187). */
+  let excludePolygons = null;
+  if (raw.exclude_polygons != null) {
+    const rings = raw.exclude_polygons;
+    if (!Array.isArray(rings) || rings.length > MAX_EXCLUDE_RINGS) return fail('invalid_exclude_polygons');
+    excludePolygons = [];
+    for (const ring of rings) {
+      if (!Array.isArray(ring) || ring.length < 4 || ring.length > MAX_EXCLUDE_POINTS) return fail('invalid_exclude_polygons');
+      const out = [];
+      for (const pt of ring) {
+        if (!Array.isArray(pt) || pt.length !== 2 || !finite(pt[0]) || !finite(pt[1])) return fail('invalid_exclude_polygons');
+        if (pt[1] < GCC_BOX.minLat || pt[1] > GCC_BOX.maxLat || pt[0] < GCC_BOX.minLng || pt[0] > GCC_BOX.maxLng) return fail('invalid_exclude_polygons');
+        out.push([pt[0], pt[1]]);
+      }
+      excludePolygons.push(out);
+    }
+  }
+
+  const value = { locations, costing, options, alternates, language, departAt };
+  if (excludePolygons && excludePolygons.length) value.excludePolygons = excludePolygons;
+  return { ok: true, value };
 }
 
 /** "YYYY-MM-DDThh:mm" at the GCC departure offset. */
@@ -162,6 +184,7 @@ function valhallaRouteBody(req) {
   };
   /* Valhalla supports alternates only for two-location, non-time-dependent routes. */
   if (req.alternates > 0 && req.locations.length === 2 && req.departAt == null) body.alternates = req.alternates;
+  if (req.excludePolygons) body.exclude_polygons = req.excludePolygons;
   if (req.departAt != null) body.date_time = { type: 1, value: localDateTime(req.departAt) };
   return body;
 }
