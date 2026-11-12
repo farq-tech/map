@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "sample_id": "scbef88789c51",
+  "created_utc": "2026-11-12T06:44:54+00:00",
+  "updated_utc": "2026-11-12T06:50:48+00:00",
+  "status": "annotated",
+  "fixture": true,
+  "source": {
+    "type": "mapbox_satellite",
+    "tileset": "mapbox.satellite",
+    "zoom": 17,
+    "tile_scale": 2,
+    "tiles": {
+      "x0": 82522,
+      "y0": 56066,
+      "nx": 3,
+      "ny": 3
+    },
+    "nominal_resolution_note": "z17@2x ~0.54 m/px at lat 25.5; z18 is only upscaled from z17 (no new detail)"
+  },
+  "georef": {
+    "crs": "EPSG:3857",
+    "epsg": 3857,
+    "transform": [
+      0.5971642834779395,
+      0.0,
+      5193437.449808016,
+      0.0,
+      -0.5971642834779395,
+      2895434.631442476
+    ],
+    "width": 1536,
+    "height": 1536,
+    "bbox_wgs84": [
+      46.653442382812514,
+      25.152743274854945,
+      46.661682128906264,
+      25.160201483133356
+    ],
+    "centre_wgs84": [
+      46.65756225585938,
+      25.156472435986743
+    ],
+    "ground_res_m": 0.5393661670597372,
+    "utm_epsg": 32638,
+    "pixel_convention": "rasterio: (0,0) = top-left corner of top-left pixel"
+  },
+  "region_cell": "r450_310",
+  "terrain": "gravel_plain",
+  "clarity": 2,
+  "notes": "FIXTURE: programmatic test drawing, not owner annotation",
+  "imagery_date": "unknown",
+  "license": {
+    "status": "owner-declared",
+    "holder": "owner",
+    "note": "The owner declared he holds the imagery licences (Mapbox commercial satellite)."
+  },
+  "annotation": {
+    "n_tracks": 3,
+    "n_edges": 2,
+    "by_type": {
+      "dirt": {
+        "n": 1,
+        "length_m": 834.54
+      },
+      "winding": {
+        "n": 1,
+        "length_m": 688.49
+      },
+      "faint": {
+        "n": 1,
+        "length_m": 344.79
+      }
+    },
+    "clarity_counts": {
+      "1": 2,
+      "3": 1
+    },
+    "mask_width_m": 3.0,
+    "mask_pixels": 19330,
+    "mask_coverage": 0.008193,
+    "tracks_sha256": "f39d82e71ec67481c440b5aaf861ee82bb2e493f844436bb1d10fa8e08833382",
+    "annotated_utc": "2026-11-12T06:50:48+00:00"
+  },
+  "image_sha256": "680c60d11d63f5cd89f5bad89b058a1a36faa383f37cb3e51b9d8429e238a609"
+}

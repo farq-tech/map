@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "sample_id": "s28a0ee5afa27",
+  "created_utc": "2026-11-12T06:47:13+00:00",
+  "updated_utc": "2026-11-12T06:49:58+00:00",
+  "status": "annotated",
+  "fixture": true,
+  "source": {
+    "type": "mapbox_satellite",
+    "tileset": "mapbox.satellite",
+    "zoom": 17,
+    "tile_scale": 2,
+    "tiles": {
+      "x0": 83514,
+      "y0": 56505,
+      "nx": 3,
+      "ny": 3
+    },
+    "nominal_resolution_note": "z17@2x ~0.54 m/px at lat 25.5; z18 is only upscaled from z17 (no new detail)"
+  },
+  "georef": {
+    "crs": "EPSG:3857",
+    "epsg": 3857,
+    "transform": [
+      0.5971642834779395,
+      0.0,
+      5496739.578043595,
+      0.0,
+      -0.5971642834779395,
+      2761211.209773708
+    ],
+    "width": 1536,
+    "height": 1536,
+    "bbox_wgs84": [
+      49.3780517578125,
+      24.056496490768524,
+      49.38629150390626,
+      24.064020344514212
+    ],
+    "centre_wgs84": [
+      49.382171630859375,
+      24.060258472782955
+    ],
+    "ground_res_m": 0.5440607737920824,
+    "utm_epsg": 32639,
+    "pixel_convention": "rasterio: (0,0) = top-left corner of top-left pixel"
+  },
+  "region_cell": "r476_298",
+  "terrain": "flat_sand",
+  "clarity": 2,
+  "notes": "FIXTURE: UI test drawing made by the agent (browser clicks), not owner annotation",
+  "imagery_date": "unknown",
+  "license": {
+    "status": "owner-declared",
+    "holder": "owner",
+    "note": "The owner declared he holds the imagery licences (Mapbox commercial satellite)."
+  },
+  "annotation": {
+    "n_tracks": 2,
+    "n_edges": 2,
+    "by_type": {
+      "dirt": {
+        "n": 1,
+        "length_m": 821.87
+      },
+      "sandy": {
+        "n": 1,
+        "length_m": 616.22
+      }
+    },
+    "clarity_counts": {
+      "2": 2
+    },
+    "mask_width_m": 3.0,
+    "mask_pixels": 12643,
+    "mask_coverage": 0.005359,
+    "tracks_sha256": "ce766ae013ce026feb77c77b7777d263b598c45831b048956920c4ca612cb70f",
+    "annotated_utc": "2026-11-12T06:49:58+00:00"
+  },
+  "image_sha256": "955afbbd5b1fe5a35ba10abd75c54f1c5dca1b186c742d4b576b66b449e0fb7c"
+}

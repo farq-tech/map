@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>أداة وسم الدروب — سَرى البارق</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>أداة وسم دروب الصحراء <small>سَرى البارق · تعليم SAM-Road</small></h1>
+  <div id="imgnote" class="badge" title="">الصور: Mapbox z17@2x ≈ 0.54 م/بكسل — ما فوق z17 تكبير فقط</div>
+  <div id="budget" class="badge"></div>
+  <div id="zoomwarn" class="badge warn" hidden>⚠ تكبير فقط: لا تفاصيل جديدة فوق الدقة الحقيقية</div>
+</header>
+<main>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="toolbar" hidden>
+      <button data-tool="select" title="تحديد وتعديل (V)">تحديد/تعديل</button>
+      <button data-tool="centerline" title="خط الوسط للمسار (C)">خط الوسط</button>
+      <button data-tool="edge" title="حافة المسار — اختر مسارًا أولًا (E)">حافة</button>
+      <span class="sep"></span>
+      <button id="btn-finish" title="إنهاء الرسم (Enter / نقر مزدوج)">إنهاء</button>
+      <button id="btn-undo" title="تراجع (Ctrl+Z)">تراجع</button>
+      <button id="btn-del" title="حذف المحدد (Delete)">حذف</button>
+      <span class="sep"></span>
+      <label class="chk"><input type="checkbox" id="chk-overlay"> القناع المحفوظ</label>
+      <button id="btn-save" class="primary" title="حفظ (Ctrl+S)">حفظ العينة</button>
+    </div>
+    <div id="hint"></div>
+    <div id="drop" hidden>أفلت ملف GeoTIFF هنا</div>
+  </div>
+  <aside>
+    <nav id="tabs">
+      <button data-tab="sample" class="on">العينة</button>
+      <button data-tab="batch">طلب الدفعة</button>
+      <button data-tab="export">التصدير والجودة</button>
+    </nav>
+
+    <section id="tab-sample">
+      <h3>1) نافذة صور جديدة</h3>
+      <div class="row">
+        <label>الحجم
+          <select id="win-size"><option value="2">2×2 (≈550 م)</option><option value="3" selected>3×3 (≈830 م)</option><option value="4">4×4 (≈1.1 كم)</option></select>
+        </label>
+        <button id="btn-win" class="primary">جلب النافذة (مركز الخريطة)</button>
+      </div>
+      <div id="win-info" class="muted">حرّك الخريطة؛ المستطيل الأصفر هو النافذة التي ستُجلب (محاذاة بلاطات z17).</div>
+      <h3>2) أو استورد GeoTIFF</h3>
+      <div class="row"><input type="file" id="file-tif" accept=".tif,.tiff"><span class="muted">أو اسحبه فوق الخريطة</span></div>
+
+      <h3>العينات</h3>
+      <ul id="samples"></ul>
+
+      <div id="cur" hidden>
+        <h3>العينة الحالية <code id="cur-id"></code></h3>
+        <div class="grid2">
+          <label>التضاريس <select id="m-terrain"></select></label>
+          <label>الوضوح العام <select id="m-clarity"></select></label>
+        </div>
+        <label>ملاحظات <textarea id="m-notes" rows="2"></textarea></label>
+        <div id="m-info" class="muted"></div>
+
+        <h3>نوع المسار</h3>
+        <div id="types"></div>
+        <label>وضوح المسار <select id="t-clarity"></select></label>
+        <div id="sel-info" class="muted">لا مسار محدد</div>
+        <div id="stats"></div>
+        <div id="quality"></div>
+      </div>
+    </section>
+
+    <section id="tab-batch" hidden>
+      <p class="muted">طلب واحد مجمّع بحسب ما وسمته فعلًا. لن نطلب نافذة سبق أن زوّدتنا بها أو تخطيتها.</p>
+      <button id="btn-batch" class="primary">حلّل ما وسمته واعرض الدفعة</button>
+      <div id="batch"></div>
+    </section>
+
+    <section id="tab-export" hidden>
+      <p class="muted">صيغة SAM-Road (spacenet): بلاطات 400×400 + gt_graph + أقنعة + data_split.json، بتقسيم مكاني مع حاجز. لا تدريب هنا.</p>
+      <div class="grid2">
+        <label>دقة التصدير (م/بكسل) <select id="x-gsd"><option>1.0</option><option>0.6</option></select></label>
+        <label class="chk"><input type="checkbox" id="x-fix"> تضمين عينات الاختبار البرمجية</label>
+      </div>
+      <button id="btn-export" class="primary">تصدير + تقرير الجودة</button>
+      <div id="export-out"></div>
+    </section>
+  </aside>
+</main>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

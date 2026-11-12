@@ -1,0 +1,212 @@
+{
+ "export_version": "v20261112-065049-82ed6e9b",
+ "created_utc": "2026-11-12T06:50:49+00:00",
+ "tool": "track-annotator 0.1.0",
+ "target": {
+  "repo": "https://github.com/htcr/sam_road",
+  "commit": "04b67c503f120ecff2b2dc5a2041ea6d300e306a",
+  "commit_date": "2024-08-10",
+  "layout": "spacenet",
+  "evidence": [
+   "vendor/sam_road/README.md (Data Preparation)",
+   "dataset.py: SatMapDataset spacenet branch",
+   "spacenet/generate_labels.py (IMAGE_SIZE=400, KEYPOINT_RADIUS=3, ROAD_WIDTH=3)",
+   "config/toponet_vitb_256_spacenet.yaml"
+  ],
+  "also_compatible_with": "SAM-Road++ (README: data prep 'refer to the sam_road repo'); not run here"
+ },
+ "params": {
+  "gsd_m": 1.0,
+  "tile_px": 400,
+  "stride_px": 400,
+  "road_width_px": 3,
+  "keypoint_radius_px": 3,
+  "include_fixtures": true,
+  "keep_empty": false,
+  "seed": 0,
+  "block_km": 5.0,
+  "buffer_m": 500.0,
+  "ratios": {
+   "train": 0.7,
+   "validation": 0.15,
+   "test": 0.15
+  },
+  "crs": "per-tile UTM (see extras/*__geo.json); labels WGS84"
+ },
+ "inputs_sha256": "82ed6e9b441f466465118f2b6b9a4649f42af776c3779d5190892d5496efc517",
+ "licence": {
+  "status": "owner-declared",
+  "holder": "owner",
+  "note": "The owner declared he holds the imagery licences (Mapbox commercial satellite)."
+ },
+ "sources": [
+  "mapbox_satellite"
+ ],
+ "samples": [
+  {
+   "sample_id": "s28a0ee5afa27",
+   "image_sha256": "955afbbd5b1fe5a35ba10abd75c54f1c5dca1b186c742d4b576b66b449e0fb7c",
+   "tracks_sha256": "ce766ae013ce026feb77c77b7777d263b598c45831b048956920c4ca612cb70f",
+   "fixture": true,
+   "terrain": "flat_sand"
+  },
+  {
+   "sample_id": "scbef88789c51",
+   "image_sha256": "680c60d11d63f5cd89f5bad89b058a1a36faa383f37cb3e51b9d8429e238a609",
+   "tracks_sha256": "f39d82e71ec67481c440b5aaf861ee82bb2e493f844436bb1d10fa8e08833382",
+   "fixture": true,
+   "terrain": "gravel_plain"
+  }
+ ],
+ "counts": {
+  "samples": 2,
+  "tiles_candidate": 6,
+  "tiles_empty_dropped": 0,
+  "tiles_buffer_dropped": 0,
+  "tiles_train": 6,
+  "tiles_validation": 0,
+  "tiles_test": 0
+ },
+ "tiles": [
+  {
+   "id": "s28a0ee5afa27_r00c01",
+   "sample_id": "s28a0ee5afa27",
+   "split": "train",
+   "types": [
+    "sandy"
+   ],
+   "terrain": "flat_sand",
+   "clarity": 2,
+   "region_cell": "r476_298",
+   "centre_wgs84": [
+    49.38387745586203,
+    24.062281315054467
+   ],
+   "mask_coverage": 0.002681,
+   "n_nodes": 2
+  },
+  {
+   "id": "s28a0ee5afa27_r01c00",
+   "sample_id": "s28a0ee5afa27",
+   "split": "train",
+   "types": [
+    "dirt",
+    "sandy"
+   ],
+   "terrain": "flat_sand",
+   "clarity": 2,
+   "region_cell": "r476_298",
+   "centre_wgs84": [
+    49.37998977868598,
+    24.058628283382774
+   ],
+   "mask_coverage": 0.019356,
+   "n_nodes": 8
+  },
+  {
+   "id": "s28a0ee5afa27_r01c01",
+   "sample_id": "s28a0ee5afa27",
+   "split": "train",
+   "types": [
+    "dirt"
+   ],
+   "terrain": "flat_sand",
+   "clarity": 2,
+   "region_cell": "r476_298",
+   "centre_wgs84": [
+    49.383922696134356,
+    24.058669872105774
+   ],
+   "mask_coverage": 0.002075,
+   "n_nodes": 2
+  },
+  {
+   "id": "scbef88789c51_r00c01",
+   "sample_id": "scbef88789c51",
+   "split": "train",
+   "types": [
+    "winding"
+   ],
+   "terrain": "gravel_plain",
+   "clarity": 2,
+   "region_cell": "r450_310",
+   "centre_wgs84": [
+    46.659367717387056,
+    25.15842607214049
+   ],
+   "mask_coverage": 0.013281,
+   "n_nodes": 9
+  },
+  {
+   "id": "scbef88789c51_r01c00",
+   "sample_id": "scbef88789c51",
+   "split": "train",
+   "types": [
+    "dirt",
+    "faint"
+   ],
+   "terrain": "gravel_plain",
+   "clarity": 2,
+   "region_cell": "r450_310",
+   "centre_wgs84": [
+    46.65535160110974,
+    25.15485964256527
+   ],
+   "mask_coverage": 0.020594,
+   "n_nodes": 9
+  },
+  {
+   "id": "scbef88789c51_r01c01",
+   "sample_id": "scbef88789c51",
+   "split": "train",
+   "types": [
+    "dirt"
+   ],
+   "terrain": "gravel_plain",
+   "clarity": 2,
+   "region_cell": "r450_310",
+   "centre_wgs84": [
+    46.65931886133617,
+    25.154815233102767
+   ],
+   "mask_coverage": 0.01245,
+   "n_nodes": 5
+  }
+ ],
+ "split_report": {
+  "blocks": {
+   "900_621": {
+    "split": "train",
+    "tiles": 3
+   },
+   "952_596": {
+    "split": "train",
+    "tiles": 3
+   }
+  },
+  "params": {
+   "block_m": 5000.0,
+   "buffer_m": 500.0,
+   "seed": 0,
+   "ratios": {
+    "train": 0.7,
+    "validation": 0.15,
+    "test": 0.15
+   },
+   "block_crs": "EPSG:6933"
+  },
+  "buffer_dropped": [],
+  "empty_dropped": [],
+  "leakage_check": {
+   "ok": true,
+   "issues": [],
+   "min_distance_m": {},
+   "counts": {
+    "train": 6,
+    "validation": 0,
+    "test": 0
+   }
+  }
+ },
+ "has_fixture_data": true
+}
