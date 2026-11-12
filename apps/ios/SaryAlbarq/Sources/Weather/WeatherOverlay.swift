@@ -556,6 +556,8 @@ struct WeatherLegendCard: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
                         .frame(width: 26, height: 26).background(Circle().fill(p.sunken))
+                        /* 26 pt circle, 44 pt touch area (the row keeps its height). */
+                        .contentShape(Rectangle().inset(by: -9))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("weather.legend.close")
@@ -567,6 +569,8 @@ struct WeatherLegendCard: View {
                         Image(systemName: model.playing ? "pause.fill" : "play.fill")
                             .font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentText)
                             .frame(width: 26, height: 26).background(Circle().fill(p.accent.opacity(0.2)))
+                            /* 26 pt circle, 44 pt touch area (the row keeps its height). */
+                            .contentShape(Rectangle().inset(by: -9))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("weather.clouds.playpause")
