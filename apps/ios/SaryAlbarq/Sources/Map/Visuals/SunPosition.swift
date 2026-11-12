@@ -185,6 +185,33 @@ struct SceneLight: Equatable {
 /// no warm dawn / dusk cast, no sun-directed light or cast shadows, no sun-lit relief (hillshade) and no
 /// golden / orange horizon in the sky. The sun maths above stays (sunset times, the night switch, car
 /// lights); only what the map RENDERS from it is flattened here, in one place.
+/// Owner, 2026-11-12: «أزل العتمة اللي بالليل بالخريطة، خلّ كل شي واضح دائمًا». The MAP never darkens
+/// at night, forced night theme or after sunset: the basemap light is always `.day`, there is no night
+/// sky / stars / fog and no night-dimmed relief. The app's UI night theme (cards, sheets, chips) is a
+/// separate thing and is untouched. This is the ONE switch every map surface reads (home / live map,
+/// plan, track and CarPlay maps, the visuals director).
+enum NightLook {
+    /// false = the map stays in clear daylight at all hours. DEBUG `-SaryNightMapDark` brings the old
+    /// dark night back for before/after comparison shots.
+    static let mapDarkens: Bool = {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-SaryNightMapDark")
+        #else
+        return false
+        #endif
+    }()
+
+    /// The basemap preset for a map: the night theme (`forcedNight`) and the real sun (`real`) only
+    /// matter while `mapDarkens`; otherwise always day.
+    static func preset(forcedNight: Bool, real: SunLight.Preset) -> SunLight.Preset {
+        if mapDarkens, forcedNight { return .night }
+        return SunLook.preset(real)
+    }
+
+    /// Whether map-drawn lines should be contrasted for a dark map (night theme AND a map that darkens).
+    static func mapIsDark(nightTheme: Bool) -> Bool { mapDarkens && nightTheme }
+}
+
 enum SunLook {
     /// false = the owner's flat look. One switch to bring the old look back for comparison shots.
     static let enabled: Bool = {
@@ -197,13 +224,13 @@ enum SunLook {
 
     /// The basemap preset actually applied: dawn and dusk are plain day (their orange cast is the sun look).
     static func preset(_ p: SunLight.Preset) -> SunLight.Preset {
-        enabled ? p : (p == .night ? .night : .day)
+        enabled ? p : (p == .night && NightLook.mapDarkens ? .night : .day)
     }
 
-    /// The altitude the sky is drawn for: the real one at night (deep blue and stars), a fixed neutral
-    /// noon otherwise (no golden horizon at sunrise / sunset).
+    /// The altitude the sky is drawn for: a fixed neutral noon (no golden horizon, no night sky or stars),
+    /// unless the old look (`-SaryOldSunLook`) or the dark night (`-SaryNightMapDark`) is asked for.
     static func skyAltitude(_ real: Double) -> Double {
-        enabled || real <= -6 ? real : 30
+        enabled || (real <= -6 && NightLook.mapDarkens) ? real : 30
     }
 
     /// Cast shadows from the scene's directional light (3D buildings): off.

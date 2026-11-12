@@ -154,7 +154,7 @@ struct PlanMapView: UIViewRepresentable {
             for (k, v) in [("show3dObjects", false), ("showPointOfInterestLabels", true), ("showTransitLabels", false), ("showRoadLabels", true)] as [(String, Bool)] {
                 try? m.setStyleImportConfigProperty(for: "basemap", config: k, value: v)
             }
-            PlanMapStyle.ensureLayers(m, emphasised: true, night: parent?.theme.night ?? false)
+            PlanMapStyle.ensureLayers(m, emphasised: true, night: NightLook.mapIsDark(nightTheme: parent?.theme.night ?? false))
             /* Every building, flat and light, from a neighbourhood zoom (the satellite base only: the other styles draw their own). */
             if appliedLayer == .satellite { BuildingFootprints.install(m) }
             drawnRoute = nil

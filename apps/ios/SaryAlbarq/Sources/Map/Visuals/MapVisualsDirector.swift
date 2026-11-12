@@ -357,10 +357,10 @@ final class MapVisualsDirector: NSObject {
         ensureGlow(restyle: true)
     }
 
-    /// The sun the sky is drawn for: the real one, unless night mode is forced on.
+    /// The sun the sky is drawn for: the real one; night mode forces a night sky only while `NightLook.mapDarkens`.
     private var skySun: SunPosition? {
         guard var s = sun else { return nil }
-        if lastInputs.night, s.altitudeDeg > -12 { s.altitudeDeg = -12; s.rising = false }
+        if NightLook.mapDarkens, lastInputs.night, s.altitudeDeg > -12 { s.altitudeDeg = -12; s.rising = false }
         return s
     }
 
@@ -370,11 +370,11 @@ final class MapVisualsDirector: NSObject {
             /* Handed back: Standard's own lights for the preset the coordinator sets. */
             if appliedScene != nil, let s = skySun {
                 appliedScene = nil
-                setScene(SceneLight.standard(lastInputs.night ? .night : SunLook.preset(s.preset)), m)
+                setScene(SceneLight.standard(NightLook.preset(forcedNight: lastInputs.night, real: s.preset)), m)
             }
             return
         }
-        let p = SunLook.preset(s.preset)
+        let p = NightLook.preset(forcedNight: lastInputs.night, real: s.preset)
         if p != appliedPreset {
             appliedPreset = p
             /* The preset still themes Standard's roads, labels and 3D objects; the light itself is ours. */
@@ -416,7 +416,7 @@ final class MapVisualsDirector: NSObject {
         /* The light comes from the sun over the map centre (where the relief is being looked at). */
         let c = m.cameraState.center
         var here = SunPosition.at(clock, lat: c.latitude, lng: c.longitude)
-        if lastInputs.night || sunNow.altitudeDeg <= -12 { here.altitudeDeg = min(here.altitudeDeg, -12) }
+        if NightLook.mapDarkens, lastInputs.night || sunNow.altitudeDeg <= -12 { here.altitudeDeg = min(here.altitudeDeg, -12) }
         let h = HillshadeLight.from(here, satellite: lastInputs.layer == .satellite)
         /* Their own sources (Mapbox advises not sharing the terrain's), same tiles: cached / offline alike. */
         if !m.sourceExists(withId: Self.hillshadeSource) {

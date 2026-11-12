@@ -762,8 +762,8 @@ struct OutingMapboxView: UIViewRepresentable {
             /* With «السماء والإضاءة» on, the visuals pack sets the light from the real sun altitude. */
             guard styleReady, let map, !visuals.ownsLight else { return }
             let at = lastCars.first(where: \.isMe)?.position ?? lastCars.first?.position
-            /* Night mode (forced or after sunset) is the night light; otherwise the sun decides. */
-            let preset: SunLight.Preset = theme.night ? .night : SunLook.preset(at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
+            /* The map never darkens at night (NightLook): the preset is day at every hour. */
+            let preset: SunLight.Preset = NightLook.preset(forcedNight: theme.night, real: at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
             guard preset != light else { return }
             light = preset
             try? map.mapboxMap.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: preset.rawValue)
@@ -1744,7 +1744,7 @@ struct OutingMapboxView: UIViewRepresentable {
             let roundLine: [String: Any] = ["line-join": "round", "line-cap": "round"]
             let layers: [[String: Any]] = [
                 ["id": "\(Self.trailFriends)-casing", "type": "line", "source": Self.trailFriends, "filter": solid, "layout": roundLine,
-                 "paint": ["line-color": theme.night ? "#ffffff" : "#16110b", "line-width": width(w * 0.55 + 2.5),
+                 "paint": ["line-color": NightLook.mapIsDark(nightTheme: theme.night) ? "#ffffff" : "#16110b", "line-width": width(w * 0.55 + 2.5),
                            "line-opacity": ["*", ["get", "o"], 0.55], "line-emissive-strength": 1] as [String: Any]],
                 ["id": "\(Self.trailFriends)-line", "type": "line", "source": Self.trailFriends, "filter": solid, "layout": roundLine,
                  "paint": ["line-color": ["get", "c"], "line-width": width(w * 0.55), "line-opacity": ["get", "o"], "line-emissive-strength": 1] as [String: Any]],

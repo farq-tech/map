@@ -201,7 +201,7 @@ extension OutingMapboxView.Coordinator {
         let p = planDrawing.plan
         let key = "\(p.emphasised)|\(theme.night)"
         if force || key != planDrawing.layerKey || !m.layerExists(withId: PlanMapStyle.line) {
-            PlanMapStyle.ensureLayers(m, emphasised: p.emphasised, night: theme.night)
+            PlanMapStyle.ensureLayers(m, emphasised: p.emphasised, night: NightLook.mapIsDark(nightTheme: theme.night))
             planDrawing.layerKey = key
             planDrawing.drawnRoute = nil
         }
