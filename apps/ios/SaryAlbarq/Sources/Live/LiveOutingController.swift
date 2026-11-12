@@ -86,6 +86,8 @@ enum LiveModal: Identifiable, Equatable {
     case campSite(String)
     /// «مخطط دروب البر» to a point (name, rain tonight, forecast available).
     case desertRoute(LngLat, String, Bool, Bool)
+    /// «إنهاء الرحلة» / «إنهاء الطلعة»: what ends, in one sentence each (`EndControls`).
+    case endChoice
 
     var id: String {
         switch self {
@@ -119,6 +121,7 @@ enum LiveModal: Identifiable, Equatable {
         case .campSuggest: return "campSuggest"
         case let .campSite(id): return "campSite:\(id)"
         case let .desertRoute(p, _, _, _): return "desertRoute:\(p.lat),\(p.lng)"
+        case .endChoice: return "endChoice"
         }
     }
 
@@ -127,7 +130,7 @@ enum LiveModal: Identifiable, Equatable {
     /// the chats, a member's card, the weather… stay until the person closes them.
     var closesWhenTripEnds: Bool {
         switch self {
-        case .note, .rallyLabel, .navPicker, .navOptions, .navSteps, .navStartChoice, .shareAlways, .trailAlways, .pttChannels:
+        case .note, .rallyLabel, .navPicker, .navOptions, .navSteps, .navStartChoice, .shareAlways, .trailAlways, .pttChannels, .endChoice:
             return true
         default:
             return false

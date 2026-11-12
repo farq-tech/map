@@ -23,7 +23,7 @@ struct LiveSheet: View {
             if controller.nav.isActive {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, «المزيد»,
                  * «غيّر الوجهة», «أوقف التوجيه»). */
-                NavBottomBar(nav: controller.nav, end: controller.stopGuidanceTapped,
+                NavBottomBar(nav: controller.nav, end: controller.openEndChoice,
                              more: { controller.modal = .actions },
                              changeDestination: controller.navChangeDestination,
                              peek: ui.sheetDetent == .peek)
@@ -244,6 +244,10 @@ struct LiveSheet: View {
             }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        case .endChoice:
+            EndChoiceSheet(state: controller.endState, choose: controller.performEnd, close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case .places:
             PlacesAndTracksSheet(controller: controller, part: .places)
                 .presentationDetents([.medium, .large])
@@ -284,7 +288,8 @@ struct LiveSheet: View {
                             canEnd: s.isLeader && running,
                             canLeave: controller.session.closedReason == nil && g.leaveAndPause,
                             pauseOrResume: a.pauseOrResumeOuting, end: a.endOuting, leave: a.leaveOuting,
-                            settings: { controller.openSettings() })
+                            settings: { controller.openSettings() },
+                            endChoice: { controller.openEndChoice() })
     }
 }
 

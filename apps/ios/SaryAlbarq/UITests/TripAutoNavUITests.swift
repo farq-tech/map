@@ -108,6 +108,7 @@ final class TripAutoNavUITests: XCTestCase {
         sleep(1)
         shot(app, "autonav-1b-member-following-leader")
         el(app, "nav.auto.pause").tap()
+        el(app, "end.action.endTrip").tap() // «إنهاء الرحلة» → the end sheet's first row
         XCTAssertTrue(el(app, "nav.auto.resume").waitForExistence(timeout: 5), "stopped on this phone only")
         sleep(6)
         XCTAssertFalse(el(app, "nav.banner").exists, "the leader's old command does not restart it")
@@ -191,6 +192,7 @@ final class TripAutoNavUITests: XCTestCase {
         let app = launch(Self.on)
         XCTAssertTrue(el(app, "nav.auto.pause").waitForExistence(timeout: 15))
         el(app, "nav.auto.pause").tap()
+        el(app, "end.action.endTrip").tap() // «إنهاء الرحلة» → the end sheet's first row
         let resume = el(app, "nav.auto.resume")
         XCTAssertTrue(resume.waitForExistence(timeout: 5), "«استأنف التوجيه»")
         XCTAssertFalse(el(app, "nav.banner").exists)

@@ -684,11 +684,11 @@ struct NavBottomBar: View {
                     .contentShape(Circle())
             }
             .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("أوقف التوجيه"))
+            .accessibilityLabel(Text("إنهاء الرحلة"))
             .accessibilityIdentifier(id)
         } else {
             Button(action: end) {
-                Text("أوقف التوجيه")
+                Text("إنهاء الرحلة")
                     .font(.sary(theme.drive ? 20 : 18, .heavy))
                     .foregroundStyle(p.onEmergency)
                     .lineLimit(1)

@@ -198,6 +198,8 @@ struct LiveTripRows {
     var end: () -> Void = {}
     var leave: () -> Void = {}
     var settings: () -> Void = {}
+    /// «إنهاء الطلعة» at the top of «المزيد»: opens the end sheet (`EndControls`).
+    var endChoice: (() -> Void)? = nil
 }
 
 struct LiveActionSheet: View {
@@ -220,6 +222,17 @@ struct LiveActionSheet: View {
                     Text("المزيد").font(.sary(18, .bold)).foregroundStyle(p.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
+                    if let endChoice = trip.endChoice, trip.canEnd || trip.canLeave {
+                        /* One tap from here, not at the bottom of the sheet: the end sheet says what each choice does. */
+                        Button { close(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: endChoice) } label: {
+                            Text(trip.solo ? SoloCopy.end : "إنهاء الطلعة").saryText(.footnote, weight: .bold)
+                                .foregroundStyle(p.emergencyText)
+                                .padding(.horizontal, 12).frame(minHeight: 36)
+                                .background(Capsule().fill(p.emergency.opacity(0.14)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("outing.endEntry")
+                    }
                     SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "outing-actions-close", visual: 36, action: close)
                 }
                 ForEach(groups) { g in
