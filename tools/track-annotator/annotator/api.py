@@ -217,6 +217,7 @@ class VerdictReq(BaseModel):
     ms: int | None = None
     line_px: list | None = None
     edits: list | None = None
+    more_tracks: bool = False
 
 
 @app.get("/api/review/deck")
@@ -228,6 +229,7 @@ def review_deck():
         return {"ready": False, "progress": prog, "build": review.JOB, "reasons": {k: v[0] for k, v in review.REASONS.items()}}
     cards = [review.card_payload(c) for c in d["cards"] if c["pid"] not in done]
     return {"ready": True, "progress": prog, "cards": cards, "meta": {k: d[k] for k in ("created_utc", "sources_count", "controls", "unavailable_sources", "non_osm_share") if k in d},
+            "batches": {k: {kk: v.get(kk) for kk in ("n_cards", "strata_evidence", "caveats", "composition")} for k, v in d.get("batches", {}).items()},
             "reasons": {k: v[0] for k, v in review.REASONS.items()}, "build": review.JOB}
 
 
@@ -264,7 +266,7 @@ def review_snap(pid: str, wide: bool = False):
 @app.post("/api/review/verdict")
 def review_verdict(req: VerdictReq):
     try:
-        rec = review.verdict(req.pid, req.verdict, req.reason, req.ms, req.line_px, req.edits)
+        rec = review.verdict(req.pid, req.verdict, req.reason, req.ms, req.line_px, req.edits, req.more_tracks)
     except KeyError as e:
         raise HTTPException(404, str(e))
     except (ValueError, store.SampleError) as e:

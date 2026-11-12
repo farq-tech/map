@@ -170,3 +170,8 @@ html,body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webk
 }
 @media (min-width:901px){#review{align-items:center}#rv-stage{width:min(70vh,640px)}#rv-main{max-width:720px;width:100%}}
 #rv-ehint{min-height:5.4em;font-size:13px;line-height:1.35}
+#review button.faint{background:#7a5a00;border-color:#ffc400}
+.rv-row.big button{font-size:19px}
+#rv-stats td,#rv-stats th{font-size:12px;padding:3px 2px;vertical-align:top}
+#rv-stats .rate{white-space:nowrap}#rv-stats .rate small{display:block;color:var(--mut);font-size:11px}
+#rv-stats table{width:100%;table-layout:auto}#rv-stats td:first-child{max-width:110px}

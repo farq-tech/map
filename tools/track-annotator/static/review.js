@@ -46,14 +46,14 @@
     $('#rv-toggle').textContent = 'إخفاء الخط';
     if (!c) { finish(); return; }
     $('#rv-img').src = c.img; badge(c); draw();
-    $('#rv-why').textContent = c.detail;
+    $('#rv-why').textContent = c.detail + ((c.why || []).length ? ' · ' + c.why.slice(0, 2).join(' · ') : '');
     R.t0 = performance.now(); prog();
     // preload the next 3 cards
     R.cards.slice(R.i + 1, R.i + 4).forEach(n => { const im = new Image(); im.src = n.img; });
   }
   function prog() {
     const p = R.progress || {total: R.cards.length, done: 0, minutes_left: 0};
-    $('#rv-prog').innerHTML = `${p.done}/${p.total} بطاقة<small>≈ ${p.minutes_left} دقيقة متبقية</small>`;
+    $('#rv-prog').innerHTML = `${p.batch > 1 ? 'دفعة ' + p.batch + ' · ' : ''}${p.done}/${p.total} بطاقة<small>≈ ${p.minutes_left} دقيقة متبقية</small>`;
   }
   function finish() {
     $('#rv-img').removeAttribute('src'); svg.innerHTML = ''; $('#rv-badge').innerHTML = ''; $('#rv-actions').hidden = true;
@@ -96,7 +96,7 @@
     $('#rv-swipe-r').style.opacity = 0; $('#rv-swipe-l').style.opacity = 0;
     if (held) { R.show = $('#rv-toggle').textContent === 'إخفاء الخط'; draw(); }
     if (R.editing) return;
-    if (dx > 90) send('correct'); else if (dx < -90) openReasons(); };
+    if (dx > 90) send('correct_clear'); else if (dx < -90) openReasons(); };
   st.addEventListener('pointerup', end); st.addEventListener('pointercancel', () => { sw = null; });
 
   // ---------------------------------------------------------------- in-card editing
@@ -162,11 +162,12 @@
   // ---------------------------------------------------------------- stats panel
   async function showStats() {
     const s = await api('/api/review/stats'); const pct = x => x == null ? '—' : Math.round(x * 100) + '%';
-    const rows = Object.values(s.sources).map(v => `<tr><td>${v.label}</td><td>${v.n}</td><td>${v.approved_unedited}/${v.approved}</td><td>${v.wrong}</td><td>${v.offset}</td><td><b>${pct(v.precision_raw)}</b></td><td>${v.wilson95_raw ? pct(Math.max(0, v.wilson95_raw[0])) + '–' + pct(v.wilson95_raw[1]) : '—'}</td></tr>`).join('');
-    $('#rv-stats').innerHTML = `<button class="x" onclick="document.querySelector('#rv-stats').hidden=true">إغلاق</button><h3>دقة كل مصدر (تقدير من أحكامك)</h3>
-      <table><tr><th>المصدر</th><th>حُكم</th><th>صح (بلا تعديل/كلّه)</th><th>خطأ</th><th>منزاح</th><th>الدقة</th><th>مجال ثقة 95%</th></tr>${rows}</table>
-      <p class="muted">الدقة = نسبة ما قبلتَه كما هو. مجال Wilson يتّسع مع قلة العيّنات. المصدر «جديد غير OSM» هو الأهم لأن النموذج الحالي يعيد إنتاج OSM فقط.</p>
-      <h3>الاتساق والسرعة</h3><div class="muted">أخطاء مُزاحة رُفضت: ${s.controls.shifted_wrong_rejected} · مطابقة OSM قُبلت: ${s.controls.likely_right_accepted} · تكرار متّسق: ${s.controls.repeat_consistent}<br>
+    const rate = r => `<td class="rate"><b>${pct(r.p)}</b><small>${r.wilson95 ? pct(Math.max(0, r.wilson95[0])) + '–' + pct(r.wilson95[1]) : '—'}</small><small>${r.k}/${r.n}</small></td>`;
+    const rows = Object.values(s.sources).map(v => `<tr><td>${v.label}<small class="muted" style="display:block">${v.n} حكم · ${v.wrong + v.offset} خطأ</small></td><td>${v.clear}</td><td>${v.faint}</td><td>${v.unspecified}</td>${rate(v.strict)}${rate(v.lenient)}</tr>`).join('');
+    $('#rv-stats').innerHTML = `<button class="x" onclick="document.querySelector('#rv-stats').hidden=true">إغلاق</button><h3>دقة كل مصدر — بتعريفين</h3>
+      <table><tr><th>المصدر</th><th>واضح</th><th>ضعيف</th><th>قديم</th><th>صارم</th><th>متساهل</th></tr>${rows}</table>
+      <p class="muted"><b>صارم</b> = «✓ واضح» فقط (درب واضح والخط ضمن ≈15 م). <b>متساهل</b> = واضح + ضعيف (يوجد أثر ظاهر ولو خافت/مُزاح). النسبة تحت كل رقم: مجال Wilson 95% ثم عدد الأحكام ذات المستويين؛ «قديم» = أحكام «صح» المفردة من الدفعة الأولى (لا تُحتسب في أي تعريف)، ومجال Wilson 95% يتّسع مع قلة العيّنات.</p>
+      <h3>الاتساق والسرعة</h3><div class="muted">أخطاء مُزاحة رُفضت: ${s.controls.shifted_wrong_rejected} · مطابقة OSM قُبلت: ${s.controls.likely_right_accepted}<br>تكرار متّسق (قبول/رفض): ${s.controls.repeat_consistent} · بنفس المستوى: ${s.controls.repeat_consistent_level}<br>
       وسيط الزمن لكل بطاقة: ${s.median_seconds_per_card ?? '—'} ث · نسبة التعديل: ${pct(s.edit_rate)} · أحكام: ${s.n_verdicts}</div>`;
     $('#rv-stats').hidden = false;
   }
@@ -178,14 +179,14 @@
     R.cards = d.cards; R.i = 0; show(); return true;
   }
   window.RV = {open: async () => { $('#review').hidden = false; document.body.classList.add('rv-open'); await load(); }, close: () => { $('#review').hidden = true; document.body.classList.remove('rv-open'); }, R};
-  $('#rv-right').onclick = () => send('correct'); $('#rv-more').onclick = () => send('correct_incomplete'); $('#rv-wrong').onclick = openReasons;
+  $('#rv-right').onclick = () => send('correct_clear'); $('#rv-faint').onclick = () => send('correct_faint'); $('#rv-more').onclick = () => send('correct_clear', null, {more_tracks: true}); $('#rv-wrong').onclick = openReasons;
   $('#rv-skip').onclick = () => send('skip'); $('#rv-undo').onclick = undo; $('#rv-editbtn').onclick = startEdit; $('#rv-statsbtn').onclick = showStats;
   $('#rv-toggle').onclick = () => { R.show = !R.show; $('#rv-toggle').textContent = R.show ? 'إخفاء الخط' : 'إظهار الخط'; draw(); };
   $('#rv-exit').onclick = () => window.RV.close(); $('#to-review').onclick = () => window.RV.open();
   document.querySelectorAll('[data-et]').forEach(b => b.onclick = () => setEt(b.dataset.et));
   $('[data-et=snap]').onclick = () => { R.tool = 'snap'; document.querySelectorAll('[data-et]').forEach(x => x.classList.toggle('on', x.dataset.et === 'snap')); doSnap(); };
   $('#rv-eundo').onclick = eUndo; $('#rv-ecancel').onclick = () => show();
-  $('#rv-edone').onclick = () => send('correct', null, {line_px: R.pts, edits: R.edits});
-  document.addEventListener('keydown', e => { if ($('#review').hidden || R.editing) return; if (e.key === 'ArrowRight' || e.key === 'y') send('correct'); else if (e.key === 'ArrowLeft' || e.key === 'n') openReasons(); else if (e.key === 's') send('skip'); else if (e.key === 'z') undo(); });
+  $('#rv-edone').onclick = () => send('correct_clear', null, {line_px: R.pts, edits: R.edits});
+  document.addEventListener('keydown', e => { if ($('#review').hidden || R.editing) return; if (e.key === 'ArrowRight' || e.key === 'y') send('correct_clear'); else if (e.key === 'f') send('correct_faint'); else if (e.key === 'ArrowLeft' || e.key === 'n') openReasons(); else if (e.key === 's') send('skip'); else if (e.key === 'z') undo(); });
   if (!new URLSearchParams(location.search).has('draw')) window.RV.open();
 })();
