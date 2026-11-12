@@ -553,6 +553,7 @@ struct AdvancedSettingsView: View {
     @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.auto.rawValue
     @AppStorage(OneMapFlag.key) private var oneMap = false
     @AppStorage(NewUI.key) private var newUI = false
+    @AppStorage(CarMode.key) private var carMode = false
 
     var body: some View {
         let p = theme.palette
@@ -562,6 +563,8 @@ struct AdvancedSettingsView: View {
                               isOn: $oneMap, id: "dev.oneMap")
                 SaryToggleRow(title: NewUI.settingsTitle, subtitle: NewUI.settingsDetail, systemImage: "sparkles",
                               isOn: $newUI, id: "dev.newUI")
+                SaryToggleRow(title: CarMode.settingsTitle, subtitle: CarMode.settingsDetail, systemImage: "car.fill",
+                              isOn: $carMode, id: "dev.carMode")
             }
             SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط الموقع الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
