@@ -106,4 +106,16 @@ final class IdleMapTests: XCTestCase {
             XCTAssertTrue(inColumn.isDisjoint(with: inMore.subtracting(["drone", "realistic"])), "«أماكني» is in one place only")
         }
     }
+
+    func testTheSettingsSwitchStoresTheFlagAndIsLabelledExperimental() {
+        let d = UserDefaults(suiteName: "idle-map-switch")!
+        d.removePersistentDomain(forName: "idle-map-switch")
+        XCTAssertFalse(OneMapFlag.isOn(defaults: d, arguments: []), "off by default")
+        d.set(true, forKey: OneMapFlag.key)   // what the «متقدم» switch writes (@AppStorage on the same key)
+        XCTAssertTrue(OneMapFlag.isOn(defaults: d, arguments: []))
+        d.set(false, forKey: OneMapFlag.key)
+        XCTAssertFalse(OneMapFlag.isOn(defaults: d, arguments: []))
+        XCTAssertEqual(OneMapFlag.settingsTitle, "الخريطة الواحدة (تجريبي)")
+        XCTAssertTrue(OneMapFlag.restartNote.contains("بعد إغلاق التطبيق"), "the restart note")
+    }
 }

@@ -6,6 +6,10 @@ import Foundation
 enum OneMapFlag {
     static let key = "sary.oneMap"
     static let argument = "-SaryOneMap"
+    /// «متقدم» → the switch (the owner turns it on from TestFlight, no Terminal).
+    static let settingsTitle = "الخريطة الواحدة (تجريبي)"
+    static let settingsDetail = "تفتح التطبيق على خريطة التنقل بدل خريطة الرئيسية"
+    static let restartNote = "يسري التغيير بعد إغلاق التطبيق وفتحه من جديد. تجريبي: ارجع للإيقاف إذا لقيت شي غريب."
 
     /// UserDefaults key (TestFlight internal builds), or the launch argument (DEBUG, tests and screenshots).
     static func isOn(defaults: UserDefaults = .standard, arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
