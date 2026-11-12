@@ -334,35 +334,27 @@ struct QiblaView: View {
     }
 
     private func page(scale: CGFloat) -> some View {
-        let p = theme.palette
-        return SaryPage(title: "القبلة", close: close) {
+        SaryPage(title: "القبلة", close: close) {
             VStack(spacing: theme.space(.l)) {
                 if let c = compass.coordinate {
                     content(c, scale: scale)
                 } else {
+                    /* The app's standard states (were a bare spinner and system-styled buttons); same ids. */
                     VStack(spacing: theme.space(.m)) {
                         if compass.locationState == .locating {
-                            ProgressView()
-                            Text("ننتظر موقعك لنحسب اتجاه القبلة").saryText(.body).foregroundStyle(p.textSecondary)
+                            SaryStateView(kind: .loading("ننتظر موقعك عشان نحسب اتجاه القبلة"))
                                 .accessibilityIdentifier("qibla.waiting")
                         } else if compass.locationState == .denied {
-                            Image(systemName: "location.slash.fill").font(.system(size: 28)).foregroundStyle(p.warning)
-                            Text("اسمح للموقع لنحسب اتجاه القبلة").saryText(.body).foregroundStyle(p.textPrimary)
-                                .accessibilityIdentifier("qibla.location-denied")
-                            Button {
+                            SaryStateView(kind: .empty(title: "الموقع مقفل", message: "اسمح للموقع من الإعدادات عشان نحسب اتجاه القبلة.",
+                                                       systemImage: "location.slash.fill"),
+                                          actionTitle: "إعدادات الموقع", actionID: "qibla.open-settings", actionIcon: "gearshape.fill") {
                                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
-                            } label: {
-                                Label("إعدادات الموقع", systemImage: "gearshape.fill")
                             }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityIdentifier("qibla.open-settings")
+                            .accessibilityIdentifier("qibla.location-denied")
                         } else {
-                            Image(systemName: "location.circle").font(.system(size: 28)).foregroundStyle(p.warning)
-                            Text("ما قدرنا نحدد موقعك الآن").saryText(.body).foregroundStyle(p.textPrimary)
+                            SaryStateView(kind: .error(title: "ما قدرنا نحدد موقعك الحين", message: "اطلع لمكان مكشوف وجرّب مرة ثانية."),
+                                          actionTitle: "حاول مرة ثانية", actionID: "qibla.retry") { compass.retryLocation() }
                                 .accessibilityIdentifier("qibla.location-error")
-                            Button("حاول مرة ثانية") { compass.retryLocation() }
-                                .buttonStyle(.borderedProminent)
-                                .accessibilityIdentifier("qibla.retry")
                         }
                     }
                     .frame(maxWidth: .infinity, minHeight: Qibla.compassDesign.height * scale)

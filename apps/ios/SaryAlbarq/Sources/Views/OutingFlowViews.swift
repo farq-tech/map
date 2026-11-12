@@ -177,8 +177,7 @@ struct OutingLegTimeline: View {
                     .padding(.bottom, 6)
             }
             if legs.isEmpty {
-                Text("ما فيه مشاوير بعد. «وين رايحين؟» تبدأ أول مشوار.")
-                    .saryText(.subhead).foregroundStyle(p.textSecondary)
+                SaryInlineState(systemImage: "point.topleft.down.to.point.bottomright.curvepath", text: "ما فيه مشاوير بعد. «وين رايحين؟» تبدأ أول مشوار.")
             }
             ForEach(Array(legs.enumerated()), id: \.element.id) { i, l in
                 HStack(alignment: .top, spacing: theme.space(.m)) {
@@ -188,7 +187,7 @@ struct OutingLegTimeline: View {
                     }
                     .frame(width: 12)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(LegText.title(l)).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                        Text(LegText.title(l)).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85)
                         Text(LegText.detail(l, now: now)).saryText(.caption).foregroundStyle(p.textSecondary)
                     }
                     .padding(.bottom, 10)

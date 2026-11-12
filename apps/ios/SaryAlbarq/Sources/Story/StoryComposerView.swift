@@ -42,7 +42,7 @@ struct StoryComposerView: View {
                         Text(photos.isEmpty ? "أضف صورًا" : "غيّر الصور (\(SaryFormat.number(photos.count)))")
                             .saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
                         Spacer()
-                        Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
+                        Image(systemName: SaryIcon.disclosure).saryGlyph(13, weight: .bold, relativeTo: .footnote).foregroundStyle(p.textTertiary)
                     }
                     .frame(minHeight: theme.minTarget)
                     .contentShape(Rectangle())
@@ -159,7 +159,7 @@ struct StoryComposerView: View {
         out.sort { $0.takenAt < $1.takenAt }
         photos = out
         var notes: [String] = []
-        if outside > 0 { notes.append(outside == 1 ? "صورة واحدة ليست من وقت الطلعة، ما أضفناها." : "\(SaryFormat.number(outside)) صور ليست من وقت الطلعة، ما أضفناها.") }
+        if outside > 0 { notes.append(outside == 1 ? "صورة وحدة مو من وقت الطلعة، ما أضفناها." : "\(SaryFormat.number(outside)) صور مو من وقت الطلعة، ما أضفناها.") }
         if undated > 0 { notes.append(undated == 1 ? "صورة واحدة ما فيها وقت التقاط، ما أضفناها." : "\(SaryFormat.number(undated)) صور ما فيها وقت التقاط، ما أضفناها.") }
         photoNote = notes.isEmpty ? nil : notes.joined(separator: "\n")
         scheduleRender(debounce: false)
@@ -175,7 +175,7 @@ struct StoryComposerView: View {
         saving = true
         let r = await StoryExport.saveToPhotos(image: preview)
         saving = false
-        show(r == .saved ? "انحفظت القصة في الصور" : r == .denied ? "اسمح بإضافة الصور من الإعدادات لحفظ القصة" : "تعذّر الحفظ، حاول مرة ثانية")
+        show(r == .saved ? "انحفظت القصة في الصور" : r == .denied ? "اسمح بإضافة الصور من الإعدادات لحفظ القصة" : "ما قدرنا نحفظ، جرّب مرة ثانية")
     }
 
     @MainActor
@@ -195,7 +195,7 @@ struct StoryComposerView: View {
             try await StoryVideo.write(scene, to: url) { p in Task { @MainActor in videoProgress = p } }
             shareURL = url
         } catch {
-            show("تعذّر تجهيز الفيديو")
+            show("ما قدرنا نجهّز الفيديو، جرّب مرة ثانية")
         }
     }
 

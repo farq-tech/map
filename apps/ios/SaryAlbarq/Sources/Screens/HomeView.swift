@@ -86,10 +86,10 @@ struct OutingCard: View {
                     }
                     .frame(width: compact ? 40 : 48, height: compact ? 40 : 48)
                     VStack(alignment: .leading, spacing: compact ? 2 : 4) {
-                        Text(o.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(2).multilineTextAlignment(.leading)
+                        Text(o.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85).multilineTextAlignment(.leading)
                         HStack(spacing: 6) {
                             SaryOutingStatusPill(status: o.status)
-                            Text(o.participantsLabel).saryText(.footnote).foregroundStyle(p.textSecondary)
+                            Text(o.participantsLabel).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                             if o.role == "owner" {
                                 Image(systemName: SaryIcon.crown).saryGlyph(10).foregroundStyle(p.warningText)
                                     .accessibilityLabel(Text("أمير الطلعة"))
@@ -135,7 +135,8 @@ struct HistoryView: View {
     var body: some View {
         SaryPage(title: "الطلعات السابقة", back: back) {
             if model.history.isEmpty {
-                SaryStateView(kind: .empty(title: "ما فيه طلعات منتهية", message: "تظهر هنا بعد ما تنتهي الطلعة.", systemImage: "flag.checkered"))
+                SaryStateView(kind: .empty(title: "ما فيه طلعات منتهية", message: "كل طلعة تخلص تنحفظ هنا مع ملخصها.", systemImage: "flag.checkered"),
+                              actionTitle: "ارجع للخريطة", actionID: "history.empty.back", actionIcon: SaryIcon.back, action: back)
             }
             VStack(spacing: theme.space(.s)) {
                 ForEach(model.history) { o in OutingCard(o: o, open: { open(o.id) }, details: nil) }

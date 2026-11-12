@@ -140,7 +140,7 @@ struct PlanEditorView: View {
             if let d = destination {
                 HStack(spacing: theme.space(.s)) {
                     Image(systemName: "flag.checkered.circle.fill").foregroundStyle(Color(UIColor(rgb: PlanMapStyle.color)))
-                    Text("الوجهة: \(d.name)").saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text("الوجهة: \(d.name)").saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         .accessibilityIdentifier("plan.destinationName")
                     Spacer()
                     if canEdit {
@@ -188,7 +188,9 @@ struct PlanEditorView: View {
 
     private func tool(_ title: String, _ icon: String, id: String, active: Bool = false, disabled: Bool = false, busy: Bool = false, _ run: @escaping () -> Void) -> some View {
         Button(action: run) { SaryButtonLabel(title: title, systemImage: icon, busy: busy) }
-            .buttonStyle(.sary(active ? .primary : .secondary, width: .hug, compact: true))
+            .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+            /* Secondary even while active: «احفظ» is the one accent button; the label says «إيقاف الرسم». */
+            .accessibilityAddTraits(active ? .isSelected : [])
             .disabled(disabled || busy)
             .accessibilityIdentifier(id)
     }
@@ -302,7 +304,7 @@ struct PlanEditorView: View {
         do {
             share = try RouteFile.exportFile(name: outingName, plan: plan.plan)
             if plan.plan.hasRoute { TrackLibrary.shared.add(name: outingName, origin: .exported, points: plan.plan.points) }
-        } catch { plan.errorText = "تعذّر تجهيز الملف." }
+        } catch { plan.errorText = "ما قدرنا نجهّز الملف. جرّب مرة ثانية." }
     }
 }
 

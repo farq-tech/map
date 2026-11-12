@@ -186,7 +186,7 @@ struct PlaceResultRow: View {
             HStack(alignment: .center, spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: icon)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2)
+                    Text(name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85)
                     if let secondaryName {
                         /* Latin reads left to right inside the RTL row, small and quiet. */
                         Text(secondaryName).saryText(.caption).foregroundStyle(p.textTertiary).lineLimit(1)
@@ -218,13 +218,10 @@ struct PlaceOrderPicker: View {
     var hasPosition: Bool
 
     var body: some View {
-        Picker("ترتيب النتائج", selection: $order) {
-            ForEach(PlaceSearch.ListOrder.allCases.filter { hasPosition || $0 != .nearest }, id: \.self) { o in
-                Text(o.title).tag(o)
-            }
-        }
-        .pickerStyle(.segmented)
-        .accessibilityIdentifier("places.order")
+        /* The design system's segmented control (the system one ignored the theme and the font). */
+        SarySegmented(options: PlaceSearch.ListOrder.allCases.filter { hasPosition || $0 != .nearest }, selection: $order,
+                      label: { $0.title }, id: "places.order")
+            .accessibilityLabel(Text("ترتيب النتائج"))
     }
 }
 
@@ -251,12 +248,7 @@ struct LiveSearchSheet: View {
     var body: some View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
-            HStack {
-                Text("ابحث عن مكان").saryText(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
-                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "live.search.close", action: close)
-            }
+            SarySheetHeader(title: "ابحث عن مكان", closeID: "live.search.close", close: close)
             HStack(spacing: theme.space(.s)) {
                 Image(systemName: "magnifyingglass").foregroundStyle(p.textTertiary).accessibilityHidden(true)
                 TextField("مكان، أو إحداثية", text: $query)
@@ -270,7 +262,7 @@ struct LiveSearchSheet: View {
                      * Button itself grows the layout but not the area a finger can hit. */
                     Button { clear() } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary)
-                            .frame(minWidth: 44, minHeight: 44)
+                            .frame(minWidth: theme.minTarget, minHeight: theme.minTarget)
                             .contentShape(Rectangle())
                     }
                         .buttonStyle(.plain)
@@ -326,7 +318,7 @@ struct LiveSearchSheet: View {
                                meters: r.areaDistanceM)
                 }, id: "live.search.result")
             } else if !searching && searchError == nil {
-                Text("ما لقينا مكان بهالاسم. جرّب اسم ثاني، أو اكتب إحداثية.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                SaryInlineState(systemImage: "magnifyingglass", text: "ما لقينا مكان بهالاسم. جرّب اسم ثاني، أو اكتب إحداثية.")
             }
         }
     }

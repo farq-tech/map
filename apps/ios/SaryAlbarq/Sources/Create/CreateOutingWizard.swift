@@ -84,7 +84,7 @@ struct CreateOutingWizard: View {
         switch flow.step {
         case .destination:
             if isQuick {
-                ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+                SaryStateView(kind: .loading("نجهّز الطلعة…"))
             } else {
                 DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
                                 choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
@@ -130,7 +130,7 @@ struct CreateOutingWizard: View {
         .padding(.horizontal, theme.space(.l))
         .padding(.top, theme.space(.s))
         .padding(.bottom, theme.space(.xs))
-        .frame(maxWidth: 640)
+        .frame(maxWidth: SaryLayout.readableWidth)
         .frame(maxWidth: .infinity)
         .background(p.background.shadow(color: .black.opacity(0.12), radius: 8, y: -2).ignoresSafeArea(edges: .bottom))
         .onAppear { emphasizeStartIfReady(after: SaryMotion.enter.duration) }
@@ -342,7 +342,7 @@ private struct DestinationStep: View {
                     }
                 }
             } else if !searching && searchError == nil && text.count >= 2 {
-                Text("ما لقينا مكان بهذا الاسم. جرّب اسم ثاني أو أدخل إحداثية.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                SaryInlineState(systemImage: "magnifyingglass", text: "ما لقينا مكان بهالاسم. جرّب اسم ثاني أو اكتب إحداثية، أو اختر من الخريطة.")
             }
         }
         Button { mapOpen = true } label: { SaryButtonLabel(title: "اختر من الخريطة", systemImage: "map") }
@@ -390,7 +390,8 @@ private struct DestinationStep: View {
                 }
                 Spacer()
                 if let trailing { Text(trailing).saryNumber(.footnote).foregroundStyle(p.textTertiary) }
-                Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
+                Image(systemName: SaryIcon.disclosure).saryGlyph(13, weight: .bold, relativeTo: .footnote).foregroundStyle(p.textTertiary)
+                    .accessibilityHidden(true)
             }
             .frame(minHeight: theme.minTarget)
             .contentShape(Rectangle())
@@ -531,7 +532,7 @@ private struct CompanionsStep: View {
             HStack(spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: "flag.checkered", color: p.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(d.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(2)
+                    Text(d.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(2).minimumScaleFactor(0.85)
                     let est = weather.estimate(departure: Date())
                     Text([est.map { SaryFormat.distance(meters: $0.distanceM) }, weather.arrivalLine(departure: Date()).map { "الجو وقت وصولكم \($0)" }]
                         .compactMap { $0 }.joined(separator: " · "))
@@ -699,7 +700,7 @@ private struct WeatherStep: View {
         }
         VStack(alignment: .leading, spacing: theme.space(.s)) {
             Label("السيول والأودية", systemImage: "water.waves").saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
-            Text("لو بتنزلون قرب وادٍ: السيل قد يأتي من مطر بعيد في أعلى الوادي لا تظهره توقعات الوجهة. لا تخيّموا في بطن الوادي، وتابعوا تحذيرات \(NCM.name). غياب التنبيه هنا لا يعني الأمان.")
+            Text("لو بتنزلون قرب وادي: السيل ممكن يجي من مطر بعيد في أعلى الوادي ما تبيّنه توقعات الوجهة. لا تخيّمون في بطن الوادي، وتابعوا تحذيرات \(NCM.name). وإذا ما فيه تنبيه هنا، ترى هذا ما يعني إن المكان آمن.")
                 .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
             Link(destination: NCM.url) {
                 Text("التحذيرات الرسمية: \(NCM.name)").saryText(.footnote, weight: .bold).foregroundStyle(p.accentText)
@@ -823,7 +824,7 @@ private struct InviteStep: View {
             /* «دعوة شخصية» (build 12+): no open link — invite each person by name. */
             WizardPersonalInvites(outingId: id, outingName: flow.trimmedName)
         } else {
-            SaryBanner(text: "ما عندنا رابط الدعوة على هذا الجوال. افتح الطلعة وأنشئ رابطًا جديدًا من «الدعوة».", tone: .warning)
+            SaryBanner(text: "ما عندنا رابط الدعوة على هالجوال. افتح الطلعة وسوّ رابط جديد من «الدعوة».", tone: .warning)
         }
         Text("«ابدأ الطلعة» تحت تفتح الخريطة وتبدأ الطلعة للجميع.")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
@@ -843,7 +844,8 @@ private struct InviteStep: View {
                         .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary).rotationEffect(.degrees(180))
+                Image(systemName: SaryIcon.disclosure).saryGlyph(13, weight: .bold, relativeTo: .footnote).foregroundStyle(p.textTertiary)
+                    .accessibilityHidden(true)
             }
             .padding(theme.space(.m))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -870,6 +872,7 @@ private struct WizardPersonalInvites: View {
     private struct Inner: View {
         @StateObject var model: PersonalInvitesModel
         init(model: @autoclosure @escaping () -> PersonalInvitesModel) { _model = StateObject(wrappedValue: model()) }
-        var body: some View { PersonalInvitesSection(model: model, canLead: true) }
+        /* «ابدأ الطلعة» in the pinned bar is this step's one primary: picking a contact is secondary here. */
+        var body: some View { PersonalInvitesSection(model: model, canLead: true, pickIsPrimary: false) { EmptyView() } }
     }
 }

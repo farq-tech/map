@@ -23,9 +23,9 @@ struct PlaceBriefSection: View {
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             switch ui.phase {
             case .loading:
-                HStack(spacing: theme.space(.s)) {
-                    ProgressView()
-                    Text("نجيب طقس هذه النقطة…").saryText(.subhead).foregroundStyle(p.textSecondary)
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    SarySkeletonRow()
+                    Text("نجيب طقس هالنقطة…").saryText(.subhead).foregroundStyle(p.textSecondary)
                 }
                 .accessibilityIdentifier("brief.loading")
             case .unavailable(let m):
@@ -71,7 +71,7 @@ struct PlaceBriefSection: View {
                 HStack(alignment: .firstTextBaseline, spacing: theme.space(.s)) {
                     Text(ui.temp).saryNumber(.title, weight: .heavy).foregroundStyle(p.textPrimary)
                         .accessibilityIdentifier("brief.temp")
-                    Text(ui.condition).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(ui.condition).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                 }
                 if let f = ui.feelsLike {
                     Text(f).saryNumber(.footnote).foregroundStyle(p.textSecondary).accessibilityIdentifier("brief.feels")
@@ -144,6 +144,7 @@ struct PlaceBriefSection: View {
             }
             .foregroundStyle(p.accentText)
             .padding(.vertical, theme.space(.xs))
+            .frame(minHeight: theme.minTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -228,7 +229,7 @@ private struct AssessmentView: View {
             }
             if let n = a.note { Text(n).saryNumber(.caption).foregroundStyle(p.warningText) }
             if !compact {
-                Text("تقدير من أرقام التوقعات، ليس تحذيرًا رسميًا. التحذيرات: \(NCM.name).").saryText(.caption).foregroundStyle(p.textTertiary)
+                Text("تقدير من أرقام التوقعات، مو تحذير رسمي. التحذيرات الرسمية: \(NCM.name).").saryText(.caption).foregroundStyle(p.textTertiary)
             }
         }
         .padding(theme.space(.m))

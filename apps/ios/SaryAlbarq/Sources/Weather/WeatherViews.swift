@@ -43,8 +43,8 @@ struct WeatherCardView: View {
             header
             switch ui.phase {
             case .loading:
-                HStack(spacing: theme.space(.s)) {
-                    ProgressView()
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    SarySkeletonRow()
                     Text("نجيب الطقس…").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
                 }
             case .unavailable(let m):
@@ -74,7 +74,8 @@ struct WeatherCardView: View {
             Text(ui.title).saryText(.caption, weight: .bold).foregroundStyle(theme.palette.textSecondary).lineLimit(1)
             Spacer(minLength: 4)
             if tap != nil {
-                Image(systemName: SaryIcon.disclosure).font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
+                Image(systemName: SaryIcon.disclosure).saryGlyph(12, weight: .bold, relativeTo: .footnote).foregroundStyle(theme.palette.textTertiary)
+                    .accessibilityHidden(true)
             }
         }
     }
@@ -90,7 +91,7 @@ struct WeatherCardView: View {
                 Text(ui.nowLabel).saryText(.caption, weight: .bold).foregroundStyle(ui.stale ? p.warningText : p.textSecondary)
                 HStack(alignment: .firstTextBaseline, spacing: theme.space(.s)) {
                     Text(ui.temp).saryNumber(.title, weight: .heavy).foregroundStyle(p.textPrimary)
-                    Text(ui.condition).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(ui.condition).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                 }
             }
             Spacer(minLength: 0)
@@ -228,7 +229,19 @@ struct WeatherSheet: View {
 
     var body: some View {
         let p = theme.palette
-        NavigationStack {
+        /* The app's one sheet header (was the system navigation bar with a text «خلاص»). */
+        VStack(spacing: 0) {
+            SarySheetHeader(title: "الطقس", closeID: "weather.close", close: close, trailing: {
+                if weather.area.refreshing {
+                    ProgressView().frame(width: theme.minTarget, height: theme.minTarget)
+                } else {
+                    SaryIconButton(systemImage: SaryIcon.retry, label: "حدّث", id: "weather.refresh") {
+                        Task { await weather.refresh(force: true); now = Date() }
+                    }
+                }
+            })
+            .padding(.horizontal, theme.space(.l))
+            .padding(.top, theme.space(.m))
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     if weather.destinationPoint != nil {
@@ -252,21 +265,8 @@ struct WeatherSheet: View {
                 }
                 .padding(theme.space(.l))
             }
-            .background(p.elevated.ignoresSafeArea())
-            .navigationTitle("الطقس")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("خلاص", action: close).accessibilityIdentifier("weather.close")
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await weather.refresh(force: true); now = Date() } } label: {
-                        if weather.area.refreshing { ProgressView() } else { Image(systemName: SaryIcon.retry) }
-                    }
-                    .accessibilityLabel(Text("حدّث"))
-                }
-            }
         }
+        .background(p.elevated.ignoresSafeArea())
         .task {
             await weather.refresh(force: false)
             now = Date()
@@ -356,7 +356,10 @@ struct WeatherPointSheet: View {
 
     var body: some View {
         let p = theme.palette
-        NavigationStack {
+        VStack(spacing: 0) {
+            SarySheetHeader(title: "الطقس هنا", closeID: "weather.point.close", close: close)
+                .padding(.horizontal, theme.space(.l))
+                .padding(.top, theme.space(.m))
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     WeatherCardView(ui: WeatherPresenter.card(title: point.name.isEmpty ? "الطقس هنا" : "الطقس في \(point.name)", report: store.report,
@@ -369,11 +372,8 @@ struct WeatherPointSheet: View {
                 }
                 .padding(theme.space(.l))
             }
-            .background(p.elevated.ignoresSafeArea())
-            .navigationTitle("الطقس هنا")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("خلاص", action: close) } }
         }
+        .background(p.elevated.ignoresSafeArea())
         .task { await store.update(WeatherArea(point: point.lat, lng: point.lng)) }
     }
 }
