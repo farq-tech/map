@@ -308,7 +308,7 @@ struct LiveOutingScreen: View {
                         /* The hint in the middle; a small walkie-talkie stays reachable (UI-AUDIT م3). */
                         HStack(alignment: .center, spacing: theme.space(.s)) {
                             Spacer(minLength: 0)
-                            Text("اضغط على أي مكان بالخريطة عشان تشوف بريفه")
+                            Text("اضغط على أي مكان بالخريطة عشان تشوف معلوماته")
                                 .saryText(.caption, weight: .medium)
                                 .foregroundStyle(theme.palette.textSecondary)
                                 .multilineTextAlignment(.center)
