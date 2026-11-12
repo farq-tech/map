@@ -1,13 +1,15 @@
 import SwiftUI
 
-/// «الطبقات»: the shared layers sheet (docs/ONE-MAP-UNIFICATION.md §6). The base-map cards are generated
-/// from `MapLayerRegistry`; the data sections below them are still the existing ones (S3 moves them in).
-/// S2: used inside Explore only. Same accessibility identifiers as the old `ExploreLayersSheet`.
+/// «الطبقات»: the shared layers sheet (docs/ONE-MAP-UNIFICATION.md §6). The base-map cards AND the data layers
+/// (weather, camp sites, OSM tracks, Qibla, high-res imagery, 3D terrain) are generated from `MapLayerRegistry`;
+/// only the action rows (camp suggestion, desert route, realistic mode, offline maps) are written by hand.
+/// Same accessibility identifiers as the old `ExploreLayersSheet`, so every existing UI test keeps working.
 struct MapLayersSheet: View {
     @ObservedObject var controller: LiveOutingController
     var mode: MapLayerMode = .explore
     @ObservedObject private var registry = MapLayerRegistry.shared
     @ObservedObject private var offline = OfflineMaps.shared
+    @ObservedObject private var weather = WeatherLayers.shared
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -47,27 +49,178 @@ struct MapLayersSheet: View {
                     .accessibilityIdentifier(row.testID)
                 }
             }
-            switches
-            ExploreLayerSections(controller: controller)
+            ForEach(MapLayersSheetModel.sections(registry: registry, mode: mode)) { section in
+                sectionView(section)
+            }
+            actionSections
         }
-        .onAppear { offline.reload(); registry.reload() }
+        .onAppear { offline.reload(); MapLayerOwners.pull(registry, controller: controller) }
+        .onReceive(MapLayerOwners.changes(controller: controller)) { MapLayerOwners.pull(registry, controller: controller) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("explore.layers.sheet")
     }
 
-    /// Registered non-base layers (none yet): one switch each, in catalog order.
-    @ViewBuilder private var switches: some View {
-        let extra = MapLayersSheetModel.switchLayers(registry: registry, mode: mode)
-        if !extra.isEmpty {
-            SarySection(title: "طبقات إضافية") {
-                ForEach(extra) { d in
-                    SaryToggleRow(title: d.title, subtitle: d.detail.isEmpty ? nil : d.detail, systemImage: d.systemImage,
-                                  isOn: Binding(get: { registry.isActive(d.id) }, set: { registry.setActive(d.id, $0) }),
-                                  id: "layer.\(d.id.rawValue)")
-                        .padding(.horizontal, theme.space(.m))
+    // MARK: Generated sections
+
+    @ViewBuilder private func sectionView(_ section: MapLayerSection) -> some View {
+        SarySection(title: section.title, footer: footer(for: section)) {
+            switch section.style {
+            case .singleSelect: singleSelect(section)
+            case .switches:
+                VStack(spacing: theme.space(.s)) {
+                    ForEach(section.rows) { r in
+                        if r.id == MapLayerCatalog.terrain.id {
+                            terrainRow(r)
+                        } else {
+                            SaryToggleRow(title: r.title, subtitle: r.detail.isEmpty ? nil : r.detail, systemImage: r.systemImage,
+                                          isOn: Binding(get: { registry.isActive(r.id) }, set: { toggle(r.id, $0) }), id: r.testID)
+                                .padding(.horizontal, theme.space(.m))
+                        }
+                        if r.id == MapLayerCatalog.camp.id {
+                            SaryNavRow(title: "اقترح لي مكان كشتة", detail: "أفضل خمسة مواقع وطقس الليلة", systemImage: "tent", id: "explore-camp-suggest") {
+                                controller.performAction("camp")
+                            }
+                            .padding(.horizontal, theme.space(.m))
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /// 3D terrain keeps its button look («شغّال/طافي») and its identifier, as before.
+    private func terrainRow(_ r: MapLayerSwitchRow) -> some View {
+        let p = theme.palette
+        let on = registry.isActive(r.id)
+        return Button { toggle(r.id, !on) } label: {
+            HStack(spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: r.systemImage, color: on ? p.accent : nil)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(r.title).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                    Text(r.detail).saryText(.footnote).foregroundStyle(p.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(on ? "شغّال" : "طافي")
+                    .saryText(.footnote, weight: .bold)
+                    .foregroundStyle(on ? p.onAccent : p.textSecondary)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Capsule().fill(on ? p.accent : p.sunken))
+            }
+            .frame(minHeight: theme.minTarget)
+            .padding(.vertical, theme.space(.xs))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryRowPressStyle())
+        .padding(.horizontal, theme.space(.m))
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(Text(on ? "شغّال" : "طافي"))
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+        .accessibilityIdentifier(r.testID)
+    }
+
+    /// Weather: «بدون» + one row per registered kind, one at a time, and the rain period under «وين نزل مطر».
+    private func singleSelect(_ section: MapLayerSection) -> some View {
+        let p = theme.palette
+        return VStack(spacing: 0) {
+            /* «بدون» first, as in the old sheet. */
+            if let off = section.off {
+                optionRow(title: off.title, detail: off.detail, systemImage: off.systemImage, on: off.isSelected, id: off.testID) {
+                    if let current = section.rows.first(where: { $0.isOn }) { toggle(current.id, false) }
+                }
+            }
+            if section.off != nil { SaryDivider() }
+            ForEach(Array(section.rows.enumerated()), id: \.element.id) { i, r in
+                optionRow(title: r.title, detail: r.detail, systemImage: r.systemImage, on: r.isOn, id: r.testID) { toggle(r.id, true) }
+                if MapLayerCatalog.weatherKind(r.id) == .rain && r.isOn {
+                    SarySegmented(options: WeatherLayers.allowedDays, selection: $weather.rainDays,
+                                  label: { WeatherLayers.daysLabel($0) }, optionID: { "weather.rain.days.\($0)" })
+                        .padding(.bottom, theme.space(.s))
+                }
+                if i < section.rows.count - 1 { SaryDivider() }
+            }
+        }
+        .padding(.horizontal, theme.space(.m))
+        .foregroundStyle(p.textPrimary)
+    }
+
+    private func optionRow(title: String, detail: String, systemImage: String, on: Bool, id: String, action: @escaping () -> Void) -> some View {
+        let p = theme.palette
+        return Button(action: action) {
+            HStack(spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: systemImage, color: on ? p.accent : p.textTertiary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                    Text(detail).saryText(.footnote).foregroundStyle(p.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(on ? p.accent : p.textTertiary)
+            }
+            .frame(minHeight: theme.minTarget)
+            .padding(.vertical, theme.space(.xs))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryRowPressStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+        .accessibilityIdentifier(id)
+    }
+
+    /// Sources and licences stay next to the layers they belong to.
+    private func footer(for section: MapLayerSection) -> String? {
+        switch section.id {
+        case "group.الطقس": return WeatherLayersSection.footer(for: weather.kind)
+        case "category.data":
+            var parts: [String] = []
+            if section.rows.contains(where: { $0.id == MapLayerCatalog.camp.id }) {
+                parts.append("\(CampReason.estimateNote). مواقع مرشحة من صور أقمار وبيانات مفتوحة (الثمامة، الدهناء، النفود)، بعيدة عن مجاري السيول والسبخات والعمران. \(CampReason.legalNote).")
+            }
+            if section.rows.contains(where: { $0.id == MapLayerCatalog.osmTracks.id }) {
+                parts.append("مسارات البر: طبعات البر من بيانات OpenStreetMap، تظهر من تقريب متوسط في الاستكشاف وأثناء القيادة خارج الطرق. \(OffroadTracks.attribution)")
+            }
+            return parts.isEmpty ? nil : parts.joined(separator: "\n")
+        case "category.terrain":
+            return section.rows.contains(where: { $0.id == MapLayerCatalog.terrain.id })
+                ? "الارتفاع عند علامة الوسط من نموذج الارتفاع، ويظهر «غير متاح» لين تنزل بيانات المنطقة." : nil
+        default: return nil
+        }
+    }
+
+    // MARK: Actions (not layers)
+
+    @ViewBuilder private var actionSections: some View {
+        SarySection(title: "دروب البر", footer: "اختر مسارًا مقترحًا للوجهة من بيانات صور الأقمار. تظهر الخيارات عند تحديد وجهة للطلعة.") {
+            SaryNavRow(title: "مسار برّي إلى الوجهة", detail: "الأسهل أو المتوازن أو الأقصر",
+                       systemImage: "point.topleft.down.to.point.bottomright.filled.curvepath", id: "explore-desert-route") {
+                controller.performAction("desertRoute")
+            }
+            .padding(.horizontal, theme.space(.m))
+        }
+        SarySection(title: "الوضع الواقعي", footer: "مدن مجسّمة بصور Apple، وأنت واقف (مو أثناء القيادة).") {
+            SaryNavRow(title: "الوضع الواقعي", detail: "شوف المكان مجسّم من فوق", systemImage: RealisticEntryButton.icon, id: "explore-realistic") {
+                controller.modal = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.realisticRequest += 1 }
+            }
+            .padding(.horizontal, theme.space(.m))
+        }
+        SarySection(title: "بلا إنترنت") {
+            SaryNavRow(title: "الخرائط بلا إنترنت",
+                       detail: offline.completeAreas > 0
+                           ? "\(SaryFormat.number(offline.completeAreas)) منطقة محفوظة · \(SaryFormat.number(offline.topoAreas)) منها مع الطبوغرافي"
+                           : "ما حفظت مناطق بعد",
+                       systemImage: "arrow.down.circle.fill", id: "explore-offline") {
+                controller.modal = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.modal = .offlineMaps }
+            }
+            .padding(.horizontal, theme.space(.m))
+        }
+    }
+
+    /// A data layer on/off: the registry stores it (under the key the app always used), then the object that draws it is told.
+    private func toggle(_ id: MapLayerID, _ on: Bool) {
+        registry.setActive(id, on)
+        MapLayerOwners.push(registry, controller: controller)
     }
 
     /// The registry keeps the stored choice; the controller keeps driving the live map (it also writes

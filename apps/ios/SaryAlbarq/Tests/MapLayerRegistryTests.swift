@@ -52,8 +52,8 @@ final class MapLayerRegistryTests: XCTestCase {
         let layers = MapLayerCatalog.all + [extra]
         XCTAssertEqual(MapLayerCatalogCheck.issues(layers), [])
         let r = registry(layers)
-        XCTAssertEqual(r.layers(in: .explore, category: .overlay).map(\.id), ["overlay.test"])
-        XCTAssertTrue(r.layers(in: .home, category: .overlay).isEmpty, "availableIn filters the sheet rows")
+        XCTAssertTrue(r.layers(in: .explore, category: .overlay).map(\.id).contains("overlay.test"))
+        XCTAssertFalse(r.layers(in: .home, category: .overlay).map(\.id).contains("overlay.test"), "availableIn filters the sheet rows")
         XCTAssertEqual(r.layers(in: .explore, category: .base).count, 3)
     }
 
@@ -77,7 +77,7 @@ final class MapLayerRegistryTests: XCTestCase {
     func testDefaultIsSatelliteAndNothingIsWrittenOnRead() {
         let r = registry()
         XCTAssertEqual(r.activeBase, "base.satellite")
-        XCTAssertEqual(r.active, ["base.satellite"])
+        XCTAssertEqual(r.active.filter { $0.rawValue.hasPrefix("base.") }, ["base.satellite"])
         XCTAssertNil(suite.object(forKey: "sary.map.layer.v1"), "reading never writes")
     }
 
@@ -88,7 +88,7 @@ final class MapLayerRegistryTests: XCTestCase {
             r.setActive(MapLayerCatalog.baseID(l))
             XCTAssertEqual(suite.string(forKey: MapLayer.key), l.rawValue)
             XCTAssertEqual(r.activeBase, MapLayerCatalog.baseID(l))
-            XCTAssertEqual(r.active.count, 1, "base layers are exclusive")
+            XCTAssertEqual(r.active.filter { $0.rawValue.hasPrefix("base.") }.count, 1, "base layers are exclusive")
         }
         // Legacy writes -> a fresh registry reads.
         for l in MapLayer.allCases {

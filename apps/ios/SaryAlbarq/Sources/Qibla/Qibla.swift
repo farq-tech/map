@@ -316,7 +316,7 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
 /// The «القبلة» sheet: an arrow to the Kaaba over a compass rose turning with the phone.
 struct QiblaView: View {
     @StateObject private var compass: QiblaCompass
-    @AppStorage("sary.map.qibla.visible.v1") private var showDirectionOnMap = true
+    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showDirectionOnMap = true
     var close: () -> Void
     @Environment(\.sary) private var theme
     /// Facing the Qibla (`Qibla.aligned`, with hysteresis).

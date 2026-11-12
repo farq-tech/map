@@ -4,9 +4,9 @@ import XCTest
 final class LayersSheetUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    private func open(_ extra: [String] = [], scheme: String = "light") -> XCUIApplication {
+    private func open(_ extra: [String] = [], scheme: String = "light", reset: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryScheme", scheme,
+        app.launchArguments = (reset ? ["-resetState"] : []) + ["-demo", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryScheme", scheme,
                                "-SaryDrive", "0", "-SaryContext", "stopped", "-SaryExplore", "-SaryLiveModal", "layers"] + extra
         app.launch()
         app.allowLocationIfAsked()
@@ -101,4 +101,55 @@ final class LayersSheetUITests: XCTestCase {
     func testLargeDetentDark() { largeDetent([], prefix: "after", scheme: "dark") }
     func testLargeDetentLegacyLight() { largeDetent(["-SaryLegacyLayersSheet"], prefix: "legacy", scheme: "light") }
     func testLargeDetentLegacyDark() { largeDetent(["-SaryLegacyLayersSheet"], prefix: "legacy", scheme: "dark") }
+
+    // MARK: S3 — the data layers come from the registry and each toggle still works
+
+    /// Every id the old sheet had for its data rows is still there (same identifiers), plus the new Qibla switch.
+    func testDataLayersAreListedWithTheOldIdentifiers() {
+        let app = open()
+        let page = app.scrollViews.firstMatch
+        for id in ["weather.layer.none", "weather.layer.clouds", "weather.layer.rain", "weather.layer.wind", "weather.layer.green",
+                   "explore-camp-sites", "explore-osm-tracks", "explore-qibla", "explore-hires", "explore-terrain3d", "explore-offline"] {
+            var found = el(app, id).exists
+            for _ in 0..<10 where !found { page.swipeUp(velocity: .slow); found = el(app, id).exists }
+            XCTAssertTrue(found, "\(id) is listed")
+        }
+    }
+
+    /// Each switch flips with a real tap and the choice survives a relaunch (same stored keys as before).
+    func testEveryDataSwitchFlipsAndPersistsAcrossRelaunch() {
+        var app = open()
+        sleep(1)
+        let ids = ["explore-camp-sites", "explore-osm-tracks", "explore-qibla", "explore-hires"]
+        var flipped: [String: String] = [:]
+        for id in ids {
+            let sw = app.switches[id].firstMatch
+            XCTAssertTrue(sw.waitForExistence(timeout: 8), id)
+            sw.scrollIntoView(in: app, margin: 120)
+            XCTAssertTrue(sw.isHittable, "\(id) on screen")
+            let before = sw.value as? String ?? ""
+            sw.tap()
+            sleep(1)
+            let after = sw.value as? String ?? ""
+            XCTAssertNotEqual(after, before, "\(id) flips with a tap")
+            flipped[id] = after
+        }
+        let terrain = app.buttons["explore-terrain3d"].firstMatch
+        terrain.scrollIntoView(in: app, margin: 120)
+        XCTAssertTrue(terrain.isHittable)
+        let wasOn = (terrain.value as? String) == "شغّال"
+        terrain.tap()
+        sleep(1)
+        XCTAssertEqual((terrain.value as? String) == "شغّال", !wasOn, "3D terrain flips")
+        shot("data-switches-flipped")
+        app.terminate()
+
+        app = open(reset: false)
+        for id in ids {
+            let sw = app.switches[id].firstMatch
+            XCTAssertTrue(sw.waitForExistence(timeout: 8), id)
+            sw.scrollIntoView(in: app, margin: 120)
+            XCTAssertEqual(sw.value as? String, flipped[id], "\(id) kept its value after a relaunch")
+        }
+    }
 }

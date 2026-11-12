@@ -67,7 +67,7 @@ struct MapHomeScreen: View {
     /// Where I am before any trip (the live sharer only runs during one).
     @StateObject private var locator = OneShotLocator()
     @ObservedObject private var saved = SavedPlacesStore.shared
-    @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
+    @AppStorage(MapLayerCatalog.qiblaVisibleKey) private var showQiblaOnMap = true
     /// «دروب البر» opened from here: drawn on this map while its sheet is open.
     @ObservedObject private var desertRoutes = DesertRoutesHub.shared
 

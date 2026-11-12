@@ -44,9 +44,10 @@ final class MapLayersSheetModelTests: XCTestCase {
         let extra = MapLayerDescriptor(id: "overlay.test", title: "طبقة تجريبية", systemImage: "star", category: .overlay,
                                        persistence: .flag(key: "sary.map.layer.overlay.test.v1"), availableIn: [.explore])
         let r = MapLayerRegistry(layers: MapLayerCatalog.all + [extra], defaults: suite)
-        XCTAssertEqual(MapLayersSheetModel.switchLayers(registry: r, mode: .explore).map(\.id), ["overlay.test"])
-        XCTAssertTrue(MapLayersSheetModel.switchLayers(registry: r, mode: .home).isEmpty)
-        XCTAssertTrue(MapLayersSheetModel.switchLayers(registry: MapLayerRegistry(defaults: suite), mode: .explore).isEmpty, "none registered yet")
+        XCTAssertTrue(MapLayersSheetModel.switchLayers(registry: r, mode: .explore).map(\.id).contains("overlay.test"))
+        XCTAssertFalse(MapLayersSheetModel.switchLayers(registry: r, mode: .home).map(\.id).contains("overlay.test"))
+        let section = MapLayersSheetModel.sections(registry: r, mode: .explore).first { $0.id == "category.overlay" }
+        XCTAssertEqual(section?.rows.map(\.id), ["overlay.test"], "an unknown overlay gets its own section with no sheet change")
         XCTAssertEqual(MapLayersSheetModel.baseRows(registry: r, mode: .home, areas: 0, topoAreas: 0).count, 3)
     }
 }

@@ -26,10 +26,17 @@ enum MapLayerPersistence: Hashable {
     case choice(key: String, value: String)
     /// An independent switch stored as a Bool under its own key (`sary.map.layer.<id>.v1`).
     case flag(key: String)
+    /// Like `.choice`, but the whole group may be off: the key holds `off` when no member is chosen
+    /// (the weather overlays: `sary.map.weather.v1` = none | clouds | rain | wind | green).
+    case optionalChoice(key: String, value: String, off: String)
+    /// Not stored: the owner of the state (the live map) resets it per screen (3D terrain). The registry only
+    /// remembers it in memory so the sheet and the map agree while the app runs.
+    case session(name: String)
 
     var key: String {
         switch self {
-        case let .choice(key, _), let .flag(key): return key
+        case let .choice(key, _), let .flag(key), let .optionalChoice(key, _, _): return key
+        case let .session(name): return "session.\(name)"
         }
     }
 }
@@ -49,15 +56,21 @@ struct MapLayerDescriptor: Identifiable, Hashable {
     let persistence: MapLayerPersistence
     let availableIn: Set<MapLayerMode>
     let needsNetwork: Bool
+    /// Title of the single-select group this layer belongs to (weather); nil for an independent switch.
+    let groupTitle: String?
+    /// The row's accessibility identifier; the ones the layers sheet already had keep working.
+    let accessibilityID: String
 
     var storageKey: String { persistence.key }
 
     init(id: MapLayerID, title: String, detail: String = "", systemImage: String, category: MapLayerCategory,
          defaultOn: Bool = false, conflicts: Set<MapLayerID> = [], persistence: MapLayerPersistence,
-         availableIn: Set<MapLayerMode> = Set(MapLayerMode.allCases), needsNetwork: Bool = false) {
+         availableIn: Set<MapLayerMode> = Set(MapLayerMode.allCases), needsNetwork: Bool = false,
+         groupTitle: String? = nil, accessibilityID: String? = nil) {
         self.id = id; self.title = title; self.detail = detail; self.systemImage = systemImage; self.category = category
         self.defaultOn = defaultOn; self.conflicts = conflicts; self.persistence = persistence
         self.availableIn = availableIn; self.needsNetwork = needsNetwork
+        self.groupTitle = groupTitle; self.accessibilityID = accessibilityID ?? "layer.\(id.rawValue)"
     }
 }
 
@@ -70,6 +83,7 @@ enum MapLayerCatalogCheck {
         if ids.count != layers.count { out.append("duplicate layer id") }
         var seenFlagKeys = Set<String>()
         var seenChoice = Set<String>()
+        var seenSession = Set<String>()
         for l in layers {
             if l.title.trimmingCharacters(in: .whitespaces).isEmpty { out.append("\(l.id.rawValue): empty title") }
             if l.availableIn.isEmpty { out.append("\(l.id.rawValue): no mode") }
@@ -78,11 +92,27 @@ enum MapLayerCatalogCheck {
             switch l.persistence {
             case let .flag(key): if !seenFlagKeys.insert(key).inserted { out.append("\(l.id.rawValue): duplicate key \(key)") }
             case let .choice(key, value): if !seenChoice.insert("\(key)=\(value)").inserted { out.append("\(l.id.rawValue): duplicate choice \(key)=\(value)") }
+            case let .optionalChoice(key, value, off):
+                if !seenChoice.insert("\(key)=\(value)").inserted { out.append("\(l.id.rawValue): duplicate choice \(key)=\(value)") }
+                if value == off { out.append("\(l.id.rawValue): off value equals a member value") }
+            case let .session(name): if !seenSession.insert(name).inserted { out.append("\(l.id.rawValue): duplicate session name \(name)") }
             }
         }
         // A key is either a choice group or a flag, never both.
         let choiceKeys = Set(layers.compactMap { l -> String? in if case let .choice(k, _) = l.persistence { return k } else { return nil } })
-        if !choiceKeys.isDisjoint(with: seenFlagKeys) { out.append("a key is used as both choice and flag") }
+        let optionalKeys = Set(layers.compactMap { l -> String? in if case let .optionalChoice(k, _, _) = l.persistence { return k } else { return nil } })
+        if !choiceKeys.isDisjoint(with: seenFlagKeys) || !optionalKeys.isDisjoint(with: seenFlagKeys) || !choiceKeys.isDisjoint(with: optionalKeys) {
+            out.append("a key is used as both choice and flag")
+        }
+        // An optional group has at most one default, and one shared off value that no member uses.
+        for key in optionalKeys {
+            let group = layers.filter { if case let .optionalChoice(k, _, _) = $0.persistence { return k == key } else { return false } }
+            if group.filter(\.defaultOn).count > 1 { out.append("optional group \(key): more than one default") }
+            let offs = Set(group.compactMap { l -> String? in if case let .optionalChoice(_, _, o) = l.persistence { return o } else { return nil } })
+            if offs.count != 1 { out.append("optional group \(key): members disagree on the off value") }
+            let values = Set(group.compactMap { l -> String? in if case let .optionalChoice(_, v, _) = l.persistence { return v } else { return nil } })
+            if !offs.isDisjoint(with: values) { out.append("optional group \(key): off value is also a member value") }
+        }
         // Exactly one default per choice group.
         for key in choiceKeys {
             let defaults = layers.filter { if case let .choice(k, _) = $0.persistence { return k == key && $0.defaultOn } else { return false } }
@@ -102,6 +132,8 @@ final class MapLayerRegistry: ObservableObject {
     let layers: [MapLayerDescriptor]
     private let defaults: UserDefaults
     @Published private(set) var active: Set<MapLayerID> = []
+    /// State of `.session` layers (not stored; lives as long as the app runs).
+    private var sessionOn: Set<MapLayerID> = []
 
     init(layers: [MapLayerDescriptor] = MapLayerCatalog.all, defaults: UserDefaults = .standard) {
         self.layers = layers
@@ -125,13 +157,26 @@ final class MapLayerRegistry: ObservableObject {
     func reload() {
         var on = Set<MapLayerID>()
         var choiceKeys: [String] = []
+        var optionalKeys: [String] = []
         for l in layers {
             switch l.persistence {
             case let .flag(key):
                 if (defaults.object(forKey: key) as? Bool ?? l.defaultOn) { on.insert(l.id) }
             case let .choice(key, _):
                 if !choiceKeys.contains(key) { choiceKeys.append(key) }
+            case let .optionalChoice(key, _, _):
+                if !optionalKeys.contains(key) { optionalKeys.append(key) }
+            case .session:
+                if sessionOn.contains(l.id) { on.insert(l.id) }
             }
+        }
+        for key in optionalKeys {
+            let group = layers.filter { if case let .optionalChoice(k, _, _) = $0.persistence { return k == key } else { return false } }
+            let stored = defaults.string(forKey: key)
+            if let stored {
+                // A stored off value (or anything unknown) means the whole group is off.
+                if let chosen = group.first(where: { if case let .optionalChoice(_, v, _) = $0.persistence { return v == stored } else { return false } }) { on.insert(chosen.id) }
+            } else if let d = group.first(where: \.defaultOn) { on.insert(d.id) }
         }
         for key in choiceKeys {
             let group = layers.filter { if case let .choice(k, _) = $0.persistence { return k == key } else { return false } }
@@ -153,6 +198,12 @@ final class MapLayerRegistry: ObservableObject {
         case let .flag(key):
             defaults.set(isOn, forKey: key)
             if isOn { for c in l.conflicts { if let other = descriptor(c) { switchOff(other) } } }
+        case let .optionalChoice(key, value, off):
+            if isOn { defaults.set(value, forKey: key) }
+            else if active.contains(id) { defaults.set(off, forKey: key) }
+        case .session:
+            if isOn { sessionOn.insert(id) } else { sessionOn.remove(id) }
+            if isOn { for c in l.conflicts { if let other = descriptor(c), case .session = other.persistence { sessionOn.remove(c) } } }
         }
         reload()
     }
@@ -160,5 +211,10 @@ final class MapLayerRegistry: ObservableObject {
     private func switchOff(_ l: MapLayerDescriptor) {
         if case let .flag(key) = l.persistence { defaults.set(false, forKey: key) }
         // A choice conflict is resolved by choosing this layer's own value (same key).
+    }
+
+    /// The chosen member of a single-select group (weather), by its group title; nil when the group is off.
+    func chosen(inGroup title: String) -> MapLayerID? {
+        layers.first { $0.groupTitle == title && active.contains($0.id) }?.id
     }
 }
