@@ -96,7 +96,10 @@ final class NewHomeUITests: XCTestCase {
         let elev = el(app, "home.place.elevation")
         XCTAssertTrue(elev.waitForExistence(timeout: 15), "the picked spot's card")
         XCTAssertTrue(waitLabel(elev, containing: "الارتفاع", timeout: 12), elev.label)
-        XCTAssertTrue(elev.label.contains("٫"), "coordinates with «٫»: \(elev.label)")
+        /* The coordinates are the card's subtitle (Arabic digits, «٫»), once; the elevation line adds only the elevation then. */
+        let coords = el(app, "home.place").staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "٫")).firstMatch
+        XCTAssertTrue(coords.waitForExistence(timeout: 5), "the coordinates with «٫» on the card")
+        XCTAssertFalse(coords.label.contains(",") || coords.label.contains("."), coords.label)
         shot("point-card")
     }
 

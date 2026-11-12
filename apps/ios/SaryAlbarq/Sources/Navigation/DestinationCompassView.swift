@@ -272,6 +272,7 @@ struct DestinationCompassView: View {
     @State private var listHeight: CGFloat = 300
     /// The dial's top edge on the screen: the open list may grow up to the maneuver card, never over it.
     @State private var dialTop: CGFloat = 600
+    @State private var rowsHeight: CGFloat = 300
 
     static let dial: CGFloat = 120
 
@@ -345,9 +346,13 @@ struct DestinationCompassView: View {
     private var targetList: some View {
         let p = theme.palette
         let safeTop = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }.first ?? 59
-        return ScrollView(.vertical, showsIndicators: false) { listRows(p) }
-            .frame(maxHeight: Self.maxListHeight(dialTop: dialTop, safeTop: safeTop))
-            .fixedSize(horizontal: false, vertical: true)
+        /* The rows' own height is measured, then the box is that tall or the room above the dial, whichever is less (a `ScrollView`
+         * under `fixedSize` ignored the cap). */
+        return ScrollView(.vertical, showsIndicators: false) {
+            listRows(p).background(GeometryReader { g in Color.clear.preference(key: CompassRowsHeightKey.self, value: g.size.height) })
+        }
+        .onPreferenceChange(CompassRowsHeightKey.self) { rowsHeight = $0 }
+        .frame(height: min(rowsHeight, Self.maxListHeight(dialTop: dialTop, safeTop: safeTop)))
     }
 
     private func listRows(_ p: SaryPalette) -> some View {
@@ -493,5 +498,10 @@ private struct CompassListHeightKey: PreferenceKey {
 
 private struct CompassDialTopKey: PreferenceKey {
     static var defaultValue: CGFloat = 600
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct CompassRowsHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 300
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
