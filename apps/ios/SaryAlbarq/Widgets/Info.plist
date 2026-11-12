@@ -23,6 +23,7 @@
 	<!-- Huwiya, the app's Arabic typeface, bundled in the extension too. -->
 	<key>UIAppFonts</key>
 	<array>
+		<string>itfHuwiyaArabic-Light.otf</string>
 		<string>itfHuwiyaArabic-Regular.otf</string>
 		<string>itfHuwiyaArabic-Medium.otf</string>
 		<string>itfHuwiyaArabic-Bold.otf</string>
