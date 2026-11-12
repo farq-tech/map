@@ -152,11 +152,11 @@ struct GroupAudioSheet: View {
         let p = theme.palette
         VStack(spacing: theme.space(.m)) {
             HStack {
-                Text("إذاعة الطلعة").saryText(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
+                Text("إذاعة الطلعة").saryText(.title2).foregroundStyle(p.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("radio.sheet")
                 Spacer()
-                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "radio.close", visual: 36) { dismiss() }
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "radio.close") { dismiss() }
             }
             ScrollView {
                 VStack(spacing: theme.space(.m)) {
@@ -301,12 +301,14 @@ private struct StationList: View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             if center.stations.isEmpty {
-                HStack(spacing: theme.space(.s)) {
-                    ProgressView()
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    SarySkeletonRow()
+                    SarySkeletonRow()
                     Text("نجيب قائمة الإذاعات…").saryText(.callout).foregroundStyle(p.textSecondary)
+                        .padding(.horizontal, theme.space(.m))
                 }
-                .frame(maxWidth: .infinity)
-                .padding(theme.space(.m))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, theme.space(.s))
                 .accessibilityIdentifier("radio.catalog.loading")
             }
             ForEach(GroupAudioStation.Group.allCases, id: \.self) { g in

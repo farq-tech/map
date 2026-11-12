@@ -113,11 +113,11 @@ struct MediaSheet: View {
         let p = theme.palette
         VStack(spacing: theme.space(.m)) {
             HStack {
-                Text("يوتيوب").saryText(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
+                Text("يوتيوب").saryText(.title2).foregroundStyle(p.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("media.sheet")
                 Spacer()
-                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "media.close", visual: 36) { dismiss() }
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "media.close") { dismiss() }
             }
             SarySegmented(options: MediaChannel.allCases, selection: Binding(get: { center.tab }, set: { center.select($0) }),
                           label: { $0.title }, systemImage: { $0 == .mine ? "person.fill" : "person.3.fill" }, id: "media.tabs")
@@ -326,11 +326,11 @@ private struct OutingTab: View {
         VStack(spacing: theme.space(.m)) {
             switch center.availability {
             case .unknown:
-                HStack(spacing: theme.space(.s)) {
-                    ProgressView()
-                    Text("جارٍ التحميل…").saryText(.callout).foregroundStyle(p.textSecondary)
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    SarySkeletonRow()
+                    Text("نجيب قناة الطلعة…").saryText(.callout).foregroundStyle(p.textSecondary)
                 }
-                .frame(maxWidth: .infinity, minHeight: 80)
+                .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
             case .notDeployed:
                 VStack(spacing: theme.space(.s)) {
                     Image(systemName: "clock.badge.exclamationmark").font(.system(size: 30, weight: .bold)).foregroundStyle(p.textTertiary)
@@ -447,7 +447,7 @@ private struct OutingTab: View {
             Text("القائمة (\(SaryFormat.number(s.queue.count))/\(SaryFormat.number(MediaPermissions.queueMax)))")
                 .saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
             if s.queue.isEmpty {
-                Text("ما فيه شي بعده. أي أحد يقدر يقترح فيديو.").saryText(.footnote).foregroundStyle(p.textTertiary)
+                SaryInlineState(systemImage: "list.bullet", text: "ما فيه شي بعده. أي أحد يقدر يقترح فيديو.")
             } else {
                 ForEach(Array(s.queue.enumerated()), id: \.offset) { i, id in
                     HStack(spacing: theme.space(.s)) {
