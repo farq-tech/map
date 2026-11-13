@@ -321,8 +321,8 @@ struct DestinationCompassView: View {
                 /* Trailing edges meet (the dial is at the screen's left in Arabic, the card grows to the right). */
                 targetList
                     .saryGlass(RoundedRectangle(cornerRadius: 18, style: .continuous), role: .chrome)
-                    .background(GeometryReader { g in Color.clear.preference(key: CompassListHeightKey.self, value: g.size.height) })
-                    .offset(y: -(listHeight + 10))
+                    /* The offset uses the box's own height (rows measured, capped): a preference read from this overlay never arrived. */
+                    .offset(y: -(listBoxHeight + 10))
                     .transition(.opacity)
             }
         }
@@ -344,19 +344,24 @@ struct DestinationCompassView: View {
     static func maxListHeight(dialTop: CGFloat, safeTop: CGFloat) -> CGFloat {
         max(96, dialTop - 10 - (safeTop + reserveTop))
     }
-    static let reserveTop: CGFloat = 215
+    /* Under the maneuver card, its chips AND the «طوارئ» / history row (that disc stays reachable, never under the list). */
+    static let reserveTop: CGFloat = 250
 
     /// The five targets, as in the mockup: the chosen one filled, a reason under a disabled one.
+    private var listBoxHeight: CGFloat {
+        let safeTop = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }.first ?? 59
+        return min(rowsHeight, Self.maxListHeight(dialTop: dialTopHint ?? dialTop, safeTop: safeTop))
+    }
+
     private var targetList: some View {
         let p = theme.palette
-        let safeTop = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }.first ?? 59
         /* The rows' own height is measured, then the box is that tall or the room above the dial, whichever is less (a `ScrollView`
          * under `fixedSize` ignored the cap). */
         return ScrollView(.vertical, showsIndicators: false) {
             listRows(p).background(GeometryReader { g in Color.clear.preference(key: CompassRowsHeightKey.self, value: g.size.height) })
         }
         .onPreferenceChange(CompassRowsHeightKey.self) { rowsHeight = $0 }
-        .frame(height: min(rowsHeight, Self.maxListHeight(dialTop: dialTopHint ?? dialTop, safeTop: safeTop)))
+        .frame(height: listBoxHeight)
     }
 
     private func listRows(_ p: SaryPalette) -> some View {
@@ -388,7 +393,7 @@ struct DestinationCompassView: View {
                     }
                     .foregroundStyle(on ? p.onAccent : p.textPrimary)
                     .padding(.horizontal, theme.space(.m))
-                    .frame(minHeight: 48)
+                    .frame(minHeight: 44)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? p.accent : Color.clear))
                     .contentShape(Rectangle())
                 }

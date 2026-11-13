@@ -145,6 +145,8 @@ final class NewGuidanceUITests: XCTestCase {
         let card = el(app, "nav.banner").frame
         XCTAssertGreaterThanOrEqual(first.frame.minY, card.maxY + 4, "the list starts under the card: \(first.frame) vs \(card)")
         XCTAssertLessThanOrEqual(first.frame.maxX, app.frame.maxX + 1)
+        let sos = el(app, "outing-sos")
+        if sos.exists { XCTAssertGreaterThanOrEqual(first.frame.minY, sos.frame.maxY, "«طوارئ» stays uncovered by the list") }
         shot(app, "compass-menu-surfaces")
         app.terminate()
     }
