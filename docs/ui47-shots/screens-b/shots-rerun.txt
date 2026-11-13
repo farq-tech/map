@@ -1,0 +1,6 @@
+build exit 0
+UI B (Pro):
+{'result': 'Passed', 'passedTests': 6, 'failedTests': 0, 'skippedTests': 0, 'totalTestCount': 6}
+UI B (SE):
+{'result': 'Passed', 'passedTests': 6, 'failedTests': 0, 'skippedTests': 0, 'totalTestCount': 6}
+03:19
