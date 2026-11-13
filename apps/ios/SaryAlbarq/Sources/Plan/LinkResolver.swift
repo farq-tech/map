@@ -58,7 +58,7 @@ enum LinkResolver {
         var token: String?
         if let m = CoordinateParser.match(#"(https?://[^\s<>"']+)"#, s) {
             token = m[1]
-        } else if let m = CoordinateParser.match(#"((?:maps\.app\.goo\.gl|goo\.gl/maps|g\.co/kgs|(?:www\.|maps\.)?google\.[a-z.]+/maps|maps\.apple\.com|(?:ul\.|www\.)?waze\.com)[^\s<>"']*)"#, s) {
+        } else if let m = CoordinateParser.match(#"((?:maps\.app\.goo\.gl|goo\.gl/maps|g\.co/kgs|(?:www\.|maps\.)?google\.[a-z.]+/maps|(?:ul\.|www\.)?waze\.com)[^\s<>"']*)"#, s) {
             token = "https://" + m[1]
         }
         guard var t = token else { return nil }
@@ -75,10 +75,10 @@ enum LinkResolver {
         return nationalAddress(s) != nil || extractURL(s) != nil
     }
 
-    /// Hosts we may open: Google (all country domains), goo.gl, maps.app.goo.gl, g.co, Waze, Apple Maps.
+    /// Hosts we may open: Google (all country domains), goo.gl, maps.app.goo.gl, g.co, Waze.
     static func isAllowed(host: String?) -> Bool {
         guard let h = host?.lowercased(), !h.isEmpty else { return false }
-        if ["goo.gl", "maps.app.goo.gl", "g.co", "waze.com", "maps.apple.com"].contains(h) { return true }
+        if ["goo.gl", "maps.app.goo.gl", "g.co", "waze.com"].contains(h) { return true }
         if h.hasSuffix(".waze.com") { return true }
         return CoordinateParser.match(#"^(?:[a-z0-9-]+\.)*google\.(?:com(?:\.[a-z]{2})?|co\.[a-z]{2}|[a-z]{2,3})$"#, h) != nil
     }
