@@ -164,7 +164,12 @@ extension LiveOutingController {
         guard !tripEnded, !nav.isActive else {
             /* Guiding on a route with dirt or off-road: room for «زفلت … ← ترابي …» under the numbers. */
             let surfaces = !tripEnded && nav.isActive && nav.phase != .arrived && nav.surfaceAhead != nil
-            return LiveSheetShape(drive: drive, trip: false, surfaces: surfaces, guide: navBarV2)
+            let live = LiveSheetShape(drive: drive, trip: false, surfaces: surfaces, guide: navBarV2)
+            guard !tripEnded, nav.isActive else { GuidanceShapeLatch.clear(session.id); return live }
+            /* Owner's Build 48 report (every map control dead during guidance, screen looking normal): the detent SET must not
+             * change while guiding — a speed drop flipping `drive`, or a reroute flipping `surfaces`, re-snapped the native
+             * sheet mid-guidance. The shape is held from the first render of the guidance until it ends (or arrives). */
+            return GuidanceShapeLatch.shape(session.id, arrived: nav.phase == .arrived, live: live)
         }
         /* The idle sheet holds the search field at peek: the taller peek the quick row used. */
         if idleHome { return LiveSheetShape(drive: drive, trip: true) }
@@ -433,4 +438,19 @@ enum LiveFit {
         let room = width - others
         return Dock(pttMinWidth: min(ptt, max(minPTTWidth, room)), ctaOwnRow: cta != nil)
     }
+}
+
+
+/// The sheet's shape for the whole guidance (see `sheetShape`): per outing, reset when guidance ends; the arrival is the one
+/// moment it may change (the arrival card replaces the numbers).
+enum GuidanceShapeLatch {
+    private static var held: [String: (arrived: Bool, shape: LiveSheetShape)] = [:]
+
+    static func shape(_ id: String, arrived: Bool, live: LiveSheetShape) -> LiveSheetShape {
+        if let h = held[id], h.arrived == arrived { return h.shape }
+        held[id] = (arrived, live)
+        return live
+    }
+
+    static func clear(_ id: String) { held[id] = nil }
 }

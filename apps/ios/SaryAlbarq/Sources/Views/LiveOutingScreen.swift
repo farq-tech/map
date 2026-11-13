@@ -136,8 +136,9 @@ struct LiveOutingScreen: View {
         }
         .ignoresSafeArea(.keyboard)
         /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
-         * its own window (the dock's copy is hidden or covered then). */
-        .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded && !controller.settingsOpen,
+         * its own window (the dock's copy is hidden or covered then). Not over the end sheet («إنهاء الرحلة»): the map's own
+         * «طوارئ» (under the card) stays reachable and a second disc on the sheet doubled it (owner review). */
+        .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || (controller.modal != nil && controller.modal != .endChoice)) && !controller.tripEnded && !controller.settingsOpen,
                                    state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger,
                                    frame: frames["sos"], size: sosSize,
                                    countdown: controller.groupUI.serverSOS))
@@ -180,6 +181,15 @@ struct LiveOutingScreen: View {
         .onChange(of: controller.modal) { _, m in watchModal(m) }
         .onChange(of: fallbackEnd) { _, on in if !on { dockUp = true } }
         .task {
+            /* Every 2 s: log the presentation chain (DEBUG) and drop an invisible presentation nobody asked for. */
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                let onTop = controller.modal != nil || controller.settingsOpen || controller.shareItem != nil || fallbackEnd || controller.legConfirmEnd
+                    || controller.meMenuOpen || controller.confirm != nil || controller.features.modal != nil
+                SheetWatchdog.check(dockUp: dockUp, appWantsOnTop: onTop)
+            }
+        }
+        .task {
             #if DEBUG
             let a = ProcessInfo.processInfo.arguments
             if let i = a.firstIndex(of: "-SaryDockDrop"), i + 1 < a.count, let sec = Double(a[i + 1]) {
@@ -202,7 +212,7 @@ struct LiveOutingScreen: View {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-SaryDockDrop") { return 4 }
         #endif
-        return 0.6
+        return 1.0
     }
 
     /// A sheet that was asked for must show up. If it has not appeared after 1.5 s the presentation stack is
@@ -215,7 +225,7 @@ struct LiveOutingScreen: View {
             NSLog("SARY-DOCK modal %@ never appeared: rebuilding the dock", m.id)
             modalRecoveries += 1
             dockUp = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { dockUp = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { dockUp = true }
         }
     }
 
@@ -274,7 +284,8 @@ struct LiveOutingScreen: View {
         let dockTop = ["flow", "dock", "convoy", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
-        let side = ["cluster", "speed"].compactMap { frames[$0] }
+        /* The destination compass counts as a side control: Mapbox's logo and «i» sit beside it, never under it (owner review). */
+        let side = ["cluster", "speed", "compass"].compactMap { frames[$0] }
         let left = side.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 }.max() ?? 0
         let right = side.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 }.max() ?? 0
         return UIEdgeInsets(top: topChromeBottom + 4, left: left, bottom: bottom + 4, right: right)
@@ -406,7 +417,7 @@ struct LiveOutingScreen: View {
                         HStack(spacing: 0) {
                             Spacer(minLength: 0)
                             DestinationCompassHost(controller: controller, nav: controller.nav, nearby: compassNearby,
-                                                   chosen: $compassTarget, online: app.online)
+                                                   chosen: $compassTarget, online: app.online, dialTop: frames["compass"]?.minY)
                         }
                         .padding(.horizontal, 16)
                         .dynamicTypeSize(...DynamicTypeSize.xxLarge)

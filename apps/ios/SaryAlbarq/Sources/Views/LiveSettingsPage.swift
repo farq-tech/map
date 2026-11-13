@@ -297,7 +297,7 @@ struct SettingsRow<Accessory: View>: View {
                 accessory
             }
             .padding(.horizontal, 16)
-            .frame(minHeight: 43)
+            .frame(minHeight: NewScreens.rowMinHeight(legacy: 43))
             if !last { Rectangle().fill(theme.palette.separator).frame(height: 0.5).padding(.leading, 16) }
         }
     }
