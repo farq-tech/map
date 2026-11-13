@@ -128,6 +128,8 @@ struct DestinationCompassHost: View {
     /// The person's choice for this outing (nil: the default, `DestinationCompass.resolve`).
     @Binding var chosen: DestinationCompass.Target?
     var online: Bool
+    /// The dial's top edge on the screen (the screen's own `compass` chrome frame): the open list is capped from here.
+    var dialTop: CGFloat? = nil
     @EnvironmentObject private var location: LocationSharer
 
     var body: some View {
@@ -229,13 +231,13 @@ struct DestinationCompassHost: View {
             .init(target: .back, enabled: back != nil, note: back == nil ? DestinationCompass.noTrail : nil),
             .init(target: .qibla, enabled: true, note: nil),
             .init(target: .rain, enabled: rainCell != nil,
-                  note: rainCell.map { "\(CompassRain.line($0)) · \(CompassRain.credit)" } ?? note(nearby.rain, none: CompassRain.none)),
+                  note: rainCell.map { "\(CompassRain.line($0))\n\(CompassRain.credit)" } ?? note(nearby.rain, none: CompassRain.none)),
             .init(target: .spring, enabled: springPick != nil,
-                  note: springPick.map { "\(CompassSpring.line($0)) · \(CompassSpring.credit)" } ?? note(nearby.spring, none: CompassSpring.none)),
+                  note: springPick.map { "\(CompassSpring.line($0))\n\(CompassSpring.credit)" } ?? note(nearby.spring, none: CompassSpring.none)),
         ]
 
         return DestinationCompassView(reading: reading, subtitle: subtitle, accessibility: DestinationCompass.accessibility(reading, detail: detail),
-                                      options: options, pick: { chosen = $0 })
+                                      options: options, dialTopHint: dialTop, pick: { chosen = $0 })
             .chromeFrame("compass")
             .task(id: refreshKey(me)) { nearby.refresh(me: me, online: online) }
     }
@@ -260,6 +262,8 @@ struct DestinationCompassView: View {
     var subtitle: String?
     var accessibility: String
     var options: [Option]
+    /// Where the dial's top edge is, when the host knows it (preferred over this view's own measure).
+    var dialTopHint: CGFloat? = nil
     var pick: (DestinationCompass.Target) -> Void
     @Environment(\.sary) private var theme
     /// Accumulated angles (`DestinationCompass.unwrap`): 359° → 1° turns 2°, never back round.
@@ -340,7 +344,7 @@ struct DestinationCompassView: View {
     static func maxListHeight(dialTop: CGFloat, safeTop: CGFloat) -> CGFloat {
         max(96, dialTop - 10 - (safeTop + reserveTop))
     }
-    static let reserveTop: CGFloat = 236
+    static let reserveTop: CGFloat = 215
 
     /// The five targets, as in the mockup: the chosen one filled, a reason under a disabled one.
     private var targetList: some View {
@@ -352,7 +356,7 @@ struct DestinationCompassView: View {
             listRows(p).background(GeometryReader { g in Color.clear.preference(key: CompassRowsHeightKey.self, value: g.size.height) })
         }
         .onPreferenceChange(CompassRowsHeightKey.self) { rowsHeight = $0 }
-        .frame(height: min(rowsHeight, Self.maxListHeight(dialTop: dialTop, safeTop: safeTop)))
+        .frame(height: min(rowsHeight, Self.maxListHeight(dialTop: dialTopHint ?? dialTop, safeTop: safeTop)))
     }
 
     private func listRows(_ p: SaryPalette) -> some View {

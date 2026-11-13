@@ -408,7 +408,7 @@ struct LiveOutingScreen: View {
                         HStack(spacing: 0) {
                             Spacer(minLength: 0)
                             DestinationCompassHost(controller: controller, nav: controller.nav, nearby: compassNearby,
-                                                   chosen: $compassTarget, online: app.online)
+                                                   chosen: $compassTarget, online: app.online, dialTop: frames["compass"]?.minY)
                         }
                         .padding(.horizontal, 16)
                         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
