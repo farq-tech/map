@@ -747,8 +747,10 @@ struct ExploreCoordinateBar: View {
                 HStack(spacing: 8) {
                     Image(systemName: "mappin.and.ellipse").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accentText)
                     VStack(alignment: .leading, spacing: 0) {
+                        /* The system number font: Huwiya draws the decimal separator «٫» like a comma
+                         * («٢٤,٥…»); SF Arabic draws it as «٫», with tabular digits that hold still while panning. */
                         Text(r.map { ExploreRules.coordinateText($0.center, format) } ?? "…")
-                            .font(.sary(14, .medium))
+                            .saryNumber(.subhead, weight: .medium)
                             .foregroundStyle(p.textPrimary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
