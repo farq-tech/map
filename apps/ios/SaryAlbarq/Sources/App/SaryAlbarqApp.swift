@@ -53,6 +53,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didSet { NotificationCenter.default.post(name: .saryModelReady, object: nil) }
     }
 
+    /// The iPhone is portrait-only, as before, unless «وضع السيارة» is on (then landscape: the mirrored screen is wide).
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        CarMode.orientationMask(carMode: CarMode.isOn(), idiom: UIDevice.current.userInterfaceIdiom)
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in
             guard let m = Self.model, !m.isDemo else { return }

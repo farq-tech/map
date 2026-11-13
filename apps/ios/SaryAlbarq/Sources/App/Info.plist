@@ -153,6 +153,9 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<!-- Landscape only for «وضع السيارة» (Sources/Navigation/CarMode.swift): AppDelegate keeps the iPhone portrait-only while it is off. -->
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>

@@ -69,8 +69,18 @@ private struct SarySheetPresentation: ViewModifier {
     /// The live screen passes it (held still during a touch); nil: the theme's drive, no quick row.
     var shape: LiveSheetShape?
     @Environment(\.sary) private var theme
+    /// «وضع السيارة»: the dock is a 1 pt invisible presenter (`CarModeSheet`), so nothing is lost.
+    @ObservedObject private var car = CarModeState.shared
 
     func body(content: Content) -> some View {
+        if car.on {
+            content.modifier(CarModeSheet())
+        } else {
+            standard(content)
+        }
+    }
+
+    private func standard(_ content: Content) -> some View {
         let drive = shape?.drive ?? theme.drive
         let trip = shape?.trip ?? false
         let surfaces = shape?.surfaces ?? false
@@ -79,7 +89,7 @@ private struct SarySheetPresentation: ViewModifier {
             get: { detent.presentationDetent(drive: drive, trip: trip, surfaces: surfaces, guide: guide) },
             set: { detent = SheetDetentUI($0, drive: drive) }
         )
-        content
+        return content
             .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: drive, trip: trip, surfaces: surfaces, guide: guide) }), selection: binding)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationDragIndicator(.visible)

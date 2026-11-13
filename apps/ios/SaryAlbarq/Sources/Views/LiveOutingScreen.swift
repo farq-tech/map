@@ -44,6 +44,9 @@ struct LiveOutingScreen: View {
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
     @ObservedObject private var tilt = MapTiltModel.shared
+    /// «وضع السيارة / بث الشاشة» (`CarMode`): off by default; on, the car layer replaces the chrome and the dock is invisible.
+    @ObservedObject private var carMode = CarModeState.shared
+    @Environment(\.layoutDirection) private var layoutDirection
     /// The live sheet (the dock) is presented from here for the whole outing. UIKit can take it down (another
     /// presentation, a system sheet, an alert): with a constant `true` binding it then never came back, the bottom
     /// bar with «إنهاء الرحلة» vanished and every sheet presented from it (layers, rain, more) silently failed
@@ -123,11 +126,16 @@ struct LiveOutingScreen: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(true)
 
-                chrome(ui, full: full, safeBottom: geo.safeAreaInsets.bottom)
+                if carMode.on {
+                    CarModeLayer(controller: controller, nav: controller.nav, ui: ui, alerts: frozenAlerts ?? ui.alerts)
+                } else {
+                    chrome(ui, full: full, safeBottom: geo.safeAreaInsets.bottom)
+                }
             }
             .onPreferenceChange(ChromeFramesKey.self) { frames = $0 }
         }
         .background(TouchWatcherView { down in touchChanged(down) }.allowsHitTesting(false))
+        .overlay(alignment: .top) { CarModeSuggestHost() }
         .onChange(of: controller.realisticRequest) { _, _ in openRealistic() }
         /* «أماكن مقترحة للكشتة»: a site tapped on the map opens its card. */
         .onReceive(CampSitesHub.shared.$tapped.compactMap { $0 }) { id in
@@ -145,7 +153,7 @@ struct LiveOutingScreen: View {
         .background(FriendSOSAlertHost(alert: LiveOutingPresenter.fullScreenSOS(ui.sos), theme: theme,
                                        show: { controller.showSOS($0) }, call: { controller.actions.sos.call($0) }))
         .overlay(alignment: .bottom) {
-            if !dockUp {
+            if !dockUp && !carMode.on {
                 DockFallbackBar(guiding: controller.nav.isActive, end: { fallbackEnd = true })
             }
         }
@@ -271,6 +279,9 @@ struct LiveOutingScreen: View {
 
     /// What our chrome covers, for the map's keep-group framing and ornaments.
     private func chromeInsets(full: CGSize) -> UIEdgeInsets {
+        if carMode.on {
+            return CarModeLayout.make(size: CarMode.previewSize() ?? full).mapInsets(rtl: layoutDirection == .rightToLeft)
+        }
         let dockTop = ["flow", "dock", "convoy", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
