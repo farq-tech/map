@@ -19,6 +19,11 @@ struct SaryPage<Content: View, Trailing: View>: View {
     var body: some View {
         let p = theme.palette
         VStack(spacing: 0) {
+            if NewUI.enabled {
+                /* Build 47: the unified window header (title right, round ✕ left). */
+                NewPageHeader(title: title, subtitle: subtitle, back: back, close: close) { trailing }
+                    .saryReadableWidth()
+            } else {
             HStack(alignment: .center, spacing: theme.space(.s)) {
                 if let back {
                     SaryIconButton(systemImage: SaryIcon.back, label: "رجوع", id: "page-back", action: back)
@@ -46,6 +51,7 @@ struct SaryPage<Content: View, Trailing: View>: View {
             /* Same column as the content below: on iPad the title and close button no longer sit at
                opposite window edges. Every iPhone is narrower than 640, so nothing changes there. */
             .saryReadableWidth()
+            }
             if scrolls {
                 ScrollView {
                     VStack(alignment: .leading, spacing: theme.space(.xl)) { content }
@@ -150,7 +156,7 @@ struct SaryNavRow: View {
                     .foregroundStyle(p.textTertiary)
                     .accessibilityHidden(true)
             }
-            .frame(minHeight: theme.minTarget + 4)
+            .frame(minHeight: NewScreens.rowMinHeight(legacy: theme.minTarget + 4))
             .padding(.vertical, theme.space(.xs))
             .contentShape(Rectangle())
         }

@@ -128,6 +128,8 @@ struct DestinationCompassHost: View {
     /// The person's choice for this outing (nil: the default, `DestinationCompass.resolve`).
     @Binding var chosen: DestinationCompass.Target?
     var online: Bool
+    /// The dial's top edge on the screen (the screen's own `compass` chrome frame): the open list is capped from here.
+    var dialTop: CGFloat? = nil
     @EnvironmentObject private var location: LocationSharer
 
     var body: some View {
@@ -229,13 +231,13 @@ struct DestinationCompassHost: View {
             .init(target: .back, enabled: back != nil, note: back == nil ? DestinationCompass.noTrail : nil),
             .init(target: .qibla, enabled: true, note: nil),
             .init(target: .rain, enabled: rainCell != nil,
-                  note: rainCell.map { "\(CompassRain.line($0)) · \(CompassRain.credit)" } ?? note(nearby.rain, none: CompassRain.none)),
+                  note: rainCell.map { "\(CompassRain.line($0))\n\(CompassRain.credit)" } ?? note(nearby.rain, none: CompassRain.none)),
             .init(target: .spring, enabled: springPick != nil,
-                  note: springPick.map { "\(CompassSpring.line($0)) · \(CompassSpring.credit)" } ?? note(nearby.spring, none: CompassSpring.none)),
+                  note: springPick.map { "\(CompassSpring.line($0))\n\(CompassSpring.credit)" } ?? note(nearby.spring, none: CompassSpring.none)),
         ]
 
         return DestinationCompassView(reading: reading, subtitle: subtitle, accessibility: DestinationCompass.accessibility(reading, detail: detail),
-                                      options: options, pick: { chosen = $0 })
+                                      options: options, dialTopHint: dialTop, pick: { chosen = $0 })
             .chromeFrame("compass")
             .task(id: refreshKey(me)) { nearby.refresh(me: me, online: online) }
     }
@@ -260,6 +262,8 @@ struct DestinationCompassView: View {
     var subtitle: String?
     var accessibility: String
     var options: [Option]
+    /// Where the dial's top edge is, when the host knows it (preferred over this view's own measure).
+    var dialTopHint: CGFloat? = nil
     var pick: (DestinationCompass.Target) -> Void
     @Environment(\.sary) private var theme
     /// Accumulated angles (`DestinationCompass.unwrap`): 359° → 1° turns 2°, never back round.
@@ -270,6 +274,9 @@ struct DestinationCompassView: View {
     /// iOS 26, which squeezed the round dial into a pill and clipped «غ» / «ق» — owner report, Build 46).
     @State private var choosing = false
     @State private var listHeight: CGFloat = 300
+    /// The dial's top edge on the screen: the open list may grow up to the maneuver card, never over it.
+    @State private var dialTop: CGFloat = 600
+    @State private var rowsHeight: CGFloat = 300
 
     static let dial: CGFloat = 120
 
@@ -305,6 +312,8 @@ struct DestinationCompassView: View {
         .accessibilityHint(Text("اضغط تختار وين تأشر البوصلة: الوجهة، الرجعة، القبلة، أقرب مطر، أقرب ربيع"))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("live.compass")
+        .background(GeometryReader { g in Color.clear.preference(key: CompassDialTopKey.self, value: g.frame(in: .global).minY) })
+        .onPreferenceChange(CompassDialTopKey.self) { dialTop = $0 }
         /* The list is a card over the map, just above the dial. (A `.popover` presented from here dismissed the live
          * sheet under it and never appeared on the simulator.) */
         .overlay(alignment: .topTrailing) {
@@ -312,8 +321,8 @@ struct DestinationCompassView: View {
                 /* Trailing edges meet (the dial is at the screen's left in Arabic, the card grows to the right). */
                 targetList
                     .saryGlass(RoundedRectangle(cornerRadius: 18, style: .continuous), role: .chrome)
-                    .background(GeometryReader { g in Color.clear.preference(key: CompassListHeightKey.self, value: g.size.height) })
-                    .offset(y: -(listHeight + 10))
+                    /* The offset uses the box's own height (rows measured, capped): a preference read from this overlay never arrived. */
+                    .offset(y: -(listBoxHeight + 10))
                     .transition(.opacity)
             }
         }
@@ -330,10 +339,33 @@ struct DestinationCompassView: View {
         }
     }
 
+    /// The most the open list may be tall: from the dial up to under the maneuver card and its chips (the safe top, the card,
+    /// «ثم» / lanes chips and «طوارئ» take ~`reserveTop`), at least two rows. It scrolls when it is taller.
+    static func maxListHeight(dialTop: CGFloat, safeTop: CGFloat) -> CGFloat {
+        max(96, dialTop - 10 - (safeTop + reserveTop))
+    }
+    /* Under the maneuver card, its chips AND the «طوارئ» / history row (that disc stays reachable, never under the list). */
+    static let reserveTop: CGFloat = 250
+
     /// The five targets, as in the mockup: the chosen one filled, a reason under a disabled one.
+    private var listBoxHeight: CGFloat {
+        let safeTop = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.top }.first ?? 59
+        return min(rowsHeight, Self.maxListHeight(dialTop: dialTopHint ?? dialTop, safeTop: safeTop))
+    }
+
     private var targetList: some View {
         let p = theme.palette
-        return VStack(alignment: .leading, spacing: 2) {
+        /* The rows' own height is measured, then the box is that tall or the room above the dial, whichever is less (a `ScrollView`
+         * under `fixedSize` ignored the cap). */
+        return ScrollView(.vertical, showsIndicators: false) {
+            listRows(p).background(GeometryReader { g in Color.clear.preference(key: CompassRowsHeightKey.self, value: g.size.height) })
+        }
+        .onPreferenceChange(CompassRowsHeightKey.self) { rowsHeight = $0 }
+        .frame(height: listBoxHeight)
+    }
+
+    private func listRows(_ p: SaryPalette) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(options) { o in
                 let on = o.target == reading.target
                 Button {
@@ -351,7 +383,9 @@ struct DestinationCompassView: View {
                                 Text(n)
                                     .saryText(.micro, weight: .medium)
                                     .foregroundStyle(on ? p.onAccent.opacity(0.8) : p.textSecondary)
-                                    .lineLimit(2)
+                                    /* The whole line («مطر ١٢ ملم · قبل ٣ ساعات · NASA GPM IMERG»): wraps, never cut. */
+                                    .lineLimit(4)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         Spacer(minLength: 0)
@@ -359,7 +393,7 @@ struct DestinationCompassView: View {
                     }
                     .foregroundStyle(on ? p.onAccent : p.textPrimary)
                     .padding(.horizontal, theme.space(.m))
-                    .frame(minHeight: 48)
+                    .frame(minHeight: 44)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? p.accent : Color.clear))
                     .contentShape(Rectangle())
                 }
@@ -370,7 +404,7 @@ struct DestinationCompassView: View {
             }
         }
         .padding(6)
-        .frame(width: 250)
+        .frame(width: 262)
     }
 
     private var dialView: some View {
@@ -467,6 +501,16 @@ private struct CompassNeedleShape: Shape {
 
 
 private struct CompassListHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 300
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct CompassDialTopKey: PreferenceKey {
+    static var defaultValue: CGFloat = 600
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct CompassRowsHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 300
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

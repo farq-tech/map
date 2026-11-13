@@ -57,7 +57,9 @@ final class RouteAdherenceTests: XCTestCase {
 
     func testTheOppositeCarriagewayDrivenTheOtherWayIsOffEvenWhenClose() {
         var a = RouteAdherence()
-        for i in 0 ..< 10 { a.note(Self.fix(i, offsetM: 14, heading: 180), on: line) }
+        /* The car really goes south (its positions move south, as its course says): since build 49 the
+         * heading comes from the displacement, so the fixtures must move the way they claim to. */
+        for i in 0 ..< 12 { a.note(Self.fix(i, offsetM: 14, heading: 180, along: 2500 - 14 * Double(i)), on: line) }
         XCTAssertEqual(a.state, .off, "14 m over, heading 180° against a northbound route")
     }
 

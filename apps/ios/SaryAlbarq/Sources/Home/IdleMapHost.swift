@@ -69,50 +69,10 @@ struct IdleSheetContent: View {
     @State private var toolsOpen = false
     @State private var profileOpen = false
 
+    @StateObject private var voice = VoiceSearch()
+
     var body: some View {
-        let p = theme.palette
-        VStack(spacing: theme.space(.s)) {
-            HStack(spacing: theme.space(.s)) {
-                Button { profileOpen = true } label: {
-                    SaryAvatar(name: model.identity?.user.display_name ?? "؟", color: theme.accent.fill,
-                               photo: AvatarCodec.image(from: model.identity?.user.avatar), size: 44)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("حسابي"))
-                .accessibilityIdentifier("idle.profile")
-                Button { searchQuery = "" } label: {
-                    HStack(spacing: theme.space(.s)) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(p.textTertiary).accessibilityHidden(true)
-                        Text("ابحث عن مكان أو إحداثية").saryText(.body).foregroundStyle(p.textSecondary)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, theme.space(.m))
-                    .frame(minHeight: 48)
-                    .background(Capsule().fill(p.sunken))
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("idle.search")
-            }
-            .padding(.horizontal, theme.space(.l))
-            categoryChips
-            if detent != .peek {
-                ScrollView {
-                    VStack(spacing: theme.space(.s)) {
-                        ForEach(IdleMapRules.visibleOutings(model.current)) { o in
-                            OutingCard(o: o, open: { model.open(o.id) }, compact: true)
-                        }
-                        row("طلعة جديدة", "plus.circle.fill", id: "idle.new", filled: true) { creating = true }
-                        row("انضم برابط", "link", id: "idle.join", filled: false) { joining = true }
-                    }
-                    .padding(.horizontal, theme.space(.l))
-                    .padding(.bottom, theme.space(.xl))
-                }
-                .scrollBounceBehavior(.basedOnSize)
-            }
-        }
+        content
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("idle.sheet")
         .sheet(isPresented: Binding(get: { searchQuery != nil }, set: { if !$0 { searchQuery = nil } })) {
@@ -169,6 +129,108 @@ struct IdleSheetContent: View {
                 }
             }
             Button("إلغاء", role: .cancel) {}
+        }
+    }
+
+
+    @ViewBuilder
+    private var content: some View {
+        if NewUI.enabled { newContent } else { legacyContent }
+    }
+
+    /// The new Home on the one map (`NewUI.enabled`, behind the one-map switch): the same shared pieces as the home map's card
+    /// (`HomeTopPill`, `HomeCardContent`); the map's own buttons (layers, 2D/3D, locate) are the side column's, unchanged.
+    private var newContent: some View {
+        let me = model.identity?.user
+        let screenH = Double(UIScreen.main.bounds.height)
+        let fix = controller.location.lastFix
+        return VStack(spacing: theme.space(.s)) {
+            HomeTopPill(avatarName: me?.display_name ?? "؟", avatarPhoto: AvatarCodec.image(from: me?.avatar),
+                        listening: voice.isListening,
+                        onSearch: { searchQuery = "" },
+                        onMic: { voice.toggle() },
+                        onProfile: { profileOpen = true })
+                .padding(.horizontal, theme.space(.l))
+            if detent != .peek {
+                ScrollView {
+                    VStack(spacing: theme.space(.s)) {
+                    HomeCardContent(weather: nil,
+                                    maghrib: fix.flatMap { HomeChromeRules.maghribLine(now: Date(), lat: $0.lat, lng: $0.lng) },
+                                    last: HomeChromeRules.isCompact(screenHeight: screenH) ? nil : HomeChromeRules.lastOuting(model.history),
+                                    weatherRow: true, lastRow: true,
+                                    onStart: { creating = true },
+                                    onTile: { openTile($0) },
+                                    onLast: { if let o = HomeChromeRules.lastOuting(model.history) { model.open(o.id) } })
+                    /* Nothing of the old idle sheet is lost: «البر» and the categories, my outings, «انضم برابط». */
+                    categoryChips
+                    VStack(spacing: theme.space(.s)) {
+                        ForEach(IdleMapRules.visibleOutings(model.current)) { o in
+                            OutingCard(o: o, open: { model.open(o.id) }, compact: true)
+                        }
+                        row("انضم برابط", "link", id: "idle.join", filled: false) { joining = true }
+                    }
+                    .padding(.horizontal, theme.space(.l))
+                    .padding(.bottom, theme.space(.xl))
+                    }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+        }
+        .onChange(of: voice.text) { _, t in if !t.isEmpty { searchQuery = t } }
+    }
+
+    private func openTile(_ t: HomeTile) {
+        switch t {
+        case .camp: controller.performAction("camp")
+        case .qibla: controller.performAction("qibla")
+        case .weather: controller.performAction("weather")
+        case .routes: toolsOpen = true
+        }
+    }
+
+    private var legacyContent: some View {
+        let p = theme.palette
+        return VStack(spacing: theme.space(.s)) {
+            HStack(spacing: theme.space(.s)) {
+                Button { profileOpen = true } label: {
+                    SaryAvatar(name: model.identity?.user.display_name ?? "؟", color: theme.accent.fill,
+                               photo: AvatarCodec.image(from: model.identity?.user.avatar), size: 44)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("حسابي"))
+                .accessibilityIdentifier("idle.profile")
+                Button { searchQuery = "" } label: {
+                    HStack(spacing: theme.space(.s)) {
+                        Image(systemName: "magnifyingglass").foregroundStyle(p.textTertiary).accessibilityHidden(true)
+                        Text("ابحث عن مكان أو إحداثية").saryText(.body).foregroundStyle(p.textSecondary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, theme.space(.m))
+                    .frame(minHeight: 48)
+                    .background(Capsule().fill(p.sunken))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("idle.search")
+            }
+            .padding(.horizontal, theme.space(.l))
+            categoryChips
+            if detent != .peek {
+                ScrollView {
+                    VStack(spacing: theme.space(.s)) {
+                        ForEach(IdleMapRules.visibleOutings(model.current)) { o in
+                            OutingCard(o: o, open: { model.open(o.id) }, compact: true)
+                        }
+                        row("طلعة جديدة", "plus.circle.fill", id: "idle.new", filled: true) { creating = true }
+                        row("انضم برابط", "link", id: "idle.join", filled: false) { joining = true }
+                    }
+                    .padding(.horizontal, theme.space(.l))
+                    .padding(.bottom, theme.space(.xl))
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
         }
     }
 

@@ -403,4 +403,13 @@ final class MapMotionTests: XCTestCase {
         XCTAssertLessThanOrEqual(MemberFade.seconds + MemberFade.revealDelay, 0.45) // 0.35 + 0.06 = 0.41
         XCTAssertEqual(MemberFade.transition["duration"] as? Int, 350)
     }
+
+    /// The car keeps room for its «أنت» chip: on a short clear area (iPhone SE) it rises, on a tall one it stays at 74 %.
+    func testCarShareKeepsRoomForTheLabel() {
+        XCTAssertEqual(FollowZoom.carShare(clear: 600), FollowZoom.carScreenShare, accuracy: 0.0001, "plenty of room: unchanged")
+        let small = FollowZoom.carShare(clear: 250)
+        XCTAssertLessThan(small, FollowZoom.carScreenShare)
+        XCTAssertGreaterThanOrEqual((1 - small) * 250, FollowZoom.carLabelClearance - 0.01, "the clearance under the car holds")
+        XCTAssertGreaterThanOrEqual(FollowZoom.carShare(clear: 120), 0.5, "never above the middle")
+    }
 }

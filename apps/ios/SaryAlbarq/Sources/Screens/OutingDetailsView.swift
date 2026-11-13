@@ -20,7 +20,68 @@ struct OutingDetailsView: View {
     @State private var share: URL?
 
     var body: some View {
+        Group {
+            if NewUI.enabled { newPage } else { legacyPage }
+        }
+        .task { await load() }
+        .saryDialog($confirmLeave, systemImage: "rectangle.portrait.and.arrow.right", title: "تغادر الطلعة؟",
+                    message: "يتوقف إرسال موقعك وتخرج منها. ترجع فقط برابط دعوة جديد.", confirmTitle: "غادر", busy: leaving) {
+            leaving = true
+            Task {
+                if await model.leave(outingId) { confirmLeave = false; back() }
+                leaving = false
+            }
+        }
+        .sheet(item: Binding(get: { share.map(ShareTarget.init) }, set: { if $0 == nil { share = nil } })) { s in
+            ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
+        }
+    }
+
+    /// The sections of a loaded outing (status, info, plan, members, weather): the same in both skins.
+    @ViewBuilder private func loadedSections(_ s: OutingSnapshot) -> some View {
         let p = theme.palette
+            HStack(spacing: theme.space(.s)) {
+                SaryOutingStatusPill(status: s.outing.status)
+                if s.me.role == "owner" { SaryRoleChip(role: .leader) } else if s.me.co_leader == true { SaryRoleChip(role: .coLeader) }
+                Spacer()
+            }
+            SarySection(title: "الطلعة") {
+                infoRow("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
+                SaryDivider()
+                infoRow(SaryIcon.crown, "أمير الطلعة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
+                if let d = ISODate.parse(s.outing.started_at) {
+                    SaryDivider()
+                    infoRow("clock", "بدأت", SaryFormat.elapsed(since: d, now: Date()))
+                } else if let d = ISODate.parse(s.outing.created_at) {
+                    SaryDivider()
+                    infoRow("clock", "أُنشئت", SaryFormat.elapsed(since: d, now: Date()))
+                }
+                if s.outing.join_locked == true {
+                    SaryDivider()
+                    infoRow("lock.fill", "الانضمام", "مقفول")
+                }
+            }
+            PlanDetailsSections(snapshot: s, plan: model.plans.model(outingId))
+            let colors = CarColors.assign(s.members)
+            SarySection(title: "من في الطلعة") {
+                ForEach(Array(s.members.enumerated()), id: \.element.user_id) { i, m in
+                    if i > 0 { SaryDivider() }
+                    HStack(spacing: theme.space(.m)) {
+                        SaryAvatar(name: m.display_name, color: colors[m.user_id] ?? CarColors.palette[i % CarColors.palette.count], photo: AvatarCodec.image(from: m.avatar), size: 36)
+                        Text(m.user_id == s.me.user_id ? "\(m.display_name) (أنت)" : m.display_name)
+                            .saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                        Spacer()
+                        if m.user_id == s.outing.owner_id { SaryRoleChip(role: .leader) } else if m.co_leader == true { SaryRoleChip(role: .coLeader) }
+                    }
+                    .padding(.vertical, theme.space(.xs))
+                }
+            }
+            if s.outing.status != .ended {
+                DetailsWeatherSection(snapshot: s, myFix: model.location.lastFix, plan: model.plans.model(outingId))
+            }
+    }
+
+    @ViewBuilder private var legacyPage: some View {
         SaryPage(title: title, back: back) {
             switch phase {
             case .loading:
@@ -29,45 +90,7 @@ struct OutingDetailsView: View {
                 SaryStateView(kind: model.online ? .error(title: "تعذّر التحميل", message: m) : .offline(message: nil),
                               actionTitle: "حاول مرة ثانية", actionID: "details.retry") { Task { await load() } }
             case .loaded(let s):
-                HStack(spacing: theme.space(.s)) {
-                    SaryOutingStatusPill(status: s.outing.status)
-                    if s.me.role == "owner" { SaryRoleChip(role: .leader) } else if s.me.co_leader == true { SaryRoleChip(role: .coLeader) }
-                    Spacer()
-                }
-                SarySection(title: "الطلعة") {
-                    infoRow("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
-                    SaryDivider()
-                    infoRow(SaryIcon.crown, "أمير الطلعة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
-                    if let d = ISODate.parse(s.outing.started_at) {
-                        SaryDivider()
-                        infoRow("clock", "بدأت", SaryFormat.elapsed(since: d, now: Date()))
-                    } else if let d = ISODate.parse(s.outing.created_at) {
-                        SaryDivider()
-                        infoRow("clock", "أُنشئت", SaryFormat.elapsed(since: d, now: Date()))
-                    }
-                    if s.outing.join_locked == true {
-                        SaryDivider()
-                        infoRow("lock.fill", "الانضمام", "مقفول")
-                    }
-                }
-                PlanDetailsSections(snapshot: s, plan: model.plans.model(outingId))
-                let colors = CarColors.assign(s.members)
-                SarySection(title: "من في الطلعة") {
-                    ForEach(Array(s.members.enumerated()), id: \.element.user_id) { i, m in
-                        if i > 0 { SaryDivider() }
-                        HStack(spacing: theme.space(.m)) {
-                            SaryAvatar(name: m.display_name, color: colors[m.user_id] ?? CarColors.palette[i % CarColors.palette.count], photo: AvatarCodec.image(from: m.avatar), size: 36)
-                            Text(m.user_id == s.me.user_id ? "\(m.display_name) (أنت)" : m.display_name)
-                                .saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
-                            Spacer()
-                            if m.user_id == s.outing.owner_id { SaryRoleChip(role: .leader) } else if m.co_leader == true { SaryRoleChip(role: .coLeader) }
-                        }
-                        .padding(.vertical, theme.space(.xs))
-                    }
-                }
-                if s.outing.status != .ended {
-                    DetailsWeatherSection(snapshot: s, myFix: model.location.lastFix, plan: model.plans.model(outingId))
-                }
+                loadedSections(s)
                 if s.outing.status != .ended {
                     Button { model.open(outingId) } label: { SaryButtonLabel(title: "افتح الخريطة", systemImage: "map.fill") }
                         .buttonStyle(.sary(.primary))
@@ -86,18 +109,40 @@ struct OutingDetailsView: View {
                     .accessibilityIdentifier("details.leave")
             }
         }
-        .task { await load() }
-        .saryDialog($confirmLeave, systemImage: "rectangle.portrait.and.arrow.right", title: "تغادر الطلعة؟",
-                    message: "يتوقف إرسال موقعك وتخرج منها. ترجع فقط برابط دعوة جديد.", confirmTitle: "غادر", busy: leaving) {
-            leaving = true
-            Task {
-                if await model.leave(outingId) { confirmLeave = false; back() }
-                leaving = false
+    }
+
+    /// Build 47 (`NewUI`): header (title right, back), the sections, and the pinned actions: «افتح الخريطة» is the ONE primary
+    /// (an ended outing: «ملخص الطلعة»), «شارك رابط الدعوة» a secondary; «غادر الطلعة» stays at the end of the page.
+    @ViewBuilder private var newPage: some View {
+        NewUIPage(title: title, back: back, content: {
+            switch phase {
+            case .loading:
+                SarySkeletonList(rows: 4)
+            case .failed(let m):
+                if model.online {
+                    SaryScreenState(kind: .error, systemImage: nil, message: "تعذّر التحميل. \(m)",
+                                    actionTitle: "حاول مرة ثانية", actionID: "details.retry") { Task { await load() } }
+                } else {
+                    SaryStateView(kind: .offline(message: nil), actionTitle: "حاول مرة ثانية", actionID: "details.retry") { Task { await load() } }
+                }
+            case .loaded(let s):
+                loadedSections(s)
+                Button { confirmLeave = true } label: { SaryButtonLabel(title: "غادر الطلعة", systemImage: "rectangle.portrait.and.arrow.right") }
+                    .buttonStyle(.sary(.plainDestructive))
+                    .accessibilityIdentifier("details.leave")
             }
-        }
-        .sheet(item: Binding(get: { share.map(ShareTarget.init) }, set: { if $0 == nil { share = nil } })) { s in
-            ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
-        }
+        }, actions: {
+            if case .loaded(let s) = phase {
+                if s.outing.status != .ended {
+                    SaryPrimaryButton("افتح الخريطة", systemImage: "map.fill", id: "details.open") { model.open(outingId) }
+                    if s.me.role == "owner", let t = InviteTokenStore.load(outingId) {
+                        SarySecondaryButton("شارك رابط الدعوة", systemImage: SaryIcon.share, id: "details.share") { share = InviteLink.url(for: t) }
+                    }
+                } else {
+                    SaryPrimaryButton("ملخص الطلعة", systemImage: "flag.checkered", id: "details.summary") { back() }
+                }
+            }
+        })
     }
 
     private var title: String {
@@ -149,98 +194,8 @@ struct TripSummaryView: View {
     @State private var trackCover: TrackCover?
 
     var body: some View {
-        let p = theme.palette
-        SaryPage(title: "ملخص الطلعة", subtitle: subtitle, back: back) {
-            switch phase {
-            case .loading:
-                SaryStateView(kind: .loading("نجهّز الملخص…"))
-            case .failed(let m):
-                SaryStateView(kind: model.online ? .error(title: "تعذّر التحميل", message: m) : .offline(message: nil),
-                              actionTitle: "حاول مرة ثانية", actionID: "summary.retry") { Task { await load() } }
-            case .loaded(let s):
-                let shares = s.summaries ?? []
-                let mine = shares.first { $0.user_id == s.me.user_id }
-                let local = model.myTrip(outingId)
-                let span = spanSeconds(s)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s))], spacing: theme.space(.s)) {
-                    stat("clock.fill", "مدة الطلعة", span.map { SaryFormat.duration(seconds: $0) } ?? "—")
-                    stat("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
-                    stat("road.lanes", "مسافتي", (mine.map { $0.distance_m } ?? local.map { Double($0.distanceM) }).map { SaryFormat.distance(meters: $0) } ?? "—")
-                    stat("gauge.with.needle", "وقت الحركة", (mine.map { Int($0.moving_s) } ?? local?.movingS).map { SaryFormat.duration(seconds: $0) } ?? "—")
-                    if let sp = model.mySpeed(outingId) {
-                        /* On this device only: never in the shared summary or the share text. */
-                        stat("speedometer", "أعلى سرعة", SaryFormat.speed(kmh: sp.maxKmh))
-                        stat("car.side.fill", "متوسط السرعة أثناء الحركة", SaryFormat.speed(kmh: sp.avgMovingKmh))
-                    }
-                }
-                .accessibilityIdentifier("summary.stats")
-                if let facts = model.tripFacts(outingId) {
-                    TripSummarySection(facts: facts, snapshot: s, destination: model.plans.model(outingId).plan.destination,
-                                       trail: model.myTrailPoints(outingId), online: model.online || model.isDemo)
-                }
-                TripLegsSection(outingId: outingId)
-                /* A solo outing (docs/SOLO-OUTING.md): on this phone only — no shared points, nobody's
-                 * summaries, nothing to share with friends, no server return trip (yet). */
-                if !solo {
-                    TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
-                    SarySection(title: "ملخصات شاركها الأصدقاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
-                        if shares.isEmpty {
-                            Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
-                        }
-                        ForEach(Array(shares.enumerated()), id: \.element.id) { i, t in
-                            if i > 0 { SaryDivider() }
-                            HStack(spacing: theme.space(.m)) {
-                                Text(SaryFormat.number(i + 1)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textTertiary).frame(width: 18)
-                                Text(t.user_id == s.me.user_id ? "\(t.display_name) (أنت)" : t.display_name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(SaryFormat.distance(meters: t.distance_m)).saryNumber(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                                    Text(SaryFormat.duration(seconds: Int(t.moving_s)) + " حركة").saryText(.caption).foregroundStyle(p.textSecondary)
-                                }
-                            }
-                            .padding(.vertical, theme.space(.xs))
-                        }
-                    }
-                }
-                if let track {
-                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
-                        TrackSummaryCard(subject: track, trail: model.myTrailPoints(outingId), online: model.online || model.isDemo,
-                                         open: { trackCover = .detail(track) }, follow: { trackCover = TrackFollowModel(track).map(TrackCover.follow) })
-                            .padding(.vertical, theme.space(.s))
-                    }
-                } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
-                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
-                        TrailSketch(trail: trail, color: theme.palette.accent)
-                            .saryFitHeight(180)
-                            .padding(.vertical, theme.space(.s))
-                            .accessibilityIdentifier("summary.trail")
-                    }
-                }
-                if s.outing.status == .ended {
-                    Button { story = storyFacts(s, mine: mine, local: local) } label: {
-                        SaryButtonLabel(title: "اصنع قصة الطلعة", systemImage: "photo.on.rectangle.angled")
-                    }
-                    .buttonStyle(.sary(.primary))
-                    .accessibilityIdentifier("summary.story")
-                    if !solo { mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at)) }
-                    if !solo, model.tripFacts(outingId)?.start != nil || (model.myTrailPoints(outingId)?.points.count ?? 0) >= 2 {
-                        Button {
-                            busy = true
-                            Task {
-                                if await model.startReturnTrip(from: outingId) == nil { busy = false }
-                            }
-                        } label: { SaryButtonLabel(title: SaryCopy.returnOuting, systemImage: SaryIcon.backTrack, busy: busy) }
-                            .buttonStyle(.sary(.secondary))
-                            .accessibilityIdentifier("summary.returnTrip")
-                        Text("«طلعة الرجعة» طلعة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
-                            .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Button {
-                    shareText = text(s, mine: mine, local: local)
-                } label: { SaryButtonLabel(title: "شارك الملخص كنص", systemImage: SaryIcon.share) }
-                    .buttonStyle(.sary(.secondary))
-            }
+        Group {
+            if NewUI.enabled { newPage } else { legacyPage }
         }
         .task { await load() }
         .task(id: subtitle) {
@@ -270,6 +225,153 @@ struct TripSummaryView: View {
                 }
             }
         }
+    }
+
+    /// «ملخص الطلعة» content shared by both skins: stats, trip, legs, waypoints, friends' shares and my track.
+    @ViewBuilder private func loadedContent(_ s: OutingSnapshot) -> some View {
+        let p = theme.palette
+            let shares = s.summaries ?? []
+            let mine = shares.first { $0.user_id == s.me.user_id }
+            let local = model.myTrip(outingId)
+            let span = spanSeconds(s)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s))], spacing: theme.space(.s)) {
+                stat("clock.fill", "مدة الطلعة", span.map { SaryFormat.duration(seconds: $0) } ?? "—")
+                stat("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
+                stat("road.lanes", "مسافتي", (mine.map { $0.distance_m } ?? local.map { Double($0.distanceM) }).map { SaryFormat.distance(meters: $0) } ?? "—")
+                stat("gauge.with.needle", "وقت الحركة", (mine.map { Int($0.moving_s) } ?? local?.movingS).map { SaryFormat.duration(seconds: $0) } ?? "—")
+                if let sp = model.mySpeed(outingId) {
+                    /* On this device only: never in the shared summary or the share text. */
+                    stat("speedometer", "أعلى سرعة", SaryFormat.speed(kmh: sp.maxKmh))
+                    stat("car.side.fill", "متوسط السرعة أثناء الحركة", SaryFormat.speed(kmh: sp.avgMovingKmh))
+                }
+            }
+            .accessibilityIdentifier("summary.stats")
+            if let facts = model.tripFacts(outingId) {
+                TripSummarySection(facts: facts, snapshot: s, destination: model.plans.model(outingId).plan.destination,
+                                   trail: model.myTrailPoints(outingId), online: model.online || model.isDemo)
+            }
+            TripLegsSection(outingId: outingId)
+            /* A solo outing (docs/SOLO-OUTING.md): on this phone only — no shared points, nobody's
+             * summaries, nothing to share with friends, no server return trip (yet). */
+            if !solo {
+                TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
+                SarySection(title: "ملخصات شاركها الأصدقاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
+                    if shares.isEmpty {
+                        Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
+                    }
+                    ForEach(Array(shares.enumerated()), id: \.element.id) { i, t in
+                        if i > 0 { SaryDivider() }
+                        HStack(spacing: theme.space(.m)) {
+                            Text(SaryFormat.number(i + 1)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textTertiary).frame(width: 18)
+                            Text(t.user_id == s.me.user_id ? "\(t.display_name) (أنت)" : t.display_name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(SaryFormat.distance(meters: t.distance_m)).saryNumber(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                                Text(SaryFormat.duration(seconds: Int(t.moving_s)) + " حركة").saryText(.caption).foregroundStyle(p.textSecondary)
+                            }
+                        }
+                        .padding(.vertical, theme.space(.xs))
+                    }
+                }
+            }
+            if let track {
+                SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
+                    TrackSummaryCard(subject: track, trail: model.myTrailPoints(outingId), online: model.online || model.isDemo,
+                                     open: { trackCover = .detail(track) }, follow: { trackCover = TrackFollowModel(track).map(TrackCover.follow) })
+                        .padding(.vertical, theme.space(.s))
+                }
+            } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
+                SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
+                    TrailSketch(trail: trail, color: theme.palette.accent)
+                        .saryFitHeight(180)
+                        .padding(.vertical, theme.space(.s))
+                        .accessibilityIdentifier("summary.trail")
+                }
+            }
+    }
+
+    /// After the end: «ملخصي» (share / withdraw) and «طلعة الرجعة» — unchanged, in both skins.
+    @ViewBuilder private func endedExtras(_ s: OutingSnapshot) -> some View {
+        let p = theme.palette
+        let mine = (s.summaries ?? []).first { $0.user_id == s.me.user_id }
+        let local = model.myTrip(outingId)
+            if !solo { mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at)) }
+            if !solo, model.tripFacts(outingId)?.start != nil || (model.myTrailPoints(outingId)?.points.count ?? 0) >= 2 {
+                Button {
+                    busy = true
+                    Task {
+                        if await model.startReturnTrip(from: outingId) == nil { busy = false }
+                    }
+                } label: { SaryButtonLabel(title: SaryCopy.returnOuting, systemImage: SaryIcon.backTrack, busy: busy) }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("summary.returnTrip")
+                Text("«طلعة الرجعة» طلعة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
+                    .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+    }
+
+    private func shareTextButton(_ s: OutingSnapshot) -> some View {
+        let mine = (s.summaries ?? []).first { $0.user_id == s.me.user_id }
+        let local = model.myTrip(outingId)
+        return Button {
+            shareText = text(s, mine: mine, local: local)
+        } label: { SaryButtonLabel(title: "شارك الملخص كنص", systemImage: SaryIcon.share) }
+            .buttonStyle(.sary(.secondary))
+            .accessibilityIdentifier("summary.shareText")
+    }
+
+    @ViewBuilder private func stateViews(modern: Bool) -> some View {
+        switch phase {
+        case .loading:
+            if modern { SarySkeletonList(rows: 4) } else { SaryStateView(kind: .loading("نجهّز الملخص…")) }
+        case .failed(let m):
+            if modern, model.online {
+                SaryScreenState(kind: .error, systemImage: nil, message: "تعذّر التحميل. \(m)",
+                                actionTitle: "حاول مرة ثانية", actionID: "summary.retry") { Task { await load() } }
+            } else {
+                SaryStateView(kind: model.online ? .error(title: "تعذّر التحميل", message: m) : .offline(message: nil),
+                              actionTitle: "حاول مرة ثانية", actionID: "summary.retry") { Task { await load() } }
+            }
+        case .loaded:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder private var legacyPage: some View {
+        SaryPage(title: "ملخص الطلعة", subtitle: subtitle, back: back) {
+            stateViews(modern: false)
+            if case .loaded(let s) = phase {
+                loadedContent(s)
+                if s.outing.status == .ended {
+                    Button { story = storyFacts(s, mine: (s.summaries ?? []).first { $0.user_id == s.me.user_id }, local: model.myTrip(outingId)) } label: {
+                        SaryButtonLabel(title: "اصنع قصة الطلعة", systemImage: "photo.on.rectangle.angled")
+                    }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("summary.story")
+                    endedExtras(s)
+                }
+                shareTextButton(s)
+            }
+        }
+    }
+
+    /// Build 47 (`NewUI`): «اصنع قصة الطلعة» is the ONE primary, pinned (an outing still running has none); «شارك ملخصي»,
+    /// «طلعة الرجعة» and «شارك الملخص كنص» keep their place in the page as secondaries.
+    @ViewBuilder private var newPage: some View {
+        NewUIPage(title: "ملخص الطلعة", subtitle: subtitle, back: back, content: {
+            stateViews(modern: true)
+            if case .loaded(let s) = phase {
+                loadedContent(s)
+                if s.outing.status == .ended { endedExtras(s) }
+                shareTextButton(s)
+            }
+        }, actions: {
+            if case .loaded(let s) = phase, s.outing.status == .ended {
+                SaryPrimaryButton("اصنع قصة الطلعة", systemImage: "photo.on.rectangle.angled", id: "summary.story") {
+                    story = storyFacts(s, mine: (s.summaries ?? []).first { $0.user_id == s.me.user_id }, local: model.myTrip(outingId))
+                }
+            }
+        })
     }
 
     /// What «قصة الطلعة» may say: the outing's totals, my trail from this device, and only a count of the others.
@@ -306,7 +408,8 @@ struct TripSummaryView: View {
                         busy = true
                         Task { if await model.shareSummary(outingId) != nil { await load() }; busy = false }
                     } label: { SaryButtonLabel(title: "شارك ملخصي مع الأصدقاء", systemImage: "square.and.arrow.up.on.square", busy: busy) }
-                        .buttonStyle(.sary(.primary))
+                        /* Build 47: one primary per screen — «اصنع قصة الطلعة» — so this one is secondary under `NewUI`. */
+                        .buttonStyle(.sary(NewUI.enabled ? .secondary : .primary))
                         .accessibilityIdentifier("summary.shareMine")
                 }
             }
