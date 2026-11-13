@@ -1,0 +1,15 @@
+{
+ "trace": "A",
+ "region": "corridor",
+ "cls": "osm_confirmed_dirt",
+ "trace_km": 10.08,
+ "skeleton_px_after_asphalt_mask": 0,
+ "skeleton_px_before_mask": 0,
+ "tiles": 81,
+ "tiles_skipped_invalid": 0,
+ "prob_max": 0.6759150624275208,
+ "prob_p99_median_over_tiles": 0.24304603040218353,
+ "coverage_30m": 0.0,
+ "covered_km_30m": 0.0,
+ "pass_gates": false
+}

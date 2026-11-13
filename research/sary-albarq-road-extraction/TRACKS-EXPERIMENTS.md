@@ -115,3 +115,6 @@
 
 ---
 المراجع داخل هذا المستودع: `research/sary-albarq-road-extraction/mapbox-highres/RESULTS.md` (تجارب Mapbox والأرقام الكاملة) والسكربتات في `mapbox-highres/scripts/`. تجارب Sentinel-2 وSpaceNet مصدرها `SATELLITE_EXPERIMENT_REPORT.md` و`SKYFI_SCENE_PREFLIGHT_AR.md` في مستودع البحث الآخر (`/Users/m4pro/farq-map/research/sary-albarq-road-extraction/`)، وجولات #177 من `~/code/map-wt/sat-tracks-sample/`.
+
+## 2.7 اختبار التعميم على القصيم والممر (Mapbox، SAM-Road مدرَّب على الثمامة كاملة)
+أُجري على 4 آثار OSM العامة (10 كم لكل منها): أثر واحد مؤكَّد ترابي بـOSM (الممر) و3 غير موثّقة. المؤكَّد: تغطية 0% (أقصى احتمال 0.68 < 0.5 بمكوّن كافٍ). غير الموثّقة: 54.2% و4.9% و19.8% و96.9% (اجتاز اثنان). الحكم: التعميم غير مثبت. التفاصيل: `mapbox-highres/RESULTS-GENERALIZATION.md`.

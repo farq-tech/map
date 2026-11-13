@@ -121,11 +121,11 @@ for fn in glob.glob(f"{GEN}/osm_*.json"):
 PAVPTS = cKDTree(np.vstack([dens(l, 10) for c, l in OSMW if c in ("paved", "ambig") and len(l) > 1]))
 def run_trace(tid):
     v = TR[tid]; ll = np.array(v["pts"]); xy = T.to_m(ll[:, 0], ll[:, 1]); dd, _ = T.densify(xy, 10.0); tg = tangents(dd); nr = np.c_[-tg[:, 1], tg[:, 0]]
-    tl = T.needed_tiles(ll); PTS = []; S = 256
+    tl = T.needed_tiles(ll); PTS = []; S = 256; skipped = 0; pmax = 0.0; p90 = []
     with torch.inference_mode():
         for n, (tx, ty) in enumerate(tl):
             B, V = block_rgb(tx, ty)
-            if V[512:1024, 512:1024].mean() < .5: continue
+            if V[512:1024, 512:1024].mean() < .5: skipped += 1; continue
             mpp = MPP_LAT(tiles.tile2ll(tx + .5, ty + .5, 17)[0]); f = mpp / 1.0
             img = cv2.resize(B, None, fx=f, fy=f, interpolation=cv2.INTER_AREA).astype(np.float32); H = img.shape[0]
             Wm = cv2.resize(V.astype(np.float32), None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST); img[Wm < .5] = img[Wm > .5].mean(0) if (Wm > .5).any() else 0
@@ -134,7 +134,7 @@ def run_trace(tid):
             for k in range(0, len(wins), 9):
                 ch = wins[k:k + 9]; X = torch.from_numpy(np.stack([img[y0:y0+S, x0:x0+S] for y0, x0 in ch])).to(dev); p = torch.sigmoid(road_logits(X)).cpu().numpy()
                 for (y0, x0), pp in zip(ch, p): prob[y0:y0+S, x0:x0+S] += pp; cnt[y0:y0+S, x0:x0+S] += 1
-            prob /= np.maximum(cnt, 1); c0 = int(512 * f); c1 = int(1024 * f); cen = prob[c0:c1, c0:c1]
+            prob /= np.maximum(cnt, 1); c0 = int(512 * f); c1 = int(1024 * f); cen = prob[c0:c1, c0:c1]; pmax = max(pmax, float(cen.max())); p90.append(float(np.percentile(cen, 99)))
             m = remove_small_objects(cen > 0.5, 30); sk = skeletonize(m); lab = label(sk, connectivity=2); cc = np.bincount(lab.ravel()); keep = cc >= 60; keep[0] = False
             ii, jj = np.nonzero(keep[lab])
             if len(ii):
@@ -144,8 +144,8 @@ def run_trace(tid):
     pts = np.vstack(PTS) if PTS else np.zeros((0, 2)); n_all = len(pts)
     pts = pts[PAVPTS.query(pts)[0] > 75] if n_all else pts
     # only tiles of the trace buffer were evaluated, so restrict the "target" to the trace itself (tile coverage check below)
-    R = dict(trace=tid, region=v["region"], cls=v["cls"], trace_km=float(len(dd) * .01), skeleton_px_after_asphalt_mask=int(len(pts)), skeleton_px_before_mask=int(n_all))
-    if len(pts) == 0: R.update(coverage_30m=0.0, covered_km_30m=0.0, pass_gates=False); return R
+    R = dict(trace=tid, region=v["region"], cls=v["cls"], trace_km=float(len(dd) * .01), skeleton_px_after_asphalt_mask=int(len(pts)), skeleton_px_before_mask=int(n_all), tiles=len(tl), tiles_skipped_invalid=skipped, prob_max=pmax, prob_p99_median_over_tiles=float(np.median(p90)) if p90 else None)
+    if len(pts) == 0: print(json.dumps(R)); R.update(coverage_30m=0.0, covered_km_30m=0.0, pass_gates=False); return R
     tree = cKDTree(pts); d0 = tree.query(dd)[0]; blk = np.arange(len(dd)) // 50; rng = np.random.default_rng(5); ctl = []
     R["coverage_15m"] = float((d0 <= 15).mean()); R["coverage_30m"] = float((d0 <= 30).mean()); R["covered_km_30m"] = float((d0 <= 30).sum() * .01)
     for _ in range(1000):

@@ -1,0 +1,18 @@
+{
+ "trace": "F",
+ "region": "corridor",
+ "cls": "unverified_unmapped",
+ "trace_km": 10.03,
+ "skeleton_px_after_asphalt_mask": 10025,
+ "skeleton_px_before_mask": 10025,
+ "coverage_15m": 0.9461615154536391,
+ "coverage_30m": 0.9690927218344965,
+ "covered_km_30m": 9.72,
+ "control_30m_p50": 0.010967098703888335,
+ "control_30m_p95": 0.020937188434695914,
+ "frac_controls_ge": 0.0,
+ "precision_30m_gps_only": 0.8164588528678304,
+ "false_alarm_km_gt30m_from_trace": 1.84,
+ "precision_control_p50": 0.006982543640897756,
+ "pass_gates": true
+}
