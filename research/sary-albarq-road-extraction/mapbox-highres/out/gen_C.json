@@ -1,0 +1,18 @@
+{
+ "trace": "C",
+ "region": "qassim",
+ "cls": "unverified_unmapped",
+ "trace_km": 10.02,
+ "skeleton_px_after_asphalt_mask": 5559,
+ "skeleton_px_before_mask": 5559,
+ "coverage_15m": 0.49600798403193613,
+ "coverage_30m": 0.5419161676646707,
+ "covered_km_30m": 5.43,
+ "control_30m_p50": 0.0,
+ "control_30m_p95": 0.0,
+ "frac_controls_ge": 0.0,
+ "precision_30m_gps_only": 0.864543982730707,
+ "false_alarm_km_gt30m_from_trace": 0.753,
+ "precision_control_p50": 0.0,
+ "pass_gates": true
+}
