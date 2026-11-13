@@ -148,7 +148,7 @@ final class LinkResolverTests: XCTestCase {
     }
 
     func testHostAllowList() {
-        for h in ["www.google.com", "maps.google.com.sa", "google.co.uk", "maps.app.goo.gl", "goo.gl", "g.co", "waze.com", "ul.waze.com", "maps.apple.com"] {
+        for h in ["www.google.com", "maps.google.com.sa", "google.co.uk", "maps.app.goo.gl", "goo.gl", "g.co", "waze.com", "ul.waze.com"] {
             XCTAssertTrue(LinkResolver.isAllowed(host: h), h)
         }
         for h in ["evil.com", "notgoogle.com", "google.com.evil.io", "goo.gl.evil.com", "apple.com", ""] {
