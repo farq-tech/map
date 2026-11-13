@@ -552,7 +552,7 @@ struct AdvancedSettingsView: View {
     @State private var gpx: [(id: String, url: URL)] = []
     @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.auto.rawValue
     @AppStorage(OneMapFlag.key) private var oneMap = false
-    @AppStorage(NewUI.key) private var newUI = false
+    @AppStorage(NewUI.key) private var newUI = NewUI.defaultOn
     @Environment(AppearanceSettings.self) private var appearance
 
     var body: some View {

@@ -164,11 +164,11 @@ enum DestinationCompass {
     }
 
     /// Driving or guiding, at the sheet's peek, nothing else holding the corner: not exploring, not after
-    /// the end, not on the off-road leg (its own arrow card is up), not with my SOS on or the alerts' list
+    /// the end, off the route too (when it is most needed; `offRoad` is kept for call sites), not with my SOS on or the alerts' list
     /// open, and not on a short screen (iPhone SE: the dial would meet SOS and the dock, `LiveFit`).
     static func shows(driving: Bool, guiding: Bool, offRoad: Bool, exploring: Bool, ended: Bool, peek: Bool,
                       sosFocused: Bool, bellOpen: Bool, screenHeight: CGFloat) -> Bool {
-        (driving || guiding) && !offRoad && !exploring && !ended && peek && !sosFocused && !bellOpen
+        (driving || guiding) && !exploring && !ended && peek && !sosFocused && !bellOpen
             && !LiveFit.compactHeight(screenHeight)
     }
 

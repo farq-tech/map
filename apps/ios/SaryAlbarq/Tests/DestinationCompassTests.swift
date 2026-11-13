@@ -226,7 +226,7 @@ final class DestinationCompassTests: XCTestCase {
         XCTAssertTrue(shows())
         XCTAssertTrue(shows(driving: false, guiding: true))
         XCTAssertFalse(shows(driving: false))
-        XCTAssertFalse(shows(offRoad: true))
+        XCTAssertTrue(shows(offRoad: true), "48.2: the compass stays up off the route")
         XCTAssertFalse(shows(exploring: true))
         XCTAssertFalse(shows(ended: true))
         XCTAssertFalse(shows(peek: false))
