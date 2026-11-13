@@ -94,6 +94,8 @@ final class NewScreensBUITests: XCTestCase {
         XCTAssertTrue(el(app, "camp.card.1").waitForExistence(timeout: 25))
         XCTAssertTrue(el(app, "camp.go.1").exists)
         XCTAssertGreaterThanOrEqual(el(app, "page-close").frame.height, 43.5)
+        XCTAssertTrue(el(app, "camp.card.5").waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 2.5) // the loading veil fades before the shot
         shot("camp")
     }
 
@@ -101,6 +103,7 @@ final class NewScreensBUITests: XCTestCase {
         let app = launch(["-SaryLiveModal", "routes", "-SaryRouteTo", "25.23,46.74", "-SaryRouteName", "روضة نورة"], live: true)
         XCTAssertTrue(el(app, "routes.sheet").waitForExistence(timeout: 25))
         XCTAssertTrue(el(app, "page-close").exists)
+        Thread.sleep(forTimeInterval: 2.5)
         shot("routes")
     }
 }

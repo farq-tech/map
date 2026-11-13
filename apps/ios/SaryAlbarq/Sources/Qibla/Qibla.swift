@@ -163,8 +163,9 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
         if let lat = arg("-SaryQiblaLat"), let lng = arg("-SaryQiblaLng") { coordinate = .init(latitude: lat, longitude: lng) }
         if let i = a.firstIndex(of: "-SaryQiblaLocationState"), i + 1 < a.count {
             switch a[i + 1] {
-            case "denied": simulatedLocationState = .denied; locationState = .denied
-            case "failed": simulatedLocationState = .failed; locationState = .failed
+            /* A simulated refusal / failure means no position: the outing's fallback fix must not hide it (UI tests, shots). */
+            case "denied": simulatedLocationState = .denied; locationState = .denied; coordinate = nil
+            case "failed": simulatedLocationState = .failed; locationState = .failed; coordinate = nil
             default: break
             }
         }
