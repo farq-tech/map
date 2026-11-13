@@ -81,7 +81,10 @@ private struct SarySheetPresentation: ViewModifier {
         )
         content
             .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: drive, trip: trip, surfaces: surfaces, guide: guide) }), selection: binding)
-            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            /* Always enabled: with a threshold (`upThrough: .medium`) a detent the system could not match to the set (a height that
+             * changed under it) left UIKit's dimming layer — alpha 0, but swallowing every touch meant for the map's controls. The
+             * sheet covers what it covers at its large detent; there is nothing to protect by blocking the map there. */
+            .presentationBackgroundInteraction(.enabled)
             .presentationDragIndicator(.visible)
             /* `.resizes` (was `.scrolls`): a drag on the content resizes the sheet until it reaches its
              * largest detent, and only then scrolls. With `.scrolls` the half-height ScrollView took the

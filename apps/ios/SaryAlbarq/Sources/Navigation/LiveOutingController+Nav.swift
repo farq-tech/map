@@ -385,6 +385,9 @@ extension LiveOutingController {
         if args.contains("-SaryNavPicker") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.openNavPicker() }
         }
+        /* `-SaryDriveFlip <s>`: the speed dropping and rising near the destination — the drive mode flips every s seconds
+         * (the sheet's peek shape follows it). */
+        if let s = arg("-SaryDriveFlip").flatMap(Double.init) { driveFlip(every: s, on: true) }
         guard let to = arg("-SaryNavTo") else { return }
         let parts = to.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         guard parts.count >= 2, let lat = Double(parts[0]), let lng = Double(parts[1]) else { return }
@@ -409,6 +412,14 @@ extension LiveOutingController {
                 }
             }
             }
+        }
+    }
+
+    private func driveFlip(every s: Double, on: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + s) { [weak self] in
+            guard let self else { return }
+            self.appearance.prefs.driveMode = on ? .on : .off
+            self.driveFlip(every: s, on: !on)
         }
     }
 
