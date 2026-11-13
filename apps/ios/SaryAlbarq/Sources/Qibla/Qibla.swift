@@ -163,8 +163,9 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
         if let lat = arg("-SaryQiblaLat"), let lng = arg("-SaryQiblaLng") { coordinate = .init(latitude: lat, longitude: lng) }
         if let i = a.firstIndex(of: "-SaryQiblaLocationState"), i + 1 < a.count {
             switch a[i + 1] {
-            case "denied": simulatedLocationState = .denied; locationState = .denied
-            case "failed": simulatedLocationState = .failed; locationState = .failed
+            /* A simulated refusal / failure means no position: the outing's fallback fix must not hide it (UI tests, shots). */
+            case "denied": simulatedLocationState = .denied; locationState = .denied; coordinate = nil
+            case "failed": simulatedLocationState = .failed; locationState = .failed; coordinate = nil
             default: break
             }
         }
@@ -312,6 +313,8 @@ struct QiblaView: View {
             VStack(spacing: theme.space(.l)) {
                 if let c = compass.coordinate {
                     content(c, scale: scale)
+                } else if NewUI.enabled {
+                    newState(scale: scale)
                 } else {
                     VStack(spacing: theme.space(.m)) {
                         if compass.locationState == .locating {
@@ -344,6 +347,32 @@ struct QiblaView: View {
         }
     }
 
+    /// Build 47: no location yet, from the shared screen components: an icon in a circle, ONE Najdi line, one primary button.
+    @ViewBuilder
+    private func newState(scale: CGFloat) -> some View {
+        let p = theme.palette
+        Group {
+            switch compass.locationState {
+            case .locating:
+                VStack(spacing: theme.space(.l)) {
+                    SarySkeleton(shape: .circle, width: 72, height: 72)
+                    Text("ننتظر موقعك لنحسب اتجاه القبلة").saryType(.headline).foregroundStyle(p.textSecondary)
+                        .multilineTextAlignment(.center).accessibilityIdentifier("qibla.waiting")
+                }
+                .padding(.horizontal, theme.space(.l))
+            case .denied:
+                SaryScreenState(kind: .empty, systemImage: "location.slash.fill", message: "اسمح للموقع لنحسب اتجاه القبلة",
+                                actionTitle: "إعدادات الموقع", actionID: "qibla.open-settings", messageID: "qibla.location-denied") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+            default:
+                SaryScreenState(kind: .error, systemImage: "location.circle", message: "ما قدرنا نحدد موقعك الآن، حاول مرة ثانية",
+                                actionTitle: "حاول مرة ثانية", actionID: "qibla.retry", messageID: "qibla.location-error") { compass.retryLocation() }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: Qibla.compassDesign.height * scale)
+    }
+
     @ViewBuilder
     private func content(_ c: CLLocationCoordinate2D, scale: CGFloat) -> some View {
         let p = theme.palette
@@ -357,7 +386,7 @@ struct QiblaView: View {
 
         VStack(spacing: theme.space(.xs)) {
             Text(Qibla.degreesLabel(q))
-                .font(.sary(44, .bold))
+                .font(NewUI.enabled ? .system(size: 52, weight: .bold, design: .rounded).monospacedDigit() : .sary(44, .bold))
                 .foregroundStyle(p.textPrimary)
                 .accessibilityIdentifier("qibla.degrees")
             Text("اتجاه القبلة من الشمال الحقيقي · مكة على بعد \(SaryFormat.number(Int(Qibla.distanceKm(from: c).rounded()))) كم")
