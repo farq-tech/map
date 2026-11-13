@@ -18,6 +18,16 @@ final class GuidingTouchUITests: XCTestCase {
         }
     }
 
+    /// Evidence for a tap that did nothing: the accessibility hierarchy and the windows, attached to the result.
+    private func dump(_ app: XCUIApplication, _ name: String) {
+        let a = XCTAttachment(string: "\(app.state.rawValue)\nwindows: \(app.windows.allElementsBoundByIndex.map { "\($0.frame)" })\n\(app.debugDescription)")
+        a.name = "tree-\(name)"; a.lifetime = .keepAlways; add(a)
+        if let dir = ProcessInfo.processInfo.environment["SARY_SHOTS"] {
+            try? "\(app.debugDescription)".write(toFile: dir + "/untappable-tree-\(name).txt", atomically: true, encoding: .utf8)
+        }
+        shot(name)
+    }
+
     /// A desert destination: the demo road ends short of it and the rest is the off-road leg.
     private func guidingApp(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
@@ -32,6 +42,7 @@ final class GuidingTouchUITests: XCTestCase {
     private func layersAnswers(_ app: XCUIApplication, _ label: String) {
         let button = el(app, "map.layers")
         XCTAssertTrue(button.waitForExistence(timeout: 20), "\(label): the layers button is on the map")
+        if !button.isHittable { dump(app, "\(label)-layers-not-hittable") }
         XCTAssertTrue(button.isHittable, "\(label): layers is hittable")
         button.tap()
         let sheet = el(app, "explore.layers.sheet")
@@ -47,9 +58,14 @@ final class GuidingTouchUITests: XCTestCase {
         let tilt = el(app, "map.tilt")
         guard tilt.waitForExistence(timeout: 5) else { return }
         let before = tilt.value as? String
-        tilt.tap()
         let changed = NSPredicate { _, _ in (tilt.value as? String) != before }
-        let ok = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: changed, object: nil)], timeout: 6) == .completed
+        var ok = false
+        /* A tap landing during the camera's own animation is absorbed by it: one more try before calling it dead. */
+        for _ in 0..<2 where !ok {
+            tilt.tap()
+            ok = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: changed, object: nil)], timeout: 5) == .completed
+        }
+        if !ok { dump(app, "\(label)-tilt-dead") }
         if !ok { shot("\(label)-tilt-dead") }
         XCTAssertTrue(ok, "\(label): a real tap on ٣د changes the camera")
         tilt.tap()
@@ -60,7 +76,11 @@ final class GuidingTouchUITests: XCTestCase {
     /// «موقعي» / «باتجاهي»: a real tap must change the camera button (its label flips between follow and heading).
     private func locateAnswers(_ app: XCUIApplication, _ label: String) {
         let b = el(app, "outing-locate")
-        guard b.waitForExistence(timeout: 5) else { return }
+        /* The button is not in every guidance state (the off-route / reroute phases drop it from the column: the tree dump of the
+         * failure showed only layers and ٣د): wait for the state to settle, skip when it is really absent, fail when it is there but covered. */
+        _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: b)], timeout: 4)
+        guard b.exists else { return }
+        if !b.isHittable { dump(app, "\(label)-locate-not-hittable") }
         XCTAssertTrue(b.isHittable, "\(label): locate is hittable")
         let before = b.value as? String
         b.tap()
@@ -102,10 +122,17 @@ final class GuidingTouchUITests: XCTestCase {
         let app = guidingApp()
         XCTAssertTrue(el(app, "nav.bottomBar").waitForExistence(timeout: 75), "guiding")
         layersAnswers(app, "before-bg")
+        shot("bg-before-home")
         XCUIDevice.shared.press(.home)
         sleep(3)
         app.activate()
         XCTAssertTrue(el(app, "nav.bottomBar").waitForExistence(timeout: 20))
+        sleep(2)
+        dump(app, "bg-after-foreground")
+        /* Coming back from the background in a shared trip the app shows its own «المشاركة تستمر والشاشة مقفلة» explainer over the map
+         * (by design, with a visible sheet): not a swallowed layer. Answer it like a person would, then the map's controls must work. */
+        let later = app.buttons["لاحقًا، والتطبيق مفتوح فقط"]
+        if later.waitForExistence(timeout: 3) { later.tap(); sleep(2) }
         layersAnswers(app, "after-bg")
         tiltAnswers(app, "after-bg")
     }
