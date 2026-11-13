@@ -304,3 +304,55 @@ final class OneMapIdleUITests: XCTestCase {
 }
 
 private enum OneMapSwitchText { static let title = "الخريطة الواحدة (تجريبي)" }
+
+/// EM4: the live outing map (no exploration mode) gets exploration's capabilities with the flag, and only with it.
+final class OutingCapabilitiesUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    private func launch(oneMap: Bool, extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", "stopped"]
+            + (oneMap ? ["-SaryOneMap"] : []) + extra
+        app.launch()
+        app.allowLocationIfAsked()
+        return app
+    }
+
+    private func el(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
+
+    private func shot(_ name: String) {
+        let s = XCUIScreen.main.screenshot()
+        let a = XCTAttachment(screenshot: s); a.name = name; a.lifetime = .keepAlways; add(a)
+        if let dir = ProcessInfo.processInfo.environment["SARY_SHOTS"] {
+            try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            try? s.pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent("em4-\(name).png"))
+        }
+    }
+
+    func testTheOutingLayersSheetKeepsItsRowsWithAndWithoutTheFlag() {
+        for flag in [false, true] {
+            let app = launch(oneMap: flag)
+            let layers = el(app, "map.layers")
+            XCTAssertTrue(layers.waitForExistence(timeout: 40), "flag=\(flag): the outing map's layers button")
+            layers.tap()
+            XCTAssertTrue(el(app, "explore.layers.sheet").waitForExistence(timeout: 10))
+            XCTAssertTrue(el(app, "layer.topo").waitForExistence(timeout: 5))
+            XCTAssertTrue(el(app, "weather.layer.rain").waitForExistence(timeout: 5), "flag=\(flag): weather layers are in the outing's sheet either way (#239)")
+            XCTAssertTrue(el(app, "explore-camp-sites").exists, "flag=\(flag): camp sites are in the outing's sheet either way (S3)")
+            shot("outing-sheet-flag-\(flag ? "on" : "off")")
+            app.terminate()
+        }
+    }
+
+    /// Same trip, same place and zoom: the chosen topographic base shows on the outing map only with the flag.
+    func testTheChosenBaseLayerShowsOnTheOutingMapOnlyWithTheFlag() {
+        for flag in [false, true] {
+            let app = launch(oneMap: flag, extra: ["-SaryLayer", "topo"])
+            XCTAssertTrue(el(app, "map.layers").waitForExistence(timeout: 40))
+            sleep(10)
+            shot("outing-topo-flag-\(flag ? "on" : "off")")
+            app.terminate()
+        }
+    }
+}
+

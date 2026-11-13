@@ -1828,7 +1828,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 cars.append(MotionFX.Car(id: r.item.id, layer: Vehicle.ids(r.key).layer, isMe: r.item.isMe, pose: pose,
                                          offRoad: r.matcher.road == nil, drawn: styleReady && r.layersReady && r.model))
             }
-            fx.exploring = exploreDrawer.last.active
+            fx.exploring = exploreDrawer.last.active || exploreDrawer.last.capabilities
             fx.drive = theme.drive
             fx.night = theme.night
             fx.exaggeration = terrainExaggeration
@@ -2439,7 +2439,7 @@ extension OutingMapboxView.Coordinator {
         let me = lastCars.first(where: \.isMe)
         var routes: [[LngLat]] = []
         if let f = trails.followed { routes.append(f.points) }
-        if exploreDrawer.last.active { routes += exploreDrawer.last.tracks.map(\.points) }
+        routes += exploreDrawer.last.visualRoutes
         if let r = navLast.routes.first(where: \.selected) { routes.append(r.coordinates) }
         if planDrawing.plan.route.count >= 2 { routes.append(planDrawing.plan.route) }
         /* UX ٢١: after the end the slope warning is history — no routes, no legend. */

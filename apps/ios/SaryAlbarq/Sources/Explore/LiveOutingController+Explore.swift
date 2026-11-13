@@ -109,9 +109,9 @@ extension LiveOutingController {
     }
 
     /// What exploration draws: shown tracks and saved places.
-    func mapExplore(places: [SavedPlace], tracks: TrackLibrary) -> MapExplore {
-        guard exploreActive else { return MapExplore() }
-        return MapExplore(active: true,
+    func mapExplore(places: [SavedPlace], tracks: TrackLibrary, capable: Bool = false) -> MapExplore {
+        guard exploreActive || capable else { return MapExplore() }
+        return MapExplore(active: exploreActive, capabilities: capable,
                           tracks: tracks.tracks.filter { tracks.shown.contains($0.id) }.map { .init(id: $0.id, name: $0.name, points: $0.points) },
                           places: places.map { .init(id: $0.id, name: $0.name, position: $0.position) })
     }

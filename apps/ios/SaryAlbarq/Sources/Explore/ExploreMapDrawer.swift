@@ -17,8 +17,14 @@ struct MapExplore: Equatable {
 
     /// Exploration mode is on (the camera stops keeping the group in view).
     var active = false
+    /// EM4: exploration's capabilities are on (`MapCapabilityRules`) without the mode: weather overlays, desert tracks,
+    /// the saved places and tracks drawn. Unlike `active` it never stops the camera keeping the group in view.
+    var capabilities = false
     var tracks: [Track] = []
     var places: [Place] = []
+
+    /// The shown GPX tracks as routes for the visuals pack (the slope overlay): when exploration is on OR its capabilities are.
+    var visualRoutes: [[LngLat]] { (active || capabilities) ? tracks.map(\.points) : [] }
 }
 
 /// Draws `MapExplore` as GeoJSON layers; re-added after every style load (layer switch).
@@ -42,7 +48,7 @@ final class ExploreMapDrawer {
         guard d != drawn else { return }
         ensureLayers(m)
         /* Build 10: the same display rules as every track (Douglas–Peucker 2.5 m), start / end dots. */
-        let lines = (d.active ? d.tracks : []).map { ($0, TrackDisplay.line(plain: $0.points)) }.filter { $0.1.isDrawable }
+        let lines = ((d.active || d.capabilities) ? d.tracks : []).map { ($0, TrackDisplay.line(plain: $0.points)) }.filter { $0.1.isDrawable }
         let tracks = FeatureCollection(features: lines.map { t, line in
             var f = Feature(geometry: .lineString(LineString(line.points.map(\.coordinate))))
             f.properties = ["id": .string(t.id), "name": .string(t.name)]
@@ -55,7 +61,7 @@ final class ExploreMapDrawer {
             b.properties = ["k": .string("e")]
             return [a, b]
         })
-        let pins = FeatureCollection(features: (d.active ? d.places : []).map { p in
+        let pins = FeatureCollection(features: ((d.active || d.capabilities) ? d.places : []).map { p in
             var f = Feature(geometry: .point(Point(p.position.coordinate)))
             f.properties = ["id": .string(p.id), "name": .string(p.name)]
             return f

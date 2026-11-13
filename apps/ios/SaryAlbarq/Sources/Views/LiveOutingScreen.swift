@@ -69,6 +69,8 @@ struct LiveOutingScreen: View {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
                 let members = controller.mapMembers(theme: theme, input: input, participants: ui.participantsTab.participants)
                 let exploring = controller.liveContext(drive: theme.drive) == .exploring
+                /* EM4: the map's capabilities (layer, 3D, weather, high-res, labels, tracks) — exploring, or the flag while looking around. */
+                let capable = controller.mapCapabilitiesOn
                 PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
                     members: members,
@@ -99,14 +101,14 @@ struct LiveOutingScreen: View {
                     onSelectRoute: { controller.nav.select($0) },
                     /* The chosen layer and the 3D view are exploration's; the trip map stays on satellite
                      * (the layer offline areas always cover). */
-                    layer: exploring ? controller.mapLayer : .satellite,
-                    terrain3D: exploring && controller.terrain3D,
+                    layer: capable ? controller.mapLayer : .satellite,
+                    terrain3D: capable && controller.terrain3D,
                     tripEnded: controller.tripEnded,
-                    explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary),
+                    explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary, capable: capable),
                     /* Build 10: clean imagery when a track is the subject; road names while navigating. */
-                    labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
+                    labels: (capable && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) },
-                    hiRes: controller.hiResRequest(ui, exploring: exploring),
+                    hiRes: controller.hiResRequest(ui, exploring: capable),
                     userPoint: weatherUserPoint
                 )
                 }
