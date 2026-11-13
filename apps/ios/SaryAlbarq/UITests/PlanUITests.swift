@@ -66,6 +66,20 @@ final class PlanUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["plan.toast"].waitForExistence(timeout: 5))
     }
 
+    /// A National Address code is recognised and answered with a clear message (never silent, never a crash).
+    func testNationalAddressCodeShowsClearMessage() {
+        let app = launch(["-demo", "-demoPlanEmpty", "-SaryScreen", "plan-editor"])
+        let search = app.buttons["plan.search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 15))
+        search.tap()
+        let field = app.textFields["search.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("RARA6498")
+        let msg = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "رمز عنوان وطني")).firstMatch
+        XCTAssertTrue(msg.waitForExistence(timeout: 8))
+    }
+
     func testLongPressCardCopiesWesternDigits() {
         let app = launch(["-demo", "-demoPlanEmpty", "-SaryScreen", "plan-editor"])
         let map = app.descendants(matching: .any)["plan.map"].firstMatch

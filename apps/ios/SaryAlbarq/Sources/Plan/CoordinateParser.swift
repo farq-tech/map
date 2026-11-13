@@ -193,7 +193,7 @@ enum CoordinateParser {
 
     // MARK: regex helper
 
-    private static func match(_ pattern: String, _ s: String) -> [String]? {
+    static func match(_ pattern: String, _ s: String) -> [String]? {
         guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = s as NSString
         guard let m = re.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) else { return nil }
