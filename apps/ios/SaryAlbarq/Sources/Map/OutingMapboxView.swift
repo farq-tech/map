@@ -1117,7 +1117,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 let c = compass.reading
                 let bearing = headingSource.update(speedKmh: kmh, course: r.heading, compass: c?.heading, compassError: c?.error)
                     ?? followSmoother.shown?.bearing ?? m.cameraState.bearing
-                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: FollowZoom.carScreenShare)
+                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h,
+                                             share: FollowZoom.carShare(clear: h - Double(chrome.top) - Double(chrome.bottom)))
                 target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: MapTiltModel.shared.pitch(.navigation),
                                           topPadding: pad.top, bottomPadding: pad.bottom)
             default:
