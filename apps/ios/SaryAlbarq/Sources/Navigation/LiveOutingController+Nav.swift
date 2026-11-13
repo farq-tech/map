@@ -259,6 +259,16 @@ extension LiveOutingController {
         case .idle:
             break
         }
+        if nav.phase == .guiding, let line = d.routes.first?.coordinates, let f = location.lastFix {
+            let me = LngLat(lng: f.lng, lat: f.lat)
+            /* Cheap first: the grid is only looked up when the car is off the line and close enough. */
+            if let (to, _, dist) = NavRejoin.nearest(me, line), dist > NavRejoinTuning.hideM, dist <= NavRejoinTuning.maxShortcutM,
+               let c = NavRejoin.connector(me: me, route: line, terrain: NavRejoin.bundledTerrain(me, to)) {
+                d.connector = [c.from, c.to]
+                d.labels = [.init(id: "connector", at: LngLat(lng: (c.from.lng + c.to.lng) / 2, lat: (c.from.lat + c.to.lat) / 2),
+                                  text: NavRejoin.label(c), selected: false)]
+            }
+        }
         if let leg = nav.offRoad, nav.phase != .arrived {
             var from = leg.from
             if nav.phase == .offRoad || nav.direct, let f = location.lastFix { from = LngLat(lng: f.lng, lat: f.lat) }
