@@ -73,8 +73,8 @@ struct GazetteerCategoryService: DesertCategoryService {
         self.limit = limit
     }
 
-    /// Without a fix the list is ranked from Riyadh (the map opens there too).
-    static let fallbackCenter = LngLat(lng: 46.6753, lat: 24.7136)
+    /// Without a fix the list is ranked from the last known place, Riyadh only if there is none (the map opens there too).
+    static var fallbackCenter: LngLat { MapOpening.center() }
 
     func search(_ category: HomeCategory, near: LngLat?) async -> DesertCategoryResult {
         guard case let .gazetteer(kind)? = category.desertSource else { return .places([]) }

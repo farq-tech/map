@@ -173,7 +173,12 @@ struct OutingMapboxView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> MapView {
-        let camera = CameraOptions(center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753), zoom: 12.15, bearing: 0, pitch: 0)
+        /* Opens where the trip is (destination), else where I am (my car / live fix / last known place); Riyadh is the last resort.
+         * Without a trip target the map re-centres once on my first real fix (see `openingRecentre`). */
+        let explicitOpen = plan.destination.map { LngLat(lng: $0.lng, lat: $0.lat) } ?? members.first(where: \.isMe)?.position
+        let camera = CameraOptions(center: MapOpening.center(explicit: explicitOpen).coordinate, zoom: 12.15, bearing: 0, pitch: 0)
+        context.coordinator.openedAt = explicitOpen == nil ? MapOpening.center() : nil
+        context.coordinator.openedAtFallback = explicitOpen == nil && MapOpening.liveFix == nil
         let cached = ArabicBasemap.cached(layer)
         let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: camera, styleURI: cached == nil ? layer.styleURI : nil))
         if let cached { map.mapboxMap.loadStyle(cached) }
@@ -208,7 +213,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onMapTap = onMapTap
         c.onEmptyTap = onEmptyTap
         c.onProjection = onProjection
-        c.onUserGesture = onUserGesture
+        c.onUserGesture = { [weak c] in c?.openingSettled = true; onUserGesture() }
         c.onGestureEnd = onGestureEnd
         c.waypointPins.onTap = onWaypointTap
         c.onLongPress = onLongPress
@@ -227,6 +232,7 @@ struct OutingMapboxView: UIViewRepresentable {
         #else
         c.syncIfChanged(members)
         #endif
+        c.openingRecentre(hasCameraRequest: camera != nil)
         c.setRally(rally)
         c.updatePulse()
         c.setWaypoints(waypoints)
@@ -349,6 +355,22 @@ struct OutingMapboxView: UIViewRepresentable {
         private var mySpeedMps: Double?
         var theme: SaryTheme = .default
         var lastCamera = -1
+        /* Opening without a trip target: the place the map opened on (nil when a target or my car was used). */
+        var openedAt: LngLat?
+        /* True when that place was the persisted/Riyadh fallback, not a live fix: the first fix may move it. */
+        var openedAtFallback = false
+        /* The person touched the map, or the controller took the camera: never move it on our own again. */
+        var openingSettled = false
+
+        /// Once: the map opened on a stale/fallback place and my first real fix arrived far from it,
+        /// untouched by the person → re-centre on me (the waiting state shows where I am, not Riyadh).
+        func openingRecentre(hasCameraRequest: Bool) {
+            guard !openingSettled, openedAt != nil, openedAtFallback else { return }
+            if hasCameraRequest { openingSettled = true; return }
+            guard let fix = MapOpening.liveFix, let from = openedAt else { return }
+            openingSettled = true
+            if MapOpening.distanceM(from, fix) > 300 { center(fix, zoom: 12.15, motion: .recenter) }
+        }
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
         /// The live breath (`LivePulse`): one slow timer, only while something live is on the map.
         private var pulseTimer: Timer?
@@ -1117,7 +1139,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 let c = compass.reading
                 let bearing = headingSource.update(speedKmh: kmh, course: r.heading, compass: c?.heading, compassError: c?.error)
                     ?? followSmoother.shown?.bearing ?? m.cameraState.bearing
-                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: FollowZoom.carScreenShare)
+                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h,
+                                             share: FollowZoom.carShare(clear: h - Double(chrome.top) - Double(chrome.bottom)))
                 target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: MapTiltModel.shared.pitch(.navigation),
                                           topPadding: pad.top, bottomPadding: pad.bottom)
             default:

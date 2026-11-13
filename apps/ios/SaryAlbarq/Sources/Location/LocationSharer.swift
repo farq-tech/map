@@ -573,6 +573,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         guard let f = fix else { gate.countInvalid(); return publishStats(nil, source: source, nowMs: nowMs) }
         guard case let .accept(ok) = gate.judge(f, nowMs: nowMs) else { return publishStats(f, source: source, nowMs: nowMs) }
         lastFix = ok
+        MapOpening.remember(LngLat(lng: ok.lng, lat: ok.lat))
         displayFix = smoother.update(ok)
         if wantsFreshFix, nowMs - ok.atMs < GpsQuality.staleMs { wantsFreshFix = false; applySettings() }
         publishStats(ok, source: source, nowMs: nowMs)

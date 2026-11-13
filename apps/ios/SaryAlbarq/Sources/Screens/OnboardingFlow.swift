@@ -192,6 +192,56 @@ private struct IntroStep: View {
     @State private var pasteMiss = false
 
     var body: some View {
+        if NewUI.enabled { newBody } else { legacyBody }
+    }
+
+    /// Build 47 (`NewUI`): one display title, one idea line, one glass card, ONE primary («ابدأ»), secondary under it.
+    private var newBody: some View {
+        let p = theme.palette
+        return SaryFitColumn {
+            VStack(spacing: 0) {
+                if model.deferredInviteHint {
+                    deferredInvite
+                        .padding(.horizontal, theme.space(.l))
+                        .padding(.top, theme.space(.l))
+                }
+                Spacer(minLength: theme.space(.xl))
+                SaryMark(size: 120)
+                Text("سَرى البارق")
+                    .saryType(.display)
+                    .foregroundStyle(p.textPrimary)
+                    .padding(.top, theme.space(.xl))
+                Text("شوف الأصدقاء على الخريطة في الطلعة، وكل سيارة بلونها.")
+                    .saryType(.headline)
+                    .foregroundStyle(p.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, theme.space(.s))
+                    .padding(.horizontal, theme.space(.l))
+                    .accessibilityIdentifier("onboarding.idea")
+                Spacer(minLength: theme.space(.xl))
+                NewUICard {
+                    NewUIPoint(systemImage: "location.fill", text: "موقعك يُشارك فقط مع أصدقاء الطلعة اللي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
+                    NewUIPoint(systemImage: "person.crop.circle.badge.checkmark", text: "بدون كلمة مرور: اسمك على هذا الجهاز، ورمز استرجاع إذا غيّرت جوالك.")
+                    NewUIPoint(systemImage: "sos", text: "طوارئ ونقطة تجمع ورسائل قصيرة للمجموعة.")
+                }
+                .padding(.horizontal, theme.space(.l))
+                .accessibilityIdentifier("onboarding.points")
+                Spacer(minLength: theme.space(.xl))
+            }
+        } bottom: {
+            NewUIActions {
+                /* Came from an invite: «لصق» in the card above is the one primary action; «ابدأ» steps back. */
+                if model.deferredInviteHint {
+                    SarySecondaryButton("ابدأ", id: "onboarding.begin", action: start)
+                } else {
+                    SaryPrimaryButton("ابدأ", id: "onboarding.begin", action: start)
+                }
+                SarySecondaryButton("عندي حساب سابق", id: "onboarding.restore", action: restore)
+            }
+        }
+    }
+
+    @ViewBuilder private var legacyBody: some View {
         let p = theme.palette
         /* Scrolls on an SE / large text (the idea, three points and the invite card no longer
            overlap the buttons); identical to the old full-height column when it fits. */
@@ -292,7 +342,36 @@ struct ProfileStep: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let phoneOK = phone.trimmingCharacters(in: .whitespaces).isEmpty || SaryFormat.normalizeSaudiMobile(phone) != nil
-        SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه الأصدقاء في الطلعة فقط", back: back) {
+        Group {
+            if NewUI.enabled {
+                /* Build 47 (`NewUI`): unified header (title right, back left), the form, and ONE pinned primary. */
+                NewUIPage(title: "عرّفنا عليك", subtitle: "يشوفه الأصدقاء في الطلعة فقط", back: back,
+                          content: { form(trimmed: trimmed, phoneOK: phoneOK) },
+                          actions: {
+                              SaryPrimaryButton(busy ? "نحفظ…" : "متابعة", id: "onboarding.start") { submit(trimmed) }
+                                  .disabled(trimmed.isEmpty || !phoneOK || busy)
+                          })
+            } else {
+                SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه الأصدقاء في الطلعة فقط", back: back) {
+                    form(trimmed: trimmed, phoneOK: phoneOK)
+                    Button {
+                        submit(trimmed)
+                    } label: { SaryButtonLabel(title: "متابعة", busy: busy, busyTitle: "نحفظ…") }
+                        .buttonStyle(.sary(.primary))
+                        .disabled(trimmed.isEmpty || !phoneOK || busy)
+                        .accessibilityIdentifier("onboarding.start")
+                }
+            }
+        }
+        .onChange(of: item) { _, it in
+            guard let it else { return }
+            Task {
+                if let d = try? await it.loadTransferable(type: Data.self), let img = UIImage(data: d) { photo = img }
+            }
+        }
+    }
+
+    @ViewBuilder private func form(trimmed: String, phoneOK: Bool) -> some View {
             VStack(spacing: theme.space(.s)) {
                 PhotosPicker(selection: $item, matching: .images) {
                     ZStack(alignment: .bottomTrailing) {
@@ -321,19 +400,6 @@ struct ProfileStep: View {
                           help: "يظهر لأصدقائك في طلعاتك فقط ليتصلوا بك أو يراسلوك واتساب. تقدر تحذفه متى شئت.")
                 .environment(\.layoutDirection, .rightToLeft)
             if let error { SaryInlineMessage(text: error, tone: .error) }
-            Button {
-                submit(trimmed)
-            } label: { SaryButtonLabel(title: "متابعة", busy: busy, busyTitle: "نحفظ…") }
-                .buttonStyle(.sary(.primary))
-                .disabled(trimmed.isEmpty || !phoneOK || busy)
-                .accessibilityIdentifier("onboarding.start")
-        }
-        .onChange(of: item) { _, it in
-            guard let it else { return }
-            Task {
-                if let d = try? await it.loadTransferable(type: Data.self), let img = UIImage(data: d) { photo = img }
-            }
-        }
     }
 
     private func submit(_ trimmed: String) {
@@ -360,6 +426,53 @@ private struct LocationStep: View {
     @State private var gesture = 0
 
     var body: some View {
+        if NewUI.enabled { newBody } else { legacyBody }
+    }
+
+    /// Build 47 (`NewUI`): the same two short lines in one glass card; ONE primary, «لاحقًا» as a secondary.
+    private var newBody: some View {
+        let p = theme.palette
+        return SaryFitColumn {
+            VStack(spacing: theme.space(.l)) {
+                Spacer(minLength: theme.space(.l))
+                Image(systemName: "location.circle.fill")
+                    .font(.system(size: 64, weight: .semibold))
+                    .foregroundStyle(p.accentText)
+                    .phaseAnimator(OnboardingMotion.Gesture.allCases, trigger: gesture) { icon, g in
+                        icon.scaleEffect(g.scale).offset(y: g.lift).rotationEffect(.degrees(g.tilt))
+                    } animation: { g in
+                        g == .rest ? theme.animation(.smooth) : theme.animation(.emphasis)
+                    }
+                    .onAppear {
+                        guard OnboardingMotion.plays(reduceMotion: theme.reduceMotion) else { return }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + SaryMotion.smooth.duration) { gesture &+= 1 }
+                    }
+                    .accessibilityHidden(true)
+                Text("موقعك للطلعة بس")
+                    .saryType(.title)
+                    .foregroundStyle(p.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("onboarding.location.title")
+                NewUICard {
+                    NewUIPoint(systemImage: "map.fill", text: "يشوفك أصدقاءك على الخريطة وتشوفهم، وقت الطلعة بس.")
+                    NewUIPoint(systemImage: "hand.raised.fill", text: "تطلع من الطلعة أو تخلص، يوقف. وبرّا الطلعات ما نتتبعك.")
+                }
+                Text("بعدها يسألك iOS: اختر «السماح أثناء استخدام التطبيق».")
+                    .saryType(.body)
+                    .foregroundStyle(p.textSecondary)
+                    .multilineTextAlignment(.center)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, theme.space(.l))
+        } bottom: {
+            NewUIActions {
+                SaryPrimaryButton("اسمح بالموقع", systemImage: SaryIcon.locate, id: "onboarding.allowLocation", action: allow)
+                SarySecondaryButton("لاحقًا", id: "onboarding.skipLocation", action: skip)
+            }
+        }
+    }
+
+    @ViewBuilder private var legacyBody: some View {
         let p = theme.palette
         SaryFitColumn {
             VStack(spacing: theme.space(.l)) {

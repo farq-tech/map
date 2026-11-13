@@ -42,7 +42,7 @@ final class CarPlayMapViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let camera = CameraOptions(center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753), zoom: zoom, bearing: 0, pitch: 0)
+        let camera = CameraOptions(center: MapOpening.center().coordinate, zoom: zoom, bearing: 0, pitch: 0)
         let map = MapView(frame: view.bounds, mapInitOptions: MapInitOptions(cameraOptions: camera, styleURI: ArabicBasemap.cachedJSON == nil ? OutingMapboxView.styleURI : nil))
         if let json = ArabicBasemap.cachedJSON { map.mapboxMap.loadStyle(json) }
         SandGrade.follow(map)
