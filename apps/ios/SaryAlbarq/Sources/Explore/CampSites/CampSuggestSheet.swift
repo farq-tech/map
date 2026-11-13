@@ -261,7 +261,7 @@ struct CampSiteCard: View {
                     .frame(width: 30, height: 30).background(Circle().fill(p.accent))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(place.title)
-                        .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                         .accessibilityIdentifier("camp.title.\(rank)")
                     if let sub = place.subtitle {
                         Text(sub).saryText(.caption).foregroundStyle(p.textTertiary).lineLimit(1)

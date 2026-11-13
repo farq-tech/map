@@ -89,7 +89,7 @@ struct WaypointRow: View {
             HStack(spacing: theme.space(.m)) {
                 SaryWaypointGlyph(kind: waypoint.kind, size: theme.drive ? 40 : 32)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(waypoint.title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(waypoint.title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     Text("\(waypoint.kind.label) · \(by)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                 }
                 Spacer(minLength: 4)

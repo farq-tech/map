@@ -110,7 +110,7 @@ struct FavoritesView: View {
                     HStack(spacing: theme.space(.m)) {
                         SaryRowIcon(systemImage: s.icon.systemImage)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(s.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                            Text(s.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                             Text(CoordinateShare.displayDecimal(s.position)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
                         }
                         Spacer()

@@ -533,7 +533,7 @@ struct MapHomeScreen: View {
                 Image(systemName: paused ? "pause.circle.fill" : "calendar").font(.system(size: 16, weight: .semibold)).foregroundStyle(p.accentText)
                     .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     let line = [paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · ")
                     Text(line)
                         .font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1)
@@ -725,7 +725,7 @@ struct MapHomeScreen: View {
                 Image(systemName: "car.2.fill").font(.system(size: 16, weight: .semibold)).foregroundStyle(p.liveText)
                     .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.live.opacity(0.16)))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     Text("طلعتك جارية · \(o.participantsLabel)").font(.sary(12, .regular)).foregroundStyle(p.textSecondary)
                         /* Someone joins: the count rolls, the card stays. */
                         .contentTransition(theme.reduceMotion ? .opacity : .numericText())
@@ -924,7 +924,7 @@ struct MapHomeScreen: View {
             HStack(spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: icon)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     if let detail { Text(detail).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                 }
                 Spacer()
