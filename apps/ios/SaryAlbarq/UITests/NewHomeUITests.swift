@@ -88,6 +88,47 @@ final class NewHomeUITests: XCTestCase {
         shot("pro-axxl-dark")
     }
 
+    /// A long press on the map: the picked spot's card with the coordinates (Arabic digits, «٫») and the elevation line.
+    func testPickedPointCardShowsCoordinatesAndElevation() {
+        let app = launch()
+        XCTAssertTrue(el(app, "home.card.start").waitForExistence(timeout: 20))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.32)).press(forDuration: 1.2)
+        let elev = el(app, "home.place.elevation")
+        XCTAssertTrue(elev.waitForExistence(timeout: 15), "the picked spot's card")
+        XCTAssertTrue(waitLabel(elev, containing: "الارتفاع", timeout: 12), elev.label)
+        /* The coordinates are the card's subtitle (Arabic digits, «٫»), once; the elevation line adds only the elevation then. */
+        let coords = el(app, "home.place").staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "٫")).firstMatch
+        XCTAssertTrue(coords.waitForExistence(timeout: 5), "the coordinates with «٫» on the card")
+        XCTAssertFalse(coords.label.contains(",") || coords.label.contains("."), coords.label)
+        shot("point-card")
+    }
+
+    /// Small phones (iPhone SE, height < 700): the «آخر طلعة» row is gone first, the primary stays and nothing overlaps;
+    /// on a big phone (Pro Max) the whole card is up. The same test runs on both devices.
+    func testSmallPhoneDropsSecondaryRowsFirst() {
+        let app = launch()
+        XCTAssertTrue(el(app, "home.card.start").waitForExistence(timeout: 20))
+        let h = app.windows.firstMatch.frame.height
+        let start = el(app, "home.card.start"), card = el(app, "home.card").frame
+        let pill = el(app, "home.pill").frame, cap = el(app, "home.capsule").frame
+        XCTAssertTrue(start.isHittable, "the primary is always reachable")
+        XCTAssertFalse(pill.intersects(card), "pill and card do not overlap")
+        XCTAssertFalse(cap.intersects(card), "capsule and card do not overlap")
+        XCTAssertFalse(pill.intersects(cap), "pill and capsule do not overlap")
+        XCTAssertLessThanOrEqual(card.height, h * 0.62 + 1)
+        if h < 700 {
+            XCTAssertFalse(el(app, "home.card.last").exists, "compact: the last-outing row is dropped first")
+            for id in ["home.tile.camp", "home.tile.routes", "home.tile.weather", "home.tile.qibla"] { XCTAssertTrue(el(app, id).exists, id) }
+        }
+        shot(h < 700 ? "se-dark" : "max-dark")
+    }
+
+    private func waitLabel(_ e: XCUIElement, containing s: String, timeout: TimeInterval) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        while Date() < end { if e.label.contains(s) { return true }; usleep(300_000) }
+        return false
+    }
+
     private func waitGone(_ e: XCUIElement, _ t: TimeInterval) -> Bool {
         let end = Date().addingTimeInterval(t)
         while Date() < end { if !e.isHittable { return true }; usleep(200_000) }
