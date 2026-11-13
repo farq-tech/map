@@ -13,6 +13,8 @@
  *   GET /api/weather/rain/tile/:days/:z/:x/:y.png
  *   GET /api/weather/green?bbox=w,s,e,n
  *   GET /api/weather/green/tile/:z/:x/:y.png
+ *   GET /api/weather/green/regions?bbox=w,s,e,n  connected greened areas (≥ 3 km², each side ≤ 3°)
+ *                                                 for «أقرب ربيع», named by the nearest OSM روضة/فيضة
  *   GET /api/desert/categories/search?q=مطر|ربيع&near=lat,lng[&radius_km=250&limit=20]
  * Contract: docs/weather-sources.md (§ API).
  */
@@ -26,6 +28,7 @@ const rain = require('../lib/weather/rain');
 const rainMotion = require('../lib/weather/rain-motion');
 const wind = require('../lib/weather/wind');
 const green = require('../lib/weather/green');
+const greenRegions = require('../lib/weather/green-regions');
 const desert = require('../lib/weather/desert-search');
 const { KSA, parseBbox, parseNear, inKsa } = require('../lib/weather/mercator');
 
@@ -146,6 +149,20 @@ function createWeatherRouter() {
     const bbox = req.query.bbox ? parseBbox(req.query.bbox) : KSA;
     if (!bbox) return res.status(400).json({ ok: false, error: 'bad_bbox', message_ar: 'المنطقة خارج المملكة أو غير مقروءة.' });
     const body = await green.areas({ bbox });
+    if (!body.ok) {
+      res.set('Retry-After', '60');
+      return res.status(503).json(body);
+    }
+    return sendJson(req, res, body, 3600);
+  }));
+
+  router.get('/weather/green/regions', wrap(async (req, res) => {
+    const bbox = req.query.bbox ? parseBbox(req.query.bbox) : null;
+    if (!bbox) return res.status(400).json({ ok: false, error: 'bad_bbox', message_ar: 'حدّد منطقة داخل المملكة (bbox=w,s,e,n).' });
+    if (greenRegions.tooLarge(bbox)) {
+      return res.status(400).json({ ok: false, error: 'bbox_too_large', message_ar: 'المنطقة كبيرة، صغّرها إلى ٣ درجات × ٣ درجات أو أقل.' });
+    }
+    const body = await greenRegions.regions({ bbox });
     if (!body.ok) {
       res.set('Retry-After', '60');
       return res.status(503).json(body);
