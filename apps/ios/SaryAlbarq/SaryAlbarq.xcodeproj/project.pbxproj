@@ -65,6 +65,7 @@
 		1B934AD60668F81F7F55269D /* ReachabilityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E2979F6264CD833C45F152 /* ReachabilityUITests.swift */; };
 		1C054D8B8A681F3966CC91A3 /* GroupAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF33DCF90BC3402E874D2661 /* GroupAudioPlayer.swift */; };
 		1C231B27D710DA0D46642E1A /* farq-route.json in Resources */ = {isa = PBXBuildFile; fileRef = 5950540C7E4D0E9AE5F1150D /* farq-route.json */; };
+		1C2C9221C957B961978263FC /* StepModeRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76FBDB93C0C5D88A0224C909 /* StepModeRulesTests.swift */; };
 		1C45B2ABAFD066E38B318B27 /* CarPlayCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39DA1A289E3CC3B2A17E5CB /* CarPlayCoordinator.swift */; };
 		1C734BBA510CAEB54C8F56F5 /* MapPortTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */; };
 		1C7881A08CD9CF42BA07A7CD /* PTTChannelsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B59E6EE67040C84A80E38F7 /* PTTChannelsAPI.swift */; };
@@ -365,6 +366,7 @@
 		9393DE17F42589B6FF7BD140 /* SaryAlbarqWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E2FB8B1FE3B733CDB15CDA57 /* SaryAlbarqWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		93CDD12593CCD66C4C20DA5F /* TrackFollowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE4E86AD6F6205042E56EC /* TrackFollowModel.swift */; };
 		93E7FD8A8A66166C635CC0A9 /* CampSitesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7D14FB6457E78CC7C9FB4BD /* CampSitesTests.swift */; };
+		93EE9481F57B33275E6C859C /* StepModeRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30AF1583979437F0640D901A /* StepModeRules.swift */; };
 		9465828E29D08CBDCE33D84C /* CarPlayPhonePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635D4BB4444B8CBDFCB3DABB /* CarPlayPhonePreview.swift */; };
 		94A62B202702F75C3C0EA43D /* DroneOrbit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B922307F5A082E97260D1CEB /* DroneOrbit.swift */; };
 		94A82E0D57CB2023C035AF9F /* SettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A6552211824B45AF52FE26 /* SettingsScreens.swift */; };
@@ -759,6 +761,7 @@
 		3027709E8F8C20AC618D477E /* HiResHosts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiResHosts.swift; sourceTree = "<group>"; };
 		3062B13ACB72770835DC3D4D /* PlaceBriefRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceBriefRules.swift; sourceTree = "<group>"; };
 		30AC37E1EA85F7EC642D4ACE /* OutingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingState.swift; sourceTree = "<group>"; };
+		30AF1583979437F0640D901A /* StepModeRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepModeRules.swift; sourceTree = "<group>"; };
 		31571952C88A8EFB16D42C17 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		31805CE2F777062AD5698A2A /* PlaceNamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceNamer.swift; sourceTree = "<group>"; };
 		318D0930455B81369FEEE9E0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -932,6 +935,7 @@
 		76528D7A5423EA817C962519 /* HiResGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiResGate.swift; sourceTree = "<group>"; };
 		76AEF1E0EA7B3233DD82712A /* Stuck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stuck.swift; sourceTree = "<group>"; };
 		76C15BFC3A0DDB5B7A822D45 /* TrailAccuracyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailAccuracyTests.swift; sourceTree = "<group>"; };
+		76FBDB93C0C5D88A0224C909 /* StepModeRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepModeRulesTests.swift; sourceTree = "<group>"; };
 		777850FB5857BBA12B1EAE94 /* RealisticUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealisticUITests.swift; sourceTree = "<group>"; };
 		77CE80B48719C956802AFB51 /* SafetyAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyAPI.swift; sourceTree = "<group>"; };
 		77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -1361,6 +1365,7 @@
 				7ADCF07BA3725250771E931F /* RouteAdherence.swift */,
 				EFCE098B3D9D73601DF1B926 /* SaryVoice.swift */,
 				9ADBDDA670FFB3481D0F0964 /* StandaloneNavScreen.swift */,
+				30AF1583979437F0640D901A /* StepModeRules.swift */,
 				ED3596F37BE05DA68D6B7DCE /* TripAutoNav.swift */,
 			);
 			path = Navigation;
@@ -1717,6 +1722,7 @@
 				A8305E4E8351FA6F8723B885 /* SaryVoiceTests.swift */,
 				DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */,
 				AFE11BD246D68B3CF32D2369 /* SpeedTests.swift */,
+				76FBDB93C0C5D88A0224C909 /* StepModeRulesTests.swift */,
 				2E6DA5CD2131BB21430FC238 /* StoryTests.swift */,
 				16D78808FA347D790E0D5E7C /* TestRoutes */,
 				0A1970B01B7B47D7191A8651 /* TestRoutesHarnessTests.swift */,
@@ -2763,6 +2769,7 @@
 				4DFBB64521E50C91BF259E1C /* SaryVoiceTests.swift in Sources */,
 				85C7304DA76D182075D64FE6 /* ServerRulesTests.swift in Sources */,
 				EA122FABE04CDF342A97DE37 /* SpeedTests.swift in Sources */,
+				1C2C9221C957B961978263FC /* StepModeRulesTests.swift in Sources */,
 				92B96B2F349DEA5FB18939FA /* StoryTests.swift in Sources */,
 				7B8F2EF6544797FE9D404A91 /* TestRoutesHarnessTests.swift in Sources */,
 				87B56AB4C039A50AD80C7B11 /* TrackPrecisionTests.swift in Sources */,
@@ -3088,6 +3095,7 @@
 				873355BA15A8FE6ECC910CC5 /* SpeedModel.swift in Sources */,
 				90E9904DE376425B0849683F /* SpeedSettingsSection.swift in Sources */,
 				E8F5690E8801E5204F3BFD07 /* StandaloneNavScreen.swift in Sources */,
+				93EE9481F57B33275E6C859C /* StepModeRules.swift in Sources */,
 				9E9FF48206A0AA4EC6BCEFF0 /* StoryComposerView.swift in Sources */,
 				3C3E50A2DBCD4ED20AD2A9BB /* StoryFixtures.swift in Sources */,
 				3A195FE4F90A1C2C9F5B7FA8 /* StoryGeometry.swift in Sources */,
