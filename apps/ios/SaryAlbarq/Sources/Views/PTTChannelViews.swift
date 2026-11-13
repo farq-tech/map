@@ -120,6 +120,16 @@ struct PTTChannelSheet: View {
                     VoiceNoteSection(center: vn)
                 }
             }
+            /* New interface (Build 47, group C): the unified window title replaces the system bar; «خلاص» is its ✕. */
+            .scrollContentBackground(NewUI.enabled ? .hidden : .automatic)
+            .background(NewUI.enabled ? theme.palette.background : Color.clear)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if NewUI.enabled {
+                    SaryWindowTitle("الترددات", closeID: "ptt-channels-done", onClose: close)
+                        .background(theme.palette.background)
+                }
+            }
+            .toolbar(NewUI.enabled ? .hidden : .automatic, for: .navigationBar)
             .navigationTitle("الترددات")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

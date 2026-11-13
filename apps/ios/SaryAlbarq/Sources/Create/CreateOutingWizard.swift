@@ -36,18 +36,15 @@ struct CreateOutingWizard: View {
     }
 
     var body: some View {
-        SaryPage(title: title, back: flow.canGoBack ? { changePlace() } : nil,
-                 close: { finish(start: false) }) {
-            if !isQuick { progress }
-            /* One step at a time, sliding the way the person moves: on → in from the reading end
-               (the left in Arabic), back → from the start. A ZStack so the two never stack during it. */
-            ZStack(alignment: .top) {
-                /* One column per step (the spacing `SaryPage` gives its content): the step views return
-                   several sibling views, which a bare ZStack would lay on top of each other (Build 41). */
-                VStack(alignment: .leading, spacing: theme.space(.xl)) { stepContent }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .id(flow.step)
-                    .transition(stepTransition)
+        Group {
+            if NewUI.enabled {
+                /* Build 47 (`NewUI`): the unified header (title right, back + ✕); the steps and the pinned
+                 * invite bar below are the same views, so every step keeps its controls and ids. */
+                NewUIPage(title: title, back: flow.canGoBack ? { changePlace() } : nil,
+                          close: { finish(start: false) }) { wizardContent }
+            } else {
+                SaryPage(title: title, back: flow.canGoBack ? { changePlace() } : nil,
+                         close: { finish(start: false) }) { wizardContent }
             }
         }
         /* «ابدأ الطلعة» pinned at the bottom of step ٣: never under the fold (UI-AUDIT ١-هـ). */
@@ -68,6 +65,20 @@ struct CreateOutingWizard: View {
             }
         }
         .onChange(of: flow.destination) { _, d in weather.setDestination(d) }
+    }
+
+    @ViewBuilder private var wizardContent: some View {
+        if !isQuick { progress }
+        /* One step at a time, sliding the way the person moves: on → in from the reading end
+           (the left in Arabic), back → from the start. A ZStack so the two never stack during it. */
+        ZStack(alignment: .top) {
+            /* One column per step (the spacing `SaryPage` gives its content): the step views return
+               several sibling views, which a bare ZStack would lay on top of each other (Build 41). */
+            VStack(alignment: .leading, spacing: theme.space(.xl)) { stepContent }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .id(flow.step)
+                .transition(stepTransition)
+        }
     }
 
     /// Steps slide (RTL aware, `CreateStepMotion`); a cross-fade where travel is not allowed.
@@ -406,6 +417,19 @@ private struct DestinationStep: View {
         guard t.count >= 2, CoordinateParser.parse(t) == nil else {
             results = []
             searching = false
+            return
+        }
+        /* «أي رابط، أي عنوان»: a short / name-only maps link or a national address code is resolved (LinkResolver). */
+        if LinkResolver.needsResolution(t) {
+            searching = true
+            let linkNear = near
+            job = Task {
+                let r = await LinkResolver.lookup(t, near: linkNear, geocode: search)
+                guard !Task.isCancelled else { return }
+                results = r.places
+                searchError = r.error
+                searching = false
+            }
             return
         }
         searching = true

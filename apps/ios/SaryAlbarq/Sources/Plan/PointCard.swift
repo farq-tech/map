@@ -358,6 +358,19 @@ struct CoordinateSearchSheet: View {
             searching = false
             return
         }
+        /* «أي رابط، أي عنوان»: a short / name-only maps link or a national address code is resolved (LinkResolver). */
+        if LinkResolver.needsResolution(t) {
+            searching = true
+            let linkNear = near
+            job = Task {
+                let r = await LinkResolver.lookup(t, near: linkNear, geocode: search)
+                guard !Task.isCancelled else { return }
+                results = r.places
+                searchError = r.error
+                searching = false
+            }
+            return
+        }
         searching = true
         job = Task {
             try? await Task.sleep(nanoseconds: 350_000_000)

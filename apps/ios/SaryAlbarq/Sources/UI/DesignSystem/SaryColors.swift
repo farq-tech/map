@@ -193,6 +193,10 @@ struct SaryPalette: Equatable {
     /// Scrim behind dialogs and full-screen alerts.
     var scrim: Color
     var shadow: Color
+    /// Floating glass over a blur (designer recipe: dark rgba(28,24,20,.78) + hairline rgba(244,239,230,.10));
+    /// light and dim have their own tints so glass reads in direct sun and at night alike.
+    var glassFill: Color = Color(rgb: 0x1C1814, opacity: 0.88)
+    var glassHairline: Color = Color(rgb: 0xF4EFE6, opacity: 0.10)
 
     /// Raw values kept for contrast tests.
     var raw: Raw
@@ -207,6 +211,14 @@ struct SaryPalette: Equatable {
         var warningText: UInt32
         var navBlue: UInt32
         var onNavBlue: UInt32
+        // Theme-contrast tests (every surface the new components draw on).
+        var elevated: UInt32 = 0
+        var sunken: UInt32 = 0
+        var textTertiary: UInt32 = 0
+        var accentFill: UInt32 = 0
+        var onAccent: UInt32 = 0
+        var glassFill: UInt32 = 0
+        var glassAlpha: Double = 0
     }
 
     /// Navigation blue for day / dark (also the route-line colour on the map).
@@ -247,7 +259,9 @@ struct SaryPalette: Equatable {
             shadow: Color.black.opacity(0.35),
             raw: .init(background: 0x1A1612, textPrimary: 0xF4EFE6, textSecondary: 0xB9AE9C,
                        accentText: accent.fill, surface: 0x2B251F, chromeOpaque: 0x241F1A,
-                       warningText: 0xF2B630, navBlue: SaryPalette.navBlueDay, onNavBlue: 0xFFFFFF)
+                       warningText: 0xF2B630, navBlue: SaryPalette.navBlueDay, onNavBlue: 0xFFFFFF,
+                       elevated: 0x221D18, sunken: 0x14110E, textTertiary: 0x8C8478, accentFill: accent.fill,
+                       onAccent: 0x1A1612, glassFill: 0x1C1814, glassAlpha: 0.88)
         )
     }
 
@@ -283,9 +297,13 @@ struct SaryPalette: Equatable {
             chromeTint: Color(rgb: 0xFFFBF3, opacity: 0.55),
             scrim: Color.black.opacity(0.40),
             shadow: Color(rgb: 0x3A2A14, opacity: 0.18),
+            glassFill: Color(rgb: 0xFFFBF3, opacity: 0.88),
+            glassHairline: Color(rgb: 0x2A2218, opacity: 0.12),
             raw: .init(background: 0xF5EFE4, textPrimary: 0x1F1A14, textSecondary: 0x5C5244,
                        accentText: accent.lightText, surface: 0xFFFFFF, chromeOpaque: 0xFFFCF6,
-                       warningText: 0x8A5C00, navBlue: SaryPalette.navBlueDay, onNavBlue: 0xFFFFFF)
+                       warningText: 0x8A5C00, navBlue: SaryPalette.navBlueDay, onNavBlue: 0xFFFFFF,
+                       elevated: 0xFBF7F0, sunken: 0xEDE5D7, textTertiary: 0x6E6457, accentFill: accent.fill,
+                       onAccent: 0x1A1612, glassFill: 0xFFFBF3, glassAlpha: 0.88)
         )
     }
 
@@ -320,9 +338,13 @@ struct SaryPalette: Equatable {
             chromeTint: Color(rgb: 0x0D0C0B, opacity: 0.62),
             scrim: Color.black.opacity(0.65),
             shadow: Color.black.opacity(0.5),
+            glassFill: Color(rgb: 0x0D0C0B, opacity: 0.88),
+            glassHairline: Color(rgb: 0xDCD4C6, opacity: 0.10),
             raw: .init(background: 0x0D0C0B, textPrimary: 0xDCD4C6, textSecondary: 0x9C9282,
                        accentText: accent.fill, surface: 0x1A1714, chromeOpaque: 0x15130F,
-                       warningText: 0xC99A2A, navBlue: SaryPalette.navBlueNight, onNavBlue: 0xF4EFE6)
+                       warningText: 0xC99A2A, navBlue: SaryPalette.navBlueNight, onNavBlue: 0xF4EFE6,
+                       elevated: 0x13110F, sunken: 0x090807, textTertiary: 0x746B5F, accentFill: accent.nightFill,
+                       onAccent: 0x0D0C0B, glassFill: 0x0D0C0B, glassAlpha: 0.88)
         )
     }
 
