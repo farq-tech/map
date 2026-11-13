@@ -15,6 +15,8 @@ import json
 import math
 import os
 import sys
+import time
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -32,6 +34,9 @@ GDAL_ENV = dict(
     CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif,.TIF",
     GDAL_HTTP_MAX_RETRY="4",
     GDAL_HTTP_RETRY_DELAY="2",
+    # A stalled connection must fail (and be retried by read_into) instead of hanging a tile for an hour.
+    GDAL_HTTP_CONNECTTIMEOUT="30",
+    GDAL_HTTP_TIMEOUT="120",
 )
 
 DEM_URL = ("https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/"
@@ -42,10 +47,36 @@ WC_URL = ("https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
 STAC = "https://earth-search.aws.element84.com/v1/search"
 
 
-def etag(url):
+def etag(url, attempts=5):
+    """ETag and size of a remote file. A 404 is the answer (the caller decides); a reset or timeout is retried."""
     req = urllib.request.Request(url, method="HEAD")
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return r.headers.get("ETag", "").strip('"'), int(r.headers.get("Content-Length", 0))
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.headers.get("ETag", "").strip('"'), int(r.headers.get("Content-Length", 0))
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, OSError) as e:
+            if attempt == attempts:
+                raise
+            print(f"HEAD failed ({attempt}/{attempts}), retrying: {str(e)[:80]} {url}", flush=True)
+            time.sleep(5 * attempt)
+
+
+def land_cells(urls):
+    """(url, etag, bytes) of the cells that exist. Copernicus DEM and ESA WorldCover publish land cells only: a
+    coastal tile whose halo reaches an open-sea cell gets a 404 there, which is not an error (sea, no ground)."""
+    found = []
+    for u in urls:
+        try:
+            tag, size = etag(u)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                print(f"no data (open sea): {u}", flush=True)
+                continue
+            raise
+        found.append((u, tag, size))
+    return found
 
 
 def target(bbox, arcsec):
@@ -54,14 +85,23 @@ def target(bbox, arcsec):
     return from_bounds(w, s, e, n, cols, rows), rows, cols
 
 
-def read_into(url, bbox, arcsec, resampling, dtype="float32", nodata=None):
+def read_into(url, bbox, arcsec, resampling, dtype="float32", nodata=None, attempts=5):
+    """One windowed read. A server that cuts a response short ("got N bytes, expected M") or resets the
+    connection raises RasterioIOError; that is transient, so retry with a growing pause before failing."""
     tr, rows, cols = target(bbox, arcsec)
-    with rasterio.Env(**GDAL_ENV):
-        with rasterio.open(url) as src:
-            with WarpedVRT(src, crs="EPSG:4326", transform=tr, width=cols, height=rows,
-                           resampling=resampling, src_nodata=nodata if nodata is not None else src.nodata,
-                           nodata=nodata if nodata is not None else src.nodata) as vrt:
-                return vrt.read(1).astype(dtype)
+    for attempt in range(1, attempts + 1):
+        try:
+            with rasterio.Env(**GDAL_ENV):
+                with rasterio.open(url) as src:
+                    with WarpedVRT(src, crs="EPSG:4326", transform=tr, width=cols, height=rows,
+                                   resampling=resampling, src_nodata=nodata if nodata is not None else src.nodata,
+                                   nodata=nodata if nodata is not None else src.nodata) as vrt:
+                        return vrt.read(1).astype(dtype)
+        except rasterio.errors.RasterioIOError as e:
+            if attempt == attempts:
+                raise
+            print(f"read failed ({attempt}/{attempts}), retrying: {str(e)[:80]} {url}", flush=True)
+            time.sleep(5 * attempt)
 
 
 def tiles(bbox, step):
@@ -136,16 +176,21 @@ def main(region, cache):
     os.makedirs(odir, exist_ok=True)
     sources = []
 
-    dem_urls = [fmt(la, lo, DEM_URL) for la, lo in tiles(bbox, 1)]
-    for u in dem_urls:
-        tag, size = etag(u)
+    all_dem = [fmt(la, lo, DEM_URL) for la, lo in tiles(bbox, 1)]
+    dem_cells = land_cells(all_dem)
+    if not dem_cells:
+        raise SystemExit(f"{region}: no Copernicus DEM cell at all")
+    for u, tag, size in dem_cells:
         sources.append({"dataset": "Copernicus DEM GLO-30", "url": u, "etag": tag, "bytes": size})
+    dem_urls = [c[0] for c in dem_cells]
     dem = mosaic(dem_urls, bbox, arc, Resampling.average, nodata=-32767.0)
+    if len(dem_urls) < len(all_dem):  # missing cells are open sea: sea level, not "no data"
+        dem = np.where((dem == -32767.0) | np.isnan(dem), 0.0, dem).astype(dem.dtype)
 
-    wc_urls = [fmt(la, lo, WC_URL) for la, lo in tiles(bbox, 3)]
-    for u in wc_urls:
-        tag, size = etag(u)
+    wc_cells = land_cells([fmt(la, lo, WC_URL) for la, lo in tiles(bbox, 3)])
+    for u, tag, size in wc_cells:
         sources.append({"dataset": "ESA WorldCover 10m 2021 v200", "url": u, "etag": tag, "bytes": size})
+    wc_urls = [c[0] for c in wc_cells]
     # The 10 m class map read once at ~10 m (6x the grid), then block statistics per cell:
     # the dominant class and the fraction of each class of interest.
     rows, cols = grid_shape(bbox, arc)
@@ -159,18 +204,32 @@ def main(region, cache):
 
     # Sentinel-2: spring greenness (after winter rain) and a recent dry-season scene for ground type.
     spring = s2_by_date(bbox, "2025-02-01T00:00:00Z/2025-04-30T23:59:59Z", 5, 3)
-    recent = s2_by_date(bbox, "2026-09-01T00:00:00Z/2026-11-05T23:59:59Z", 3, 1)
+    recent = s2_by_date(bbox, "2026-09-01T00:00:00Z/2026-11-05T23:59:59Z", 3, 3)  # best day first, the rest are fallbacks
     ndvi_max = None
     for day, items in spring:
-        b = s2_bands(bbox, arc, items, ["red", "nir"])
+        try:
+            b = s2_bands(bbox, arc, items, ["red", "nir"])
+        except rasterio.errors.RasterioIOError as e:  # one damaged/truncated scene file must not sink the tile
+            print(f"skipping spring scene day {day}: {str(e)[:80]}", flush=True)
+            continue
         nd = (b["nir"] - b["red"]) / (b["nir"] + b["red"] + 1e-6)
         ndvi_max = nd if ndvi_max is None else np.fmax(ndvi_max, nd)
         for it in items:
             sources.append({"dataset": "Sentinel-2 L2A", "item": it["id"], "date": day, "use": "spring NDVI"})
-    day, items = recent[0]
-    rb = s2_bands(bbox, arc, items, ["blue", "green", "red", "nir", "swir16", "swir22"])
-    for it in items:
-        sources.append({"dataset": "Sentinel-2 L2A", "item": it["id"], "date": day, "use": "ground type"})
+    if ndvi_max is None:
+        raise SystemExit(f"{region}: every spring Sentinel-2 day failed to read")
+    rb = None
+    for day, items in recent:
+        try:
+            rb = s2_bands(bbox, arc, items, ["blue", "green", "red", "nir", "swir16", "swir22"])
+        except rasterio.errors.RasterioIOError as e:
+            print(f"skipping dry-season scene day {day}: {str(e)[:80]}", flush=True)
+            continue
+        for it in items:
+            sources.append({"dataset": "Sentinel-2 L2A", "item": it["id"], "date": day, "use": "ground type"})
+        break
+    if rb is None:
+        raise SystemExit(f"{region}: every dry-season Sentinel-2 day failed to read")
 
     arrays = dict(dem=dem, wc=wc, ndvi_spring=ndvi_max.astype("float32"),
                   **{f"s2_{k}": v.astype("float32") for k, v in rb.items()}, **frac)
