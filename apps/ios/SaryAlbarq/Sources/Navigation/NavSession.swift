@@ -70,6 +70,11 @@ final class NavSession: ObservableObject {
     private(set) var adherence = RouteAdherence()
     private var routeLine: RouteLine?
     private var adherenceHold = false
+    /// The off-road wording (build 49, `OffRoadVoice`): used when most of the route is dirt, track or open
+    /// ground. Same voice, desert words; the road-trip lines are unchanged.
+    private var offRoadVoice = OffRoadVoice()
+    private(set) var offRoadTrip = false
+    private var offRoadBegan = false
     private var forceTask: Task<Void, Never>?
     private var forcedAt: [Date] = []
     /// Our own reroutes: at most this many in `forceWindowS`, at least `forceGapS` apart.
@@ -746,6 +751,7 @@ final class NavSession: ObservableObject {
             progressRevision = routeRevision
             etaSmoother.update(remainingS: p.durationRemainingS, speedMps: guidanceSpeed())
             announceETAIfDue(p)
+            speakOffRoadProgress(p)
         case .offRoute:
             guard phase == .guiding else { return }
             if !rerouting { reroutingSince = Date() }
@@ -753,8 +759,12 @@ final class NavSession: ObservableObject {
             /* Once, not on every reroute while the driver is still finding the way back. */
             if Date().timeIntervalSince(lastOffRouteSpoken) > 45 {
                 lastOffRouteSpoken = Date()
-                /* «start_08», not «rr_01»: that clip says «درب يديد» (Emirati), the owner says «جديد». */
-                voice.say("طلعت عن الدرب، نضبط لك الطريق", clips: ["start_08"])
+                if offRoadTrip {
+                    speakOffRoadDeviation(from: myFix())
+                } else {
+                    /* «start_08», not «rr_01»: that clip says «درب يديد» (Emirati), the owner says «جديد». */
+                    voice.say("طلعت عن الدرب، نضبط لك الطريق", clips: ["start_08"])
+                }
             }
         case let .rerouted(r):
             guard phase == .guiding else { return }
@@ -827,7 +837,11 @@ final class NavSession: ObservableObject {
         locator.stop()
         stopEngine()
         retryTask?.cancel()
-        voice.say(auto ? "وصلتوا \(target?.name ?? "")" : "وصلت إلى \(target?.name ?? "وجهتك")", clips: [target?.source == .rally ? "start_07" : auto ? "arr_01" : "arr_02"])
+        if offRoadTrip, let s = offRoadVoice.arrival(OffRoadContext()) {
+            voice.say(s.navLine())
+        } else {
+            voice.say(auto ? "وصلتوا \(target?.name ?? "")" : "وصلت إلى \(target?.name ?? "وجهتك")", clips: [target?.source == .rally ? "start_07" : auto ? "arr_01" : "arr_02"])
+        }
         UIApplication.shared.isIdleTimerDisabled = false
         if let t = target { onArrived(t) }
     }
@@ -872,6 +886,7 @@ final class NavSession: ObservableObject {
     private func setRouteLine(_ r: NavRoute, near fix: DeviceFix? = nil) {
         let line = RouteLine(r.coordinates)
         routeLine = line
+        offRoadTrip = OffRoadVoice.isOffRoadTrip(NavSurfaceKm.of(r.surfaceRuns, routeM: r.distanceM))
         adherenceHold = false
         var allowance = 0.0
         if let f = fix, let s = RouteAdherence.measure(f, on: line) {
@@ -898,7 +913,10 @@ final class NavSession: ObservableObject {
             rerouting = false
             reroutingSince = nil
         }
-        if adherence.state == .off { forceReroute(from: f) }
+        if adherence.state == .off {
+            if offRoadTrip { speakOffRoadDeviation(from: f) }
+            forceReroute(from: f)
+        }
     }
 
     /// The raw fix has been on another road than the route for a while: ask for a route from where the
@@ -970,7 +988,40 @@ final class NavSession: ObservableObject {
         engine = nil
     }
 
+    // MARK: off-road wording (build 49)
+
+    private func offRoadContext(_ p: NavProgress?) -> OffRoadContext {
+        OffRoadContext(distanceToManeuverM: p?.distanceToManeuverM, warningActive: false, now: Date())
+    }
+
+    private func sayOffRoad(_ s: OffRoadSpeech?) {
+        guard let s else { return }
+        voice.say(s.navLine(routeRevision: routeRevision))
+    }
+
+    /// The trip's first line, then the milestones («باقي ٢٠ كيلو على مسارك» …) and «رجعت على مسارك».
+    private func speakOffRoadProgress(_ p: NavProgress) {
+        guard offRoadTrip else { return }
+        let ctx = offRoadContext(p)
+        if !offRoadBegan {
+            offRoadBegan = true
+            sayOffRoad(offRoadVoice.begin(ctx))
+        }
+        sayOffRoad(offRoadVoice.progress(remainingM: p.distanceRemainingM, ctx))
+        if offRoadVoice.deviationOpen, adherence.state == .on { sayOffRoad(offRoadVoice.backOnRoute(ctx)) }
+    }
+
+    /// Off the route: «ابتعدت عن مسارك، ارجع [الجهة]» from the raw fix and the route line, or «بعدت كثير عن مسارك».
+    private func speakOffRoadDeviation(from fix: DeviceFix?) {
+        guard offRoadTrip, let f = fix, let line = routeLine,
+              let n = OffRoadGeometry.nearest(on: line.coords, from: LngLat(lng: f.lng, lat: f.lat)) else { return }
+        sayOffRoad(offRoadVoice.deviation(crossM: n.distanceM, bearingToRoute: n.bearing, offRoadContext(progress)))
+    }
+
     private func reset() {
+        offRoadVoice.reset()
+        offRoadBegan = false
+        offRoadTrip = false
         phase = .idle
         routeLine = nil
         adherence.reset()
