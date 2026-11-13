@@ -400,7 +400,7 @@ struct NavManeuverBanner: View {
         .animation(theme.animation(.smooth), value: nav.rerouting)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { RoundedRectangle(cornerRadius: 22, style: .continuous).fill(p.navBlue) }
-        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+        .shadow(color: p.shadow, radius: 8, y: 3)
     }
 
     /// Under the card, each its own small chip: the lanes near the turn and «ثم …» when the next turn

@@ -21,6 +21,8 @@ extension View {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-SaryShowcase") {
             SaryShowcaseRoot()
+        } else if ProcessInfo.processInfo.arguments.contains("-SaryThemesGallery") {
+            SaryThemesGallery()
         } else if ProcessInfo.processInfo.arguments.contains("-SaryFoundations") {
             SaryFoundationsPreview()
         } else if ProcessInfo.processInfo.arguments.contains("-SaryComponents") {

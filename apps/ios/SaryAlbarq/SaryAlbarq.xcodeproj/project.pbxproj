@@ -104,6 +104,7 @@
 		2AF04C664C03718542548443 /* SaryPTT.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087D07928C7AC61627BD3A63 /* SaryPTT.swift */; };
 		2B115D428C173D9063FDCDD9 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31571952C88A8EFB16D42C17 /* HomeView.swift */; };
 		2B5758AC6E38B537D3F8EF80 /* OutingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D91B934841C11948875B8B21 /* OutingActivityAttributes.swift */; };
+		2C0108F0EFABE2186FBA0C5E /* ThemesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6078E62CD148F710F31D8E7D /* ThemesUITests.swift */; };
 		2C4539C7EB1476966EEF4242 /* QuickStartLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2929C8B8A684CE8B9FAE4108 /* QuickStartLayoutUITests.swift */; };
 		2C8CA83B7B0C94582E449D58 /* VoiceNoteUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 201AAA2B35385AA6AC04720D /* VoiceNoteUploader.swift */; };
 		2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7375A05885429491947FFF5 /* OutingStateTests.swift */; };
@@ -182,6 +183,7 @@
 		45FBA811120909FF772A8267 /* HiResHosts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3027709E8F8C20AC618D477E /* HiResHosts.swift */; };
 		462574160D3E1979F718D1CD /* CarPlayManeuvers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A03AC033CA2F5A3B5DF26E24 /* CarPlayManeuvers.swift */; };
 		46A6420D055E9CB4B2D7F1D9 /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74730391AAD5CE3F324E29F8 /* ReminderScheduler.swift */; };
+		46EEA0FE53D4AE5235ABF889 /* SaryThemeChoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4DE24739ADF91D2A3138AAD /* SaryThemeChoiceTests.swift */; };
 		48B96A3CFD58F83AC7128007 /* MapHomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F952C74DD68A27167B6C0F /* MapHomeScreen.swift */; };
 		48FD091ED96CA8AD956F0810 /* DemoTrail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C608FD300357F3B7B83789 /* DemoTrail.swift */; };
 		493B53CB5FA52E7BE4AFCCF5 /* SafetyController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6F5E37AF2D093C5BF7EFC3 /* SafetyController.swift */; };
@@ -465,6 +467,7 @@
 		BB92ECB854EB5E22C291E8E5 /* TrackFollowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D195AD214B4CA1E984CD2A64 /* TrackFollowUITests.swift */; };
 		BB9B9D41FC0F770C9ABEC942 /* TripProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4164610D015B4413743DBA8 /* TripProgress.swift */; };
 		BBCD84DAD25F2187C95BA342 /* MediaShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F17910DB4903F123F2A30A /* MediaShareInbox.swift */; };
+		BC7D9E67DAED1B9BCE00A325 /* SaryThemeChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 327A282572F72A88F151EBE3 /* SaryThemeChoice.swift */; };
 		BC9CFD776CD89EDD38EF2D47 /* DustPlume.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A66949EC54362D8A4A3D124 /* DustPlume.swift */; };
 		BDFCDAAADAB278BD8F9A942E /* UrbanAreas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E68459CC2E8963AB00C2FD8 /* UrbanAreas.swift */; };
 		BF2BD526F33ECE620A8A61C5 /* MapTilt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DFD7E5844714C62593D80B /* MapTilt.swift */; };
@@ -774,6 +777,7 @@
 		318D0930455B81369FEEE9E0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		319F5D6B850C453345A0118C /* OutingFeaturesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingFeaturesModel.swift; sourceTree = "<group>"; };
 		31FFBAC2CB2F8F7492FDCF05 /* YouTubeLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeLink.swift; sourceTree = "<group>"; };
+		327A282572F72A88F151EBE3 /* SaryThemeChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryThemeChoice.swift; sourceTree = "<group>"; };
 		32FCE3EEF86D3386602FB586 /* SafetyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyUITests.swift; sourceTree = "<group>"; };
 		33423E5B09B8A1AC4E722A89 /* DesignSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystemTests.swift; sourceTree = "<group>"; };
 		334A86B04E005C3C03E875C7 /* FoundationsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationsUITests.swift; sourceTree = "<group>"; };
@@ -894,6 +898,7 @@
 		5F3084AFED2254E2AB685973 /* CarIcon-8a4fd1.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-8a4fd1.png"; sourceTree = "<group>"; };
 		5F9CFC01A92F8600D0137AF6 /* LiveActionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActionSheet.swift; sourceTree = "<group>"; };
 		60638084F780BC8BED2D9961 /* SarySOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SarySOS.swift; sourceTree = "<group>"; };
+		6078E62CD148F710F31D8E7D /* ThemesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemesUITests.swift; sourceTree = "<group>"; };
 		615CB81F74F9A6160C2DCA92 /* riyadh-rabie-drive.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "riyadh-rabie-drive.json"; sourceTree = "<group>"; };
 		61D00282D218E5D04013AD73 /* SuvModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuvModel.swift; sourceTree = "<group>"; };
 		623B1D1A1CD8AB2E477E8304 /* EndControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndControls.swift; sourceTree = "<group>"; };
@@ -1041,6 +1046,7 @@
 		A3E4678268B288A88DA575A6 /* SaryColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryColors.swift; sourceTree = "<group>"; };
 		A4017BB558E46DC93348B5D6 /* CarIcon-e05a9c.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-e05a9c.png"; sourceTree = "<group>"; };
 		A44C2A050B84465EA50A992A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A4DE24739ADF91D2A3138AAD /* SaryThemeChoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryThemeChoiceTests.swift; sourceTree = "<group>"; };
 		A59F37C5AA9DBD75A848FA27 /* UXSimplifyShotsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UXSimplifyShotsUITests.swift; sourceTree = "<group>"; };
 		A6512E998C15D9197A532AED /* LiveActivityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityUITests.swift; sourceTree = "<group>"; };
 		A6B3DBC08695A8D21743AB97 /* TripAutoNavUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripAutoNavUITests.swift; sourceTree = "<group>"; };
@@ -1735,6 +1741,7 @@
 				936885EDDC9016EA6FAB7D27 /* SafetyTests.swift */,
 				D5591DE7CCEDF7C0904180E7 /* SaryFoundationsTests.swift */,
 				F268263E8B8C5086C49AAD82 /* SaryScreenKitTests.swift */,
+				A4DE24739ADF91D2A3138AAD /* SaryThemeChoiceTests.swift */,
 				A8305E4E8351FA6F8723B885 /* SaryVoiceTests.swift */,
 				DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */,
 				AFE11BD246D68B3CF32D2369 /* SpeedTests.swift */,
@@ -2094,6 +2101,7 @@
 				3C9B06D4A123CE3781120D31 /* SOSAlwaysUITests.swift */,
 				29029D8E01752FD2B307DDB3 /* SpeedUITests.swift */,
 				A2F250B4DBC1D0018C096D9D /* StoryUITests.swift */,
+				6078E62CD148F710F31D8E7D /* ThemesUITests.swift */,
 				D195AD214B4CA1E984CD2A64 /* TrackFollowUITests.swift */,
 				A6B3DBC08695A8D21743AB97 /* TripAutoNavUITests.swift */,
 				D6F594D397D26518C5CE8821 /* TripUITests.swift */,
@@ -2145,6 +2153,7 @@
 			children = (
 				1ABFEAE857E8126FC2E351DC /* SaryFoundationComponents.swift */,
 				9EC1D5282A9EE5F7A0ECCB84 /* SaryFoundationsPreview.swift */,
+				327A282572F72A88F151EBE3 /* SaryThemeChoice.swift */,
 				1DF06A4656BCC5378CBC37F7 /* SaryType.swift */,
 			);
 			path = Foundations;
@@ -2712,6 +2721,7 @@
 				2F8F190AEC4682EBB4977F9E /* ScreensUITests.swift in Sources */,
 				693C61DAE332565D0BB660FD /* SpeedUITests.swift in Sources */,
 				1FF78175DEA5D06E0A2A39A4 /* StoryUITests.swift in Sources */,
+				2C0108F0EFABE2186FBA0C5E /* ThemesUITests.swift in Sources */,
 				BB92ECB854EB5E22C291E8E5 /* TrackFollowUITests.swift in Sources */,
 				97A100225D3CD8937DEA30EB /* TripAutoNavUITests.swift in Sources */,
 				F485262B8070E55703B90807 /* TripUITests.swift in Sources */,
@@ -2808,6 +2818,7 @@
 				5E1F37D3C1DAFE6A6D3AAA46 /* SafetyTests.swift in Sources */,
 				E13018E33F8F6029CA5FDBBE /* SaryFoundationsTests.swift in Sources */,
 				FBCC42EFC787E3B2E6377107 /* SaryScreenKitTests.swift in Sources */,
+				46EEA0FE53D4AE5235ABF889 /* SaryThemeChoiceTests.swift in Sources */,
 				4DFBB64521E50C91BF259E1C /* SaryVoiceTests.swift in Sources */,
 				85C7304DA76D182075D64FE6 /* ServerRulesTests.swift in Sources */,
 				EA122FABE04CDF342A97DE37 /* SpeedTests.swift in Sources */,
@@ -3122,6 +3133,7 @@
 				C4BE81361B59B343906259EA /* SaryStates.swift in Sources */,
 				36AA83D258DA6FEF5B807226 /* SaryStatusCapsule.swift in Sources */,
 				44413C11D673845BD6EEFEE0 /* SaryTheme.swift in Sources */,
+				BC7D9E67DAED1B9BCE00A325 /* SaryThemeChoice.swift in Sources */,
 				138A60F5D0FA3F96BC3F543C /* SaryTokens.swift in Sources */,
 				4A8118DF771723F46DE6722D /* SaryType.swift in Sources */,
 				8B12C57E80FE1B7980C891A4 /* SaryVoice.swift in Sources */,

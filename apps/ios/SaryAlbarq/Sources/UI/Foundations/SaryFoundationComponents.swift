@@ -23,14 +23,8 @@ struct SaryGlassSurface<Content: View>: View {
     @ViewBuilder var content: Content
     @Environment(\.sary) private var theme
 
-    /// Designer glass recipe, dark first: rgba(28,24,20,.78) + blur + hairline rgba(244,239,230,.10).
-    /// Light / dim variants arrive with the themes PR; until then they follow the palette's own tints.
-    static var darkFill: Color { Color(rgb: 0x1C1814, opacity: 0.78) }
-    static var darkHairline: Color { Color(rgb: 0xF4EFE6, opacity: 0.10) }
-
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        let dark = !theme.isLight && !theme.night
         content
             .padding(padding)
             .background {
@@ -39,9 +33,9 @@ struct SaryGlassSurface<Content: View>: View {
                         shape.fill(theme.palette.chromeOpaque)
                     } else {
                         shape.fill(.ultraThinMaterial)
-                        shape.fill(dark ? Self.darkFill : theme.palette.chromeTint)
+                        shape.fill(theme.palette.glassFill)
                     }
-                    shape.strokeBorder(dark ? Self.darkHairline : theme.palette.stroke, lineWidth: 1)
+                    shape.strokeBorder(theme.palette.glassHairline, lineWidth: 1)
                 }
                 .compositingGroup()
                 .saryShadow(.floating, theme)
