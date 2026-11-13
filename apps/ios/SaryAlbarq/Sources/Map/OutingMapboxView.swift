@@ -1119,7 +1119,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     ?? followSmoother.shown?.bearing ?? m.cameraState.bearing
                 let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h,
                                              share: FollowZoom.carShare(clear: h - Double(chrome.top) - Double(chrome.bottom)))
-                target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: MapTiltModel.shared.pitch(.navigation),
+                target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh, mode: TravelMode.active), bearing: bearing, pitch: MapTiltModel.shared.pitch(.navigation),
                                           topPadding: pad.top, bottomPadding: pad.bottom)
             default:
                 let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: 0.5)
@@ -1195,14 +1195,16 @@ struct OutingMapboxView: UIViewRepresentable {
             guard styleReady else { return }
             let m: MapboxMap = map.mapboxMap!
             let ids = Vehicle.ids(r.key)
-            let wantModel = !r.item.approximate
+            /* Walking guidance: my own marker is the dot (spot + white ring), not the car. */
+            let walkerDot = r.item.isMe && TravelMode.active.isWalk
+            let wantModel = !r.item.approximate && !walkerDot
             if !r.layersReady || r.model != wantModel {
                 removeLayers(r, on: map)
                 /* Joining: the first layers start at zero and ease to their presence opacity
                    (the spot also grows from nothing). The same transition softens later changes
                    of presence (live → last known → lost). */
                 let fadeIn = r.appearing
-                let spotRadius: Double = r.item.approximate ? 9 : 6
+                let spotRadius: Double = r.item.approximate ? 9 : walkerDot ? 8 : 6
                 var src = GeoJSONSource(id: ids.source)
                 src.data = .geometry(.point(Point(r.shown.coordinate)))
                 try? m.addSource(src)

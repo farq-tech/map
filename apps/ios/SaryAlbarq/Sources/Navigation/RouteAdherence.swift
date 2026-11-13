@@ -60,6 +60,34 @@ struct RouteAdherence {
     static let windowBackM = 400.0
     static let windowAheadM = 1500.0
 
+    /// The thresholds above are a car's. A walker is slower, the GPS noise is the same size relative to
+    /// the walking speed, and the opposite-carriageway rule does not exist on foot (Build 49).
+    struct Tuning: Equatable {
+        var baseM: Double
+        var maxBaseM: Double
+        var offFixes: Int
+        var offSeconds: Double
+        var onFixes: Int
+        var minSpeedMps: Double
+        /// Driving the other way along the road next to the route. Never on foot.
+        var wrongWay: Bool
+        var wrongWayDeg: Double
+        var wrongWayMinCrossM: Double
+        var wrongWayMinSpeedMps: Double
+
+        static let car = Tuning(baseM: RouteAdherence.baseM, maxBaseM: RouteAdherence.maxBaseM, offFixes: RouteAdherence.offFixes,
+                                offSeconds: RouteAdherence.offSeconds, onFixes: RouteAdherence.onFixes, minSpeedMps: RouteAdherence.minSpeedMps,
+                                wrongWay: true, wrongWayDeg: RouteAdherence.wrongWayDeg, wrongWayMinCrossM: RouteAdherence.wrongWayMinCrossM,
+                                wrongWayMinSpeedMps: RouteAdherence.wrongWayMinSpeedMps)
+        /// Walking: a wider lane (walkers cut corners, pavements are wide, GPS wanders 10–20 m between
+        /// buildings), slow speeds count, a reroute only after ~10 s of sustained deviation, no wrong-way rule.
+        static let walk = Tuning(baseM: 30, maxBaseM: 60, offFixes: 6, offSeconds: 10, onFixes: 3, minSpeedMps: 0.5,
+                                 wrongWay: false, wrongWayDeg: 180, wrongWayMinCrossM: 8, wrongWayMinSpeedMps: 5)
+
+        static func `for`(_ mode: TravelMode) -> Tuning { mode.isWalk ? .walk : .car }
+    }
+
+    private(set) var tuning = Tuning.car
     private(set) var state: State = .on
     /// Extra lateral distance accepted for this route: a router that insists on the other
     /// carriageway (the only legal one) must not be flagged off-route over and over.
@@ -70,17 +98,21 @@ struct RouteAdherence {
     private var onCount = 0
     private var offSinceMs: Double?
 
-    init(allowanceM: Double = 0) { self.allowanceM = allowanceM }
+    init(allowanceM: Double = 0, tuning: Tuning = .car) {
+        self.allowanceM = allowanceM
+        self.tuning = tuning
+    }
 
-    /// A new route: start fresh, remembering how far the car already is from it.
-    mutating func reset(allowanceM: Double = 0) {
-        self = RouteAdherence(allowanceM: allowanceM)
+    /// A new route: start fresh, remembering how far the car already is from it. `tuning`: the mode
+    /// of the new route (nil keeps the current one).
+    mutating func reset(allowanceM: Double = 0, tuning: Tuning? = nil) {
+        self = RouteAdherence(allowanceM: allowanceM, tuning: tuning ?? self.tuning)
     }
 
     /// The lateral tolerance for this fix.
     func toleranceM(accuracy: Double?) -> Double {
         let acc = (accuracy ?? 10).isFinite ? (accuracy ?? 10) : 10
-        return min(Self.maxBaseM, max(Self.baseM, 2 * acc)) + allowanceM
+        return min(tuning.maxBaseM, max(tuning.baseM, 2 * acc)) + allowanceM
     }
 
     /// The fix against the route. `expectedAlongM` narrows the search to the part of the route the car
@@ -118,23 +150,23 @@ struct RouteAdherence {
         last = s
         /* A parked or crawling car (and a very poor fix) says nothing about which road it is on. */
         let speed = fix.speed ?? 0
-        guard speed >= Self.minSpeedMps, (fix.accuracy ?? 10) <= 40 else { return nil }
+        guard speed >= tuning.minSpeedMps, (fix.accuracy ?? 10) <= 40 else { return nil }
         let tol = toleranceM(accuracy: fix.accuracy)
         let acrossOff = s.crossM > tol
-        let wrongWay = speed >= Self.wrongWayMinSpeedMps && (s.courseDiff ?? 0) >= Self.wrongWayDeg && s.crossM > Self.wrongWayMinCrossM
+        let wrongWay = tuning.wrongWay && speed >= tuning.wrongWayMinSpeedMps && (s.courseDiff ?? 0) >= tuning.wrongWayDeg && s.crossM > tuning.wrongWayMinCrossM
         if acrossOff || wrongWay {
             onCount = 0
             offCount += 1
             if offSinceMs == nil { offSinceMs = fix.atMs }
-            if state == .on, offCount >= Self.offFixes, fix.atMs - (offSinceMs ?? fix.atMs) >= Self.offSeconds * 1000 {
+            if state == .on, offCount >= tuning.offFixes, fix.atMs - (offSinceMs ?? fix.atMs) >= tuning.offSeconds * 1000 {
                 state = .off
                 return .off
             }
-        } else if s.crossM <= max(12, min(tol, 2 * (fix.accuracy ?? 10))) + allowanceM, (s.courseDiff ?? 0) < Self.wrongWayDeg {
+        } else if s.crossM <= max(12, min(tol, 2 * (fix.accuracy ?? 10))) + allowanceM, !tuning.wrongWay || (s.courseDiff ?? 0) < tuning.wrongWayDeg {
             offCount = 0
             offSinceMs = nil
             onCount += 1
-            if state == .off, onCount >= Self.onFixes {
+            if state == .off, onCount >= tuning.onFixes {
                 state = .on
                 return .on
             }
@@ -144,8 +176,8 @@ struct RouteAdherence {
 
     /// A new route from the car's own position that still starts off the road line by `crossM`
     /// (the router put it on the other carriageway): accept that offset rather than loop.
-    static func allowance(forCrossM crossM: Double, accuracy: Double?) -> Double {
-        let base = min(maxBaseM, max(baseM, 2 * (accuracy ?? 10)))
+    static func allowance(forCrossM crossM: Double, accuracy: Double?, tuning: Tuning = .car) -> Double {
+        let base = min(tuning.maxBaseM, max(tuning.baseM, 2 * (accuracy ?? 10)))
         return crossM > base ? min(60, crossM - base + 8) : 0
     }
 }

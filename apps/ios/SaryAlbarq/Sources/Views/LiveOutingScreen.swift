@@ -504,7 +504,7 @@ struct LiveOutingScreen: View {
                         }
                         /* UI-AUDIT م3: no red «أنهِ الطلعة» flag on the map. Ending is in «المزيد» → «الطلعة»
                          * (the owner) and this CTA when «رجعتوا؟» suggests it — one confirmation below. */
-                        if guidingHUD && controller.speed.everRead {
+                        if guidingHUD && controller.speed.everRead && !controller.nav.travelMode.isWalk {
                             NavSpeedCluster(ui: controller.speedometerUI, limit: controller.nav.progress?.speedLimitKmh)
                                 .chromeFrame("speed")
                                 .transition(.opacity)

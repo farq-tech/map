@@ -255,7 +255,16 @@ enum FollowZoom {
     /// «تتبعني» keeps the person's zoom, but never further out than this.
     static let northMinZoom = 14.0
 
-    static func zoom(kmh: Double?) -> Double {
+    /// On foot («مشي»): much closer, so the next turn and the pavement are readable at 1–6 km/h.
+    static let walkCurve: [(kmh: Double, zoom: Double)] = [(0, 18.4), (3, 18.2), (6, 17.8), (12, 17.2)]
+
+    static func zoom(kmh: Double?, mode: TravelMode) -> Double {
+        mode.isWalk ? zoom(kmh: kmh, curve: walkCurve) : zoom(kmh: kmh)
+    }
+
+    static func zoom(kmh: Double?) -> Double { zoom(kmh: kmh, curve: curve) }
+
+    static func zoom(kmh: Double?, curve: [(kmh: Double, zoom: Double)]) -> Double {
         let v = max(0, kmh ?? 0)
         guard let first = curve.first, let last = curve.last else { return 16 }
         if v <= first.kmh { return first.zoom }

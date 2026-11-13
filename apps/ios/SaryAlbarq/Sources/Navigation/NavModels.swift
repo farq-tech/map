@@ -69,15 +69,21 @@ struct NavRouteOptions: Equatable {
     var fastest = true
     var avoidUnpaved = false
     var avoidTolls = false
+    /// «بالسيارة» / «مشي» (Build 49). Remembered under its own key so the stored flags keep their shape.
+    var mode: TravelMode = .default
 
     static let defaultsKey = "sary.nav.options.v1"
 
     static func load(_ d: UserDefaults = .standard) -> NavRouteOptions {
-        guard let a = d.array(forKey: defaultsKey) as? [Bool], a.count == 3 else { return .init() }
-        return .init(fastest: a[0], avoidUnpaved: a[1], avoidTolls: false)
+        let mode = TravelMode.load(d)
+        guard let a = d.array(forKey: defaultsKey) as? [Bool], a.count == 3 else { return .init(mode: mode) }
+        return .init(fastest: a[0], avoidUnpaved: a[1], avoidTolls: false, mode: mode)
     }
 
-    func save(_ d: UserDefaults = .standard) { d.set([fastest, avoidUnpaved, avoidTolls], forKey: Self.defaultsKey) }
+    func save(_ d: UserDefaults = .standard) {
+        d.set([fastest, avoidUnpaved, avoidTolls], forKey: Self.defaultsKey)
+        mode.save(d)
+    }
 }
 
 /// What a turn looks like (the banner arrow, the voice, CarPlay's `CPManeuver`).

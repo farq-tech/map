@@ -185,6 +185,21 @@ test('translate: the exact Valhalla /route body (snapshot)', () => {
   assert.equal('alternates' in timed, false, 'nor on time-dependent ones');
 });
 
+test('walking: pedestrian costing carries only the pedestrian options, the car request is unchanged', () => {
+  const walk = parseRouteRequest(okBody({ costing: 'pedestrian', options: { walking_speed: 4.5, use_hills: 0.3, avoid_unpaved: true, avoid_tolls: true } }));
+  assert.equal(walk.ok, true);
+  assert.equal(walk.value.costing, 'pedestrian');
+  const body = valhallaRouteBody(walk.value);
+  assert.equal(body.costing, 'pedestrian');
+  assert.deepEqual(body.costing_options, { pedestrian: { walking_speed: 4.5, use_hills: 0.3 } }, 'no tolls / unpaved options on foot');
+  assert.equal(parseRouteRequest(okBody({ costing: 'pedestrian', options: { walking_speed: 0 } })).reason, 'invalid_options');
+  assert.equal(parseRouteRequest(okBody({ costing: 'pedestrian', options: { walking_speed: 30 } })).reason, 'invalid_options');
+  assert.equal(parseRouteRequest(okBody({ costing: 'pedestrian', options: { walking_speed: '4.5' } })).reason, 'invalid_options');
+  assert.equal(parseRouteRequest(okBody({ costing: 'pedestrian', options: { use_hills: 2 } })).reason, 'invalid_options');
+  const car = valhallaRouteBody(parseRouteRequest(okBody({ options: { avoid_unpaved: true, use_tracks: 0.2 } })).value);
+  assert.deepEqual(car.costing_options, { auto: { use_tracks: 0.2, exclude_unpaved: true } });
+});
+
 test('exclude_polygons: validated, passed to Valhalla only when present', () => {
   const ring = [[46.6, 25.2], [46.7, 25.2], [46.7, 25.3], [46.6, 25.3], [46.6, 25.2]];
   const p = (extra) => parseRouteRequest(okBody(extra));

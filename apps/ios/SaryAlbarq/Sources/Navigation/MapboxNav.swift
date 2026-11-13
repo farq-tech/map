@@ -129,7 +129,7 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
         let dest = MapboxDirections.Waypoint(coordinate: r.target.position.coordinate, name: r.target.name)
         let o = NavigationRouteOptions(
             waypoints: [origin, dest],
-            profileIdentifier: spec.profile == .drivingTraffic ? .automobileAvoidingTraffic : .automobile,
+            profileIdentifier: spec.profile == .walking ? .walking : spec.profile == .drivingTraffic ? .automobileAvoidingTraffic : .automobile,
             queryItems: nil,
             locale: Locale(identifier: spec.language),
             distanceUnit: .kilometer

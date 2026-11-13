@@ -43,7 +43,10 @@ enum NavCameraMode: Equatable {
 /// provider, the guidance engine and the voice; the live screen observes it.
 @MainActor
 final class NavSession: ObservableObject {
-    @Published private(set) var phase: NavPhase = .idle
+    @Published private(set) var phase: NavPhase = .idle {
+        /* The map draws a walker dot and zooms closer only while a walking guidance runs. */
+        didSet { TravelMode.active = (phase == .guiding || phase == .offRoad) ? options.mode : .car }
+    }
     @Published private(set) var target: NavTarget?
     @Published var options: NavRouteOptions = .load() {
         didSet { options.save() }
@@ -120,7 +123,7 @@ final class NavSession: ObservableObject {
     var toast: (String) -> Void = { _ in }
 
     init(provider: NavRoutingProvider, makeEngine: ((NavRoutePlan) -> NavGuidanceEngine)? = nil) {
-        self.provider = provider
+        self.provider = TravelModeRouteProvider(provider)
         muted = UserDefaults.standard.bool(forKey: NavVoice.muteKey)
         self.makeEngine = makeEngine ?? { plan in
             plan.native is MapboxRoutesBox || plan.native is FarqRoutesBox ? MapboxGuidanceEngine() as NavGuidanceEngine : LocalGuidanceEngine()
@@ -129,7 +132,19 @@ final class NavSession: ObservableObject {
         locator.onFix = { [weak self] f in self?.ingest(f) }
         voice.onReevaluate = { [weak self] in self?.restateCurrent() }
         voice.atPlayback = { [weak self] l, c in self?.playback(l, choice: c) ?? .play(l) }
+        /* Walking is spoken by the device voice (ar-SA) from our own walking text: the recorded
+         * «صوت سرى» clips are car phrasing. See `WalkWording.phrasesNeedingClips`. */
+        voice.choice = { [weak self] in (self?.options.mode.isWalk ?? false) ? .device : NavVoiceChoice.current() }
     }
+
+    /// «بالسيارة» / «مشي»: remembered, and the routes are asked for again in the new mode.
+    func setMode(_ mode: TravelMode) {
+        guard options.mode != mode else { return }
+        options.mode = mode
+        refetch()
+    }
+
+    var travelMode: TravelMode { options.mode }
 
     /// The arrival time: the engine's (Mapbox: live traffic) remaining time, smoothed (`NavETASmoother`).
     private(set) var etaSmoother = NavETASmoother()
@@ -143,10 +158,12 @@ final class NavSession: ObservableObject {
               let a = etaSmoother.arrival, etaAnnouncer.isDue(arrival: a, now: now),
               !voice.isSpeaking else { return }
         let v = max(3, guidanceSpeed(now) ?? 0)
-        guard p.distanceToManeuverM > 150, p.distanceToManeuverM / v > 20 else { return }
+        let walk = options.mode.isWalk
+        guard p.distanceToManeuverM > (walk ? 60 : 150), p.distanceToManeuverM / v > 20 else { return }
         let s = a.timeIntervalSince(now)
         etaAnnouncer.said(arrival: a, now: now)
-        voice.say(NavLine(NavETAAnnouncer.text(arrival: a, remainingS: s), clips: NavETAAnnouncer.clip(remainingS: s).map { [$0] } ?? [],
+        voice.say(NavLine(walk ? WalkWording.etaText(arrival: a, remainingS: s) : NavETAAnnouncer.text(arrival: a, remainingS: s),
+                          clips: walk ? [] : NavETAAnnouncer.clip(remainingS: s).map { [$0] } ?? [],
                           routeRevision: routeRevision, expiresAt: now.addingTimeInterval(15)))
     }
 
@@ -203,7 +220,7 @@ final class NavSession: ObservableObject {
         let dNow = max(0, p.distanceToManeuverM - (v ?? 0) * age)
         let step = r.steps[index]
         let soft = isSoft(index)
-        let stage = NavPromptBudget.stage(distanceM: dNow, speedMps: v)
+        let stage = NavPromptBudget.stage(distanceM: dNow, speedMps: v, mode: options.mode)
         /* The per-maneuver budget, at the moment the voice commits to a line: one early + one final
          * (one short line for a soft maneuver), never the same line twice. A reroute or Mapbox's
          * traffic refresh of the same maneuver does not restart it (kept by maneuver, not route). */
@@ -235,7 +252,8 @@ final class NavSession: ObservableObject {
             return commit(out, held: 0)
         }
         let plan = NavPromptTiming.plan(distanceNowM: dNow, speedMps: v, latencyS: NavPromptTiming.startLatencyS(c),
-                                        canHold: true, heldS: line.heldS, band: NavPromptTiming.band(c)) { s in
+                                        canHold: true, heldS: line.heldS, mode: options.mode,
+                                        band: NavPromptTiming.band(c, mode: options.mode)) { s in
             guard let l = build(s) else { return 0 }
             return NavPromptTiming.duration(c, clips: l.clips, text: l.text)
         }
@@ -279,7 +297,7 @@ final class NavSession: ObservableObject {
         }
         /* The per-maneuver budget (one early + one final at most, no repeats) is applied at
          * playback, where the voice commits to a line; here we only build it. */
-        let stage = NavPromptBudget.stage(distanceM: d, speedMps: speed)
+        let stage = NavPromptBudget.stage(distanceM: d, speedMps: speed, mode: options.mode)
         guard let words = lineWords(index, distanceM: d, dNow: d, speed: speed, stage: stage, opening: opening) else { return nil }
         saidAtM[key] = d
         var line = NavLine(words.text, clips: words.clips, maneuverID: key, routeRevision: routeRevision, expiresAt: Date().addingTimeInterval(10))
@@ -314,6 +332,14 @@ final class NavSession: ObservableObject {
     private func lineWords(_ index: Int, distanceM d: Double, dNow: Double, speed: Double?, stage: NavPromptBudget.Stage, opening: Bool) -> (text: String, clips: [String])? {
         guard let r = active, r.steps.indices.contains(index) else { return nil }
         let step = r.steps[index]
+        if options.mode.isWalk {
+            /* On foot: our walking text, no clips (the device voice says it), no road names. */
+            if isSoft(index) {
+                if stage == .final { return NavPromptBudget.softLine(step).map { ($0.text, []) } }
+                return opening ? ("استمر للأمام", []) : nil
+            }
+            return (WalkWording.spoken(step, distanceM: d, targetName: target?.name), [])
+        }
         if isSoft(index) {
             if stage == .final { return NavPromptBudget.softLine(step) }
             return opening ? ("كمّل سيده", ["mv_02"]) : nil
@@ -741,11 +767,18 @@ final class NavSession: ObservableObject {
             }
             /* The raw fix says I am on another road than the route: its numbers are stale. */
             if adherence.state == .off { return }
-            noteProgress(p)
-            progress = p
+            var pr = p
+            if options.mode.isWalk, let r = active {
+                /* The engine times a car (or its own walking guess): on foot it is our pace over what is left,
+                 * and there is no posted limit to show. */
+                pr.durationRemainingS = WalkPace.remaining(route: r, remainingM: pr.distanceRemainingM)
+                pr.speedLimitKmh = nil
+            }
+            noteProgress(pr)
+            progress = pr
             progressRevision = routeRevision
-            etaSmoother.update(remainingS: p.durationRemainingS, speedMps: guidanceSpeed())
-            announceETAIfDue(p)
+            etaSmoother.update(remainingS: pr.durationRemainingS, speedMps: guidanceSpeed())
+            announceETAIfDue(pr)
         case .offRoute:
             guard phase == .guiding else { return }
             if !rerouting { reroutingSince = Date() }
@@ -875,9 +908,9 @@ final class NavSession: ObservableObject {
         adherenceHold = false
         var allowance = 0.0
         if let f = fix, let s = RouteAdherence.measure(f, on: line) {
-            allowance = RouteAdherence.allowance(forCrossM: s.crossM, accuracy: f.accuracy)
+            allowance = RouteAdherence.allowance(forCrossM: s.crossM, accuracy: f.accuracy, tuning: .for(options.mode))
         }
-        adherence.reset(allowanceM: allowance)
+        adherence.reset(allowanceM: allowance, tuning: .for(options.mode))
     }
 
     /// Where along the route the car should be (from the last progress on THIS route), metres.

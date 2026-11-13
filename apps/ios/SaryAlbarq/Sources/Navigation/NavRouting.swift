@@ -112,7 +112,15 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         return DesertArea(key: "tiles|\(h.south)|\(h.west)|\(h.north)|\(h.east)", grid: grid)
     }
 
+    /// The mode of the request being answered, for `makeRoute` (task-local: it flows into the
+    /// street requests sent from child tasks, and costs the signatures nothing).
+    @TaskLocal private static var travelMode = TravelMode.car
+
     func routes(_ request: NavRouteRequest) async throws -> NavRoutePlan {
+        try await Self.$travelMode.withValue(request.options.mode) { try await carOrWalkRoutes(request) }
+    }
+
+    private func carOrWalkRoutes(_ request: NavRouteRequest) async throws -> NavRoutePlan {
         let roadPlan: NavRoutePlan
         do {
             roadPlan = try await base.routes(request)
@@ -357,8 +365,14 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
             steps = desertRouteSteps
         }
         let prefixDistance = prefix.count >= 2 ? roadDistance(prefix) : 0
-        let streetDuration = road.map { Self.durationAlongRoad($0, distanceM: prefixDistance) } ?? 0
-        let desertDuration = option.minutes * 60
+        /* On foot: the street part at walking pace, the desert part at walking pace over the raster's own
+         * slopes (the option's minutes are a car's, in the mode the person picked: sand / firm / fast). */
+        let walking = Self.travelMode.isWalk
+        let streetDuration = walking ? WalkPace.duration(distanceM: prefixDistance)
+            : road.map { Self.durationAlongRoad($0, distanceM: prefixDistance) } ?? 0
+        let desertDuration = walking
+            ? WalkPace.duration(points: routePoints, elevation: { Double(grid.elev[grid.index($0)]) })
+            : option.minutes * 60
         let duration = max(60, streetDuration + desertDuration)
         var timingProfile: [NavRouteTimingLeg] = []
         if prefixDistance > 0, streetDuration > 0 {
@@ -533,7 +547,7 @@ private struct UncheckedSendable<Value>: @unchecked Sendable {
 /// Provider-neutral request parameters, from the options sheet.
 /// Mapbox: `profile`, `exclude`, `language`, `voice_units`; Valhalla: costing + `exclude_unpaved` / `use_tolls`.
 struct NavRouteSpec: Equatable {
-    enum Profile: String { case drivingTraffic = "driving-traffic", driving }
+    enum Profile: String { case drivingTraffic = "driving-traffic", driving, walking }
     var profile: Profile
     /// Road classes to exclude: "toll", "unpaved".
     var exclude: [String]
@@ -542,6 +556,11 @@ struct NavRouteSpec: Equatable {
     var metric: Bool
 
     static func from(_ o: NavRouteOptions) -> NavRouteSpec {
+        /* Walking: Mapbox `walking` (Valhalla `pedestrian`). Toll / unpaved exclusions are car-only
+         * (a footpath over sand is fine), and «أسرع» (live traffic) means nothing on foot. */
+        if o.mode.isWalk {
+            return NavRouteSpec(profile: .walking, exclude: [], alternatives: true, language: "ar", metric: true)
+        }
         var ex: [String] = []
         if o.avoidTolls { ex.append("toll") }
         if o.avoidUnpaved { ex.append("unpaved") }

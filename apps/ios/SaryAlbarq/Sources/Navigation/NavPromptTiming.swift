@@ -44,16 +44,21 @@ enum NavPromptTiming {
         var holdS: Double = 0
     }
 
-    static func isImmediate(_ endM: Double, speedMps v: Double) -> Bool {
-        endM < immediateM || (v > 0.5 && endM / v < immediateS)
+    static func isImmediate(_ endM: Double, speedMps v: Double, mode: TravelMode = .car) -> Bool {
+        if mode.isWalk { return endM < WalkWording.nowM || (v > 0.5 && endM / v < 2) }
+        return endM < immediateM || (v > 0.5 && endM / v < immediateS)
     }
 
     /// - distanceNowM: to the maneuver now (the engine's along-route distance, projected to now).
     /// - band: the largest distance we can say that is ≤ m (nil: under the smallest / too far).
     /// - duration: seconds of the whole line built for that distance (nil: the immediate phrase).
     static func plan(distanceNowM d: Double, speedMps: Double?, latencyS: Double, canHold: Bool, heldS: Double = 0,
-                     band: (Double) -> Double?, duration: (Double?) -> Double) -> Plan {
+                     mode: TravelMode = .car, band: (Double) -> Double?, duration: (Double?) -> Double) -> Plan {
         let v = max(0, speedMps ?? 0)
+        /* On foot the maneuver is «here» much sooner, and a line may end only a few metres off its distance. */
+        let immediateM = mode.isWalk ? WalkWording.nowM : Self.immediateM
+        let maxErrorM = mode.isWalk ? 6.0 : Self.maxErrorM
+        func isImmediate(_ e: Double, speedMps v: Double) -> Bool { Self.isImmediate(e, speedMps: v, mode: mode) }
         func end(_ s: Double?, hold: Double = 0) -> Double { d - v * (hold + latencyS + duration(s)) }
         /* Not moving (or no speed): the distance now, rounded down. */
         guard v > 0.5 else {
@@ -90,6 +95,12 @@ enum NavPromptTiming {
     }
 
     /// The recorded «صوت سرى» distances (rounded down), or the device voice's own rounding.
+    static func band(_ c: NavVoiceChoice, miles: Bool = DistanceUnits.miles, mode: TravelMode) -> (Double) -> Double? {
+        guard mode.isWalk else { return band(c, miles: miles) }
+        /* Walking is always the device voice (see `NavSession`): metres, finer steps, «now» at 12 m. */
+        return { m in m >= WalkWording.nowM ? WalkWording.flooredMeters(m) : nil }
+    }
+
     static func band(_ c: NavVoiceChoice, miles: Bool = DistanceUnits.miles) -> (Double) -> Double? {
         switch c {
         case .sary:
@@ -140,8 +151,9 @@ struct NavPromptBudget: Equatable {
 
     mutating func reset() { said = [] }
 
-    static func stage(distanceM d: Double, speedMps v: Double?) -> Stage {
-        d <= finalM || d / max(5, v ?? 0) <= finalS ? .final : .early
+    static func stage(distanceM d: Double, speedMps v: Double?, mode: TravelMode = .car) -> Stage {
+        if mode.isWalk { return d <= WalkWording.finalM || d / max(1, v ?? 0) <= WalkWording.finalS ? .final : .early }
+        return d <= finalM || d / max(5, v ?? 0) <= finalS ? .final : .early
     }
 
     private func index(_ s: NavStep) -> Int? {
