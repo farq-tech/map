@@ -108,6 +108,7 @@
 		2B5758AC6E38B537D3F8EF80 /* OutingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D91B934841C11948875B8B21 /* OutingActivityAttributes.swift */; };
 		2C0108F0EFABE2186FBA0C5E /* ThemesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6078E62CD148F710F31D8E7D /* ThemesUITests.swift */; };
 		2C4539C7EB1476966EEF4242 /* QuickStartLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2929C8B8A684CE8B9FAE4108 /* QuickStartLayoutUITests.swift */; };
+		2C8559DFF78A9495CDCBABD4 /* CarHeadingEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE753C65F8C39AE73EB8BDB /* CarHeadingEstimator.swift */; };
 		2C8CA83B7B0C94582E449D58 /* VoiceNoteUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 201AAA2B35385AA6AC04720D /* VoiceNoteUploader.swift */; };
 		2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7375A05885429491947FFF5 /* OutingStateTests.swift */; };
 		2D57E09AFD46BAE41FD94E99 /* MeshStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92E5C3B7CAF047A17215B8E1 /* MeshStore.swift */; };
@@ -538,6 +539,7 @@
 		D8048225C7DDBD4AC05B6C0A /* IntroUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8161B8B4725CAA9EAF536CF /* IntroUITests.swift */; };
 		D85574D7972FCF4602460F6D /* WeatherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DCD33518F150B1E06AF5689 /* WeatherViews.swift */; };
 		D9281E5FB1D18AA139CA57CD /* Real-ESRGAN-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = E28812358815F698C2D6D9CE /* Real-ESRGAN-LICENSE.txt */; };
+		D997F37041BC67419C94D3A8 /* CarHeadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3541A0B430079043B2F2C06F /* CarHeadingTests.swift */; };
 		DA66187CA3FE4D475A1A83C4 /* IntroController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64ABED795F650D9AE83DC908 /* IntroController.swift */; };
 		DA9943B6E7168F7328929C03 /* GroupAudioModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D999D2CC10905DDCD847908 /* GroupAudioModels.swift */; };
 		DABD4B91D899F5F3D4B1CFDD /* CarIcon-8a4fd1.png in Resources */ = {isa = PBXBuildFile; fileRef = 5F3084AFED2254E2AB685973 /* CarIcon-8a4fd1.png */; };
@@ -795,6 +797,7 @@
 		33A8E29435159A3BF9F129E2 /* CampSitesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampSitesUITests.swift; sourceTree = "<group>"; };
 		34D5C8675B8818C49D07DE22 /* SaryStatusCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryStatusCapsule.swift; sourceTree = "<group>"; };
 		350C0C1DE95561FD26192CDE /* SarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SarySheet.swift; sourceTree = "<group>"; };
+		3541A0B430079043B2F2C06F /* CarHeadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarHeadingTests.swift; sourceTree = "<group>"; };
 		35455B0FA230E73A9455A6F2 /* ShowcaseMocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowcaseMocks.swift; sourceTree = "<group>"; };
 		3580FF79D52965D9C8AF372B /* SarySpeedometer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SarySpeedometer.swift; sourceTree = "<group>"; };
 		359CEAF67C56A12CA9208807 /* RoundaboutExitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundaboutExitTests.swift; sourceTree = "<group>"; };
@@ -894,6 +897,7 @@
 		59DEC4234B3BE81868B048B8 /* NewScreensBTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewScreensBTests.swift; sourceTree = "<group>"; };
 		5A6B66CEF20B285BE64F5F88 /* TrailKalman.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailKalman.swift; sourceTree = "<group>"; };
 		5ACEFFFBF3BBB3DA6A6AE327 /* LivePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePlan.swift; sourceTree = "<group>"; };
+		5AE753C65F8C39AE73EB8BDB /* CarHeadingEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarHeadingEstimator.swift; sourceTree = "<group>"; };
 		5AF5AA15881B17850C98CA71 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5B467A26D5ED997F21AAF90A /* PendingActionQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingActionQueue.swift; sourceTree = "<group>"; };
 		5B581A946C420C5701FCB189 /* CarPlayMapViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayMapViewController.swift; sourceTree = "<group>"; };
@@ -1332,6 +1336,7 @@
 		12B3C3B994B8ADE6016E391A /* Location */ = {
 			isa = PBXGroup;
 			children = (
+				5AE753C65F8C39AE73EB8BDB /* CarHeadingEstimator.swift */,
 				E2837B11E95DD4B17B54C37E /* GpsQuality.swift */,
 				653EE1CF838CE307187A6B95 /* GpsQualityView.swift */,
 				13815A9D77BC92625010C184 /* LocationSharer.swift */,
@@ -1685,6 +1690,7 @@
 				55AFB79D57FBFAC9F3B1FE4B /* BackgroundShareTests.swift */,
 				BD953F3EF9949FE956D773AA /* BilingualSearchTests.swift */,
 				A7D14FB6457E78CC7C9FB4BD /* CampSitesTests.swift */,
+				3541A0B430079043B2F2C06F /* CarHeadingTests.swift */,
 				6AD4A7C44EFE17317B03A499 /* CarPlayManeuverTests.swift */,
 				E13D7B33BE15B22E053E00E9 /* CarPlayPresenterTests.swift */,
 				A8182A276F271D81E93BEDA5 /* CarPlayWiringTests.swift */,
@@ -2777,6 +2783,7 @@
 				9CA0F11C5186EB32A9B17216 /* BackgroundShareTests.swift in Sources */,
 				45B41E2FCCB4BCFE643BDCD0 /* BilingualSearchTests.swift in Sources */,
 				93E7FD8A8A66166C635CC0A9 /* CampSitesTests.swift in Sources */,
+				D997F37041BC67419C94D3A8 /* CarHeadingTests.swift in Sources */,
 				C0E59F4FB60042E38D039E62 /* CarPlayManeuverTests.swift in Sources */,
 				C22A7CC533E50F7A5B7A49E0 /* CarPlayPresenterTests.swift in Sources */,
 				00F55CEAAB1773620F7C2E18 /* CarPlayWiringTests.swift in Sources */,
@@ -2905,6 +2912,7 @@
 				9F55AD25D81A2A72BFED81EB /* CampSitesMapLayer.swift in Sources */,
 				A5E8ED3F4BD60EAE89A4B616 /* CampSuggestSheet.swift in Sources */,
 				1CA61098FF2C6466AC156AEF /* CarColors.swift in Sources */,
+				2C8559DFF78A9495CDCBABD4 /* CarHeadingEstimator.swift in Sources */,
 				58E77A55FF5F1741A5FE53B6 /* CarIcon.swift in Sources */,
 				5805AD4310E69C54DA6F84A7 /* CarMotion.swift in Sources */,
 				1C45B2ABAFD066E38B318B27 /* CarPlayCoordinator.swift in Sources */,

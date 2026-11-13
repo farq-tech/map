@@ -915,7 +915,8 @@ final class OutingSession: ObservableObject, Identifiable {
         f.lng = p.lng
         if f.speed == nil { f.speed = k.speedMps }
         /* A crawling car's course points anywhere: no arrow rather than a wrong one. */
-        f.heading = HeadingChooser.course(f)
+        let course = HeadingChooser.course(f)
+        f.heading = course == nil ? nil : (location.carHeading.estimate.goodHeading ?? course)
         return f
     }
 
