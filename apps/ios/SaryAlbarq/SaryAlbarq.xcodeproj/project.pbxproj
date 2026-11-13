@@ -18,6 +18,7 @@
 		02CE1FBA75860269420A052B /* ShowcaseMocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35455B0FA230E73A9455A6F2 /* ShowcaseMocks.swift */; };
 		031CA50B2586A95D8980EEFA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 6738086AFB683BCF39276691 /* PrivacyInfo.xcprivacy */; };
 		03319C713755B2202A668711 /* IdleMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB820A4F3EC4786723900BA1 /* IdleMapTests.swift */; };
+		038E1D697C5A76BD4BBB7C9A /* AlongRouteRankTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C007295403DF7A20D67902A /* AlongRouteRankTests.swift */; };
 		039F0FA6693F70B787A5E24C /* radio-squelch.caf in Resources */ = {isa = PBXBuildFile; fileRef = 4C3C6ADB78B865A680C5A2DC /* radio-squelch.caf */; };
 		03EBEE86EB887DD71C6F824C /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F025C4BB80157D5B8653F73E /* ChatStore.swift */; };
 		040AA1C5BF9D08D471FE89C2 /* CarIcon-1fb8c4.png in Resources */ = {isa = PBXBuildFile; fileRef = F1D84D7AC1A11FDF1EE20DB3 /* CarIcon-1fb8c4.png */; };
@@ -378,6 +379,7 @@
 		98F4EB3B6FBDCC01779015FA /* WaypointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD3481E4956173E7476C431 /* WaypointTests.swift */; };
 		98F511391CA39ED1A4D0CC3F /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 522D9BD5ED742287300C4BD0 /* MapboxMaps */; };
 		997F43BC613C7888B7DAD066 /* NearbyMesh.swift in Sources */ = {isa = PBXBuildFile; fileRef = C345B48C2AFDDA7637004476 /* NearbyMesh.swift */; };
+		999E82B3D8C32C21658920C2 /* AlongRouteRank.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA6E878B59AC78BA7A174B7 /* AlongRouteRank.swift */; };
 		99D7D53D0C335A8D09A60A73 /* CloudFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6279B67DAA10A1762E33D070 /* CloudFlow.swift */; };
 		9A3CD88BCA8CC00D11A65A80 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = FC139EAD42D49AEAA31C42F6 /* README.md */; };
 		9B71C5433FA3670679205CCA /* MapboxNavigationCore in Frameworks */ = {isa = PBXBuildFile; productRef = 13C88C33837F81FD3A5CE12B /* MapboxNavigationCore */; };
@@ -792,6 +794,7 @@
 		3C9B06D4A123CE3781120D31 /* SOSAlwaysUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SOSAlwaysUITests.swift; sourceTree = "<group>"; };
 		3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-Medium.ttf"; sourceTree = "<group>"; };
 		3D999D2CC10905DDCD847908 /* GroupAudioModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupAudioModels.swift; sourceTree = "<group>"; };
+		3DA6E878B59AC78BA7A174B7 /* AlongRouteRank.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlongRouteRank.swift; sourceTree = "<group>"; };
 		3DD3067CF341A79F279CD980 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackTrackUITests.swift; sourceTree = "<group>"; };
 		3E68459CC2E8963AB00C2FD8 /* UrbanAreas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UrbanAreas.swift; sourceTree = "<group>"; };
@@ -1002,6 +1005,7 @@
 		9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipDeclutterUITests.swift; sourceTree = "<group>"; };
 		9ADBDDA670FFB3481D0F0964 /* StandaloneNavScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandaloneNavScreen.swift; sourceTree = "<group>"; };
 		9BB8DDC21C2DEE9CE14CA999 /* Qibla.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qibla.swift; sourceTree = "<group>"; };
+		9C007295403DF7A20D67902A /* AlongRouteRankTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlongRouteRankTests.swift; sourceTree = "<group>"; };
 		9C3B037894673EFCBDD08445 /* FarqTiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqTiles.swift; sourceTree = "<group>"; };
 		9C955FB296901E5F5AA3ED3A /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
 		9CAF059F25F880DEEA683E7A /* WeatherModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherModels.swift; sourceTree = "<group>"; };
@@ -1332,6 +1336,7 @@
 		14C8DCC62E4CE07DF8C5DC49 /* Navigation */ = {
 			isa = PBXGroup;
 			children = (
+				3DA6E878B59AC78BA7A174B7 /* AlongRouteRank.swift */,
 				80CE3133B0257B80CB692127 /* DestinationCompass.swift */,
 				2D77AB2FE12C808F3B14703D /* DestinationCompassView.swift */,
 				623B1D1A1CD8AB2E477E8304 /* EndControls.swift */,
@@ -1638,6 +1643,7 @@
 			isa = PBXGroup;
 			children = (
 				6E44D5D17C6A2F26C19273B4 /* AccountDeletionTests.swift */,
+				9C007295403DF7A20D67902A /* AlongRouteRankTests.swift */,
 				B192EF8661150F1AD7319221 /* AlwaysLiveTests.swift */,
 				55AFB79D57FBFAC9F3B1FE4B /* BackgroundShareTests.swift */,
 				BD953F3EF9949FE956D773AA /* BilingualSearchTests.swift */,
@@ -2684,6 +2690,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6C8C6C1D3F169181BC4A9A8B /* AccountDeletionTests.swift in Sources */,
+				038E1D697C5A76BD4BBB7C9A /* AlongRouteRankTests.swift in Sources */,
 				A37E8B1D950B1FFE39C69A24 /* AlwaysLiveTests.swift in Sources */,
 				9CA0F11C5186EB32A9B17216 /* BackgroundShareTests.swift in Sources */,
 				45B41E2FCCB4BCFE643BDCD0 /* BilingualSearchTests.swift in Sources */,
@@ -2797,6 +2804,7 @@
 			files = (
 				08B95CC152CFCF0A70B61C87 /* AccountDeletion.swift in Sources */,
 				1E84E577AF0DBF1899919903 /* AlertQueue.swift in Sources */,
+				999E82B3D8C32C21658920C2 /* AlongRouteRank.swift in Sources */,
 				769416EEC0A4B403253B0E96 /* AppModel+Speed.swift in Sources */,
 				66672651B5767A5368BC50AC /* AppModel+Track.swift in Sources */,
 				6E8DD717C35604A4FACFA8EB /* AppModel.swift in Sources */,
