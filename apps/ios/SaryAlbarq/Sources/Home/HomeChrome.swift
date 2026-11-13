@@ -212,7 +212,7 @@ struct HomeBottomCard: View {
         }
         .padding(.bottom, bottomInset)
         .frame(maxWidth: 560)
-        .background(shape.fill(p.background).shadow(color: .black.opacity(0.25), radius: 14, y: -2))
+        .background(shape.fill(p.background).shadow(color: p.shadow, radius: 14, y: -2))
         .overlay(shape.stroke(p.stroke, lineWidth: 0.5))
         .background(GeometryReader { r in Color.clear.preference(key: HomeCardHeightKey.self, value: r.size.height) })
         .frame(maxWidth: .infinity)
