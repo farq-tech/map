@@ -1,4 +1,5 @@
 @_spi(Experimental) import MapboxMaps
+import CoreLocation
 import SwiftUI
 import UIKit
 
@@ -140,15 +141,37 @@ struct PlanMapView: UIViewRepresentable {
             }))
         }
 
+        /// Elevation (metres, the flat exaggeration undone) from the DEM tiles the map has loaded; nil otherwise, never guessed.
+        func terrainSample(at p: LngLat) -> TerrainSample {
+            guard let m = map?.mapboxMap, styleReady, NewUI.enabled,
+                  let e = m.elevation(at: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lng)) else { return .unavailable }
+            return TerrainSample(elevationM: e / Self.demExaggeration, slopeDeg: nil)
+        }
+
         func detach() {
+            if MapTerrainProbe.source === self { MapTerrainProbe.source = nil }
             interactions.forEach { $0.cancel() }
             interactions = []
             bag.removeAll()
         }
 
+        /// Terrain-DEM under the home map (new Home only): a flat (×0.01) terrain, so nothing looks different, but the picked
+        /// spot's elevation can be read (`MapTerrainProbe`, «بطاقة النقطة»). Without DEM tiles the card says «غير متاح».
+        private static let demExaggeration = 0.01
+
+        private func installTerrainProbe(_ m: MapboxMap) {
+            guard NewUI.enabled else { return }
+            if !m.sourceExists(withId: "mapbox-dem") {
+                try? m.addSource(withId: "mapbox-dem", properties: ["type": "raster-dem", "url": "mapbox://mapbox.mapbox-terrain-dem-v1", "tileSize": 512, "maxzoom": 14])
+            }
+            try? m.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": Self.demExaggeration])
+            MapTerrainProbe.source = self
+        }
+
         private func styleLoaded() {
             guard let map, let m = map.mapboxMap else { return }
             styleReady = true
+            installTerrainProbe(m)
             /* «أداء التطبيق»: the launch interval ends at the first map (a no-op after that). */
             PerfSignpost.end(.launchToMap)
             for (k, v) in [("show3dObjects", false), ("showPointOfInterestLabels", true), ("showTransitLabels", false), ("showRoadLabels", true)] as [(String, Bool)] {
@@ -307,4 +330,8 @@ struct ReportThrottle {
 
     /// Seconds until a report is allowed again (0 when it already is).
     func wait(_ now: Double) -> Double { max(0, interval - (now - last)) }
+}
+
+extension PlanMapView.Coordinator: TerrainSampling {
+    func terrain(at p: LngLat) -> TerrainSample { terrainSample(at: p) }
 }

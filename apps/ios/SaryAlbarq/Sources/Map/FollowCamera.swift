@@ -243,10 +243,28 @@ enum FollowZoom {
     static let headingPitch = 58.0
     /// «باتجاهي»: the car sits this far down the clear area (0 = top, 1 = bottom).
     static let carScreenShare = 0.74
+    /// Room kept under the car for its «أنت» chip and the car's own half (pt): the chip never touches the bottom bar. On a small
+    /// phone (iPhone SE) the clear area is short, so 74 % of it left only ~50 pt (owner review, 2026-11-13).
+    static let carLabelClearance = 92.0
+
+    /// The car's share of the clear area: `carScreenShare`, lifted just enough to keep `carLabelClearance` under the car (never above the middle).
+    static func carShare(clear: Double) -> Double {
+        guard clear > 1 else { return carScreenShare }
+        return min(carScreenShare, max(0.5, 1 - carLabelClearance / clear))
+    }
     /// «تتبعني» keeps the person's zoom, but never further out than this.
     static let northMinZoom = 14.0
 
-    static func zoom(kmh: Double?) -> Double {
+    /// On foot («مشي»): much closer, so the next turn and the pavement are readable at 1–6 km/h.
+    static let walkCurve: [(kmh: Double, zoom: Double)] = [(0, 18.4), (3, 18.2), (6, 17.8), (12, 17.2)]
+
+    static func zoom(kmh: Double?, mode: TravelMode) -> Double {
+        mode.isWalk ? zoom(kmh: kmh, curve: walkCurve) : zoom(kmh: kmh)
+    }
+
+    static func zoom(kmh: Double?) -> Double { zoom(kmh: kmh, curve: curve) }
+
+    static func zoom(kmh: Double?, curve: [(kmh: Double, zoom: Double)]) -> Double {
         let v = max(0, kmh ?? 0)
         guard let first = curve.first, let last = curve.last else { return 16 }
         if v <= first.kmh { return first.zoom }

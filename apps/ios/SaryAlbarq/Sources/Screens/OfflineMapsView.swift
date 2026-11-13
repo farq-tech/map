@@ -15,8 +15,50 @@ struct OfflineMapsView: View {
     @State private var deleting: OfflineArea?
 
     var body: some View {
+        Group {
+            if NewUI.enabled {
+                /* New interface (Build 47, group C): the unified window title; «حمّل منطقة» is the one
+                   primary button, pinned at the bottom. Everything else is where it was. */
+                SaryScreenScaffold(title: "الخرائط بلا إنترنت", subtitle: "للبر حيث لا تغطية", closeID: "offline.close", onClose: back) {
+                    VStack(alignment: .leading, spacing: SarySpace.l.rawValue) { sections(addInline: false) }
+                } bottom: {
+                    addButton(newUI: true)
+                }
+            } else {
+                SaryPage(title: "الخرائط بلا إنترنت", subtitle: "للبر حيث لا تغطية", back: back) {
+                    sections(addInline: true)
+                }
+            }
+        }
+        .onAppear { store.reload() }
+        .fullScreenCover(isPresented: $picking) {
+            OfflineAreaPicker(initial: suggested, outingName: outingName, close: { picking = false })
+                .saryPresented(appearance)
+        }
+        .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
+                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "تُحذف خرائط هذه المنطقة من الجوال، وتحتاج إنترنت لعرضها.", confirmTitle: "احذف") {
+            if let d = deleting { store.delete(d.id) }
+            deleting = nil
+        }
+    }
+
+    @ViewBuilder
+    private func addButton(newUI: Bool) -> some View {
+        let b = Button { picking = true } label: { SaryButtonLabel(title: "حمّل منطقة", systemImage: "square.dashed") }
+        if newUI {
+            b.buttonStyle(SaryFoundationButtonStyle(kind: .primary))
+                .disabled({ if case .downloading = store.job { return true }; return false }())
+                .accessibilityIdentifier("offline.add")
+        } else {
+            b.buttonStyle(.sary(.primary))
+                .disabled({ if case .downloading = store.job { return true }; return false }())
+                .accessibilityIdentifier("offline.add")
+        }
+    }
+
+    @ViewBuilder
+    private func sections(addInline: Bool) -> some View {
         let p = theme.palette
-        SaryPage(title: "الخرائط بلا إنترنت", subtitle: "للبر حيث لا تغطية", back: back) {
             usage
             if case let .downloading(name, f, bytes) = store.job {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
@@ -38,10 +80,7 @@ struct OfflineMapsView: View {
                 SaryBanner(text: "«\(name)» جاهزة بلا إنترنت (\(SaryFormat.bytes(bytes))).", tone: .success, systemImage: SaryIcon.checkCircle)
                     .accessibilityIdentifier("offline.finished")
             }
-            Button { picking = true } label: { SaryButtonLabel(title: "حمّل منطقة", systemImage: "square.dashed") }
-                .buttonStyle(.sary(.primary))
-                .disabled({ if case .downloading = store.job { return true }; return false }())
-                .accessibilityIdentifier("offline.add")
+            if addInline { addButton(newUI: false) }
             if store.loaded && store.areas.isEmpty {
                 SaryStateView(kind: .empty(title: "ما حفظت مناطق بعد", message: "قبل الطلعة، وأنت على إنترنت، احفظ منطقتها: الخريطة والطرق والتضاريس تشتغل بعدها بدون تغطية.", systemImage: "map"))
                     .sarySurface(radius: SaryRadius.l)
@@ -66,17 +105,6 @@ struct OfflineMapsView: View {
                 .foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))
             }
-        }
-        .onAppear { store.reload() }
-        .fullScreenCover(isPresented: $picking) {
-            OfflineAreaPicker(initial: suggested, outingName: outingName, close: { picking = false })
-                .saryPresented(appearance)
-        }
-        .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
-                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "تُحذف خرائط هذه المنطقة من الجوال، وتحتاج إنترنت لعرضها.", confirmTitle: "احذف") {
-            if let d = deleting { store.delete(d.id) }
-            deleting = nil
-        }
     }
 
     private var usage: some View {

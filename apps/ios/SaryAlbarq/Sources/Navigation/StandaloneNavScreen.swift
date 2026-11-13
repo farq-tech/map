@@ -251,7 +251,8 @@ struct StandaloneNavScreen: View {
     /// speed is read. Respects «نبّهني إذا تجاوزت» (SpeedPrefs).
     @ViewBuilder
     private var speedReadout: some View {
-        let guiding = nav.phase == .guiding
+        /* No speedometer / posted limit on foot («مشي»). */
+        let guiding = nav.phase == .guiding && !nav.travelMode.isWalk
         if guiding && speed.everRead {
             let over = SpeedPrefs.alertOn() && (speed.current.kmh ?? 0) > Double(SpeedPrefs.limitKmh())
             NavSpeedCluster(ui: SpeedometerUI(current: speed.current, trip: nil, overLimit: over), limit: nav.progress?.speedLimitKmh)

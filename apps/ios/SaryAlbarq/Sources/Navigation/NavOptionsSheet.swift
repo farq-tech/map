@@ -29,16 +29,28 @@ struct NavOptionsSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.m)) {
-                    VStack(spacing: 0) {
-                        SaryToggleRow(title: "أسرع", subtitle: nav.options.fastest ? "حسب الزحام الآن" : "الأقصر مسافة", systemImage: "bolt.fill",
-                                      isOn: binding(\.fastest), id: "nav.opt.fastest")
-                        SaryDivider()
-                        SaryToggleRow(title: "تجنّب الطرق الترابية", subtitle: nil, systemImage: "road.lanes",
-                                      isOn: binding(\.avoidUnpaved), id: "nav.opt.unpaved")
-                        /* No toll roads in Saudi Arabia: the «تجنّب الرسوم» toggle is not shown. */
+                    /* «بالسيارة» / «مشي» (Build 49): remembered; changing it asks for the routes again. */
+                    SarySegmented(options: TravelMode.allCases,
+                                  selection: Binding(get: { nav.options.mode }, set: { nav.setMode($0) }),
+                                  label: { $0.title }, systemImage: { $0.symbol }, id: "nav.mode",
+                                  optionID: { "nav.mode.\($0.rawValue)" })
+                    if nav.options.mode.isWalk {
+                        /* Walking: shortest footpath; the car options (traffic, dirt roads) do not apply. */
+                        Label("مشي: أقصر طريق للمشاة، ٤٫٥ كم/س تقريبًا", systemImage: "figure.walk")
+                            .saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                            .accessibilityIdentifier("nav.mode.walkNote")
+                    } else {
+                        VStack(spacing: 0) {
+                            SaryToggleRow(title: "أسرع", subtitle: nav.options.fastest ? "حسب الزحام الآن" : "الأقصر مسافة", systemImage: "bolt.fill",
+                                          isOn: binding(\.fastest), id: "nav.opt.fastest")
+                            SaryDivider()
+                            SaryToggleRow(title: "تجنّب الطرق الترابية", subtitle: nil, systemImage: "road.lanes",
+                                          isOn: binding(\.avoidUnpaved), id: "nav.opt.unpaved")
+                            /* No toll roads in Saudi Arabia: the «تجنّب الرسوم» toggle is not shown. */
+                        }
+                        .padding(.horizontal, theme.space(.m))
+                        .sarySurface(radius: SaryRadius.m)
                     }
-                    .padding(.horizontal, theme.space(.m))
-                    .sarySurface(radius: SaryRadius.m)
 
                     content
                 }
@@ -46,7 +58,7 @@ struct NavOptionsSheet: View {
             .scrollBounceBehavior(.basedOnSize)
 
             Button(action: start) {
-                SaryButtonLabel(title: nav.direct ? "ابدأ باتجاه مباشر" : "ابدأ الملاحة", systemImage: "location.north.line.fill", busy: nav.loading)
+                SaryButtonLabel(title: nav.direct ? "ابدأ باتجاه مباشر" : nav.options.mode.isWalk ? "ابدأ المشي" : "ابدأ الملاحة", systemImage: nav.options.mode.isWalk ? "figure.walk" : "location.north.line.fill", busy: nav.loading)
             }
             .buttonStyle(.saryPrimary)
             .disabled(nav.loading || (nav.routes.isEmpty && !nav.direct))
@@ -116,7 +128,7 @@ struct NavOptionsSheet: View {
                 NavSurfaceLegend(runs: r.surfaceRuns)
             }
             if let leg = nav.offRoad { offRoadNote(leg, whole: false) }
-            if nav.options.avoidUnpaved, nav.selected?.hasUnpaved == true {
+            if !nav.options.mode.isWalk, nav.options.avoidUnpaved, nav.selected?.hasUnpaved == true {
                 SaryInlineMessage(text: "ما لقينا طريقًا بدون أجزاء ترابية؛ هذا أقرب ما يكون.", tone: .warning)
             }
         }

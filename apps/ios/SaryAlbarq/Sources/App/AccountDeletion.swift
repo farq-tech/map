@@ -84,7 +84,7 @@ enum LocalAccountData {
             WatchLinkStore.key, SafetyController.warnedStoreKey,
             /* Round 3: create flow, «دائمًا» explainer, navigation preferences. */
             RecentPlaces.key, PlaceNameCache.key, LiveOutingController.shareAlwaysAskedKey,
-            NavRouteOptions.defaultsKey, NavVoice.muteKey, NavVoiceChoice.key, NavProviderChoice.key,
+            NavRouteOptions.defaultsKey, TravelMode.defaultsKey, NavVoice.muteKey, NavVoiceChoice.key, NavProviderChoice.key,
             /* Build 9: exploration and convoy-alert rules. */
             MapLayer.key, ExploreRules.formatKey, ConvoyAlertPrefs.key, "sary.tracks.shown.v1",
             /* The trip's automatic guidance (setting + per-outing progress). */

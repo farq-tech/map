@@ -82,10 +82,14 @@ final class FarqValhallaRouteProvider: NavRoutingProvider {
     /// The body the proxy expects (`language: ar-SA`, metric is implied by Valhalla's km units).
     static func body(_ r: NavRouteRequest) -> [String: Any] {
         let o = r.options
+        /* Walking: `pedestrian` costing at 4.5 km/h, mild hill avoidance; none of the car options. */
+        let costingOptions: [String: Any] = o.mode.isWalk
+            ? ["walking_speed": WalkPace.flatMps * 3.6, "use_hills": 0.3]
+            : ["avoid_unpaved": o.avoidUnpaved, "avoid_tolls": o.avoidTolls, "avoid_highways": false, "use_tracks": !o.avoidUnpaved]
         var body: [String: Any] = [
             "locations": [["lat": r.origin.lat, "lng": r.origin.lng], ["lat": r.target.position.lat, "lng": r.target.position.lng]],
-            "costing": "auto",
-            "options": ["avoid_unpaved": o.avoidUnpaved, "avoid_tolls": o.avoidTolls, "avoid_highways": false, "use_tracks": !o.avoidUnpaved],
+            "costing": o.mode.isWalk ? "pedestrian" : "auto",
+            "options": costingOptions,
             "alternates": 2,
             "language": "ar-SA",
         ]

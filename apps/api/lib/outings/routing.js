@@ -35,7 +35,7 @@ const MAX_EXCLUDE_RINGS = 4;
 const MAX_EXCLUDE_POINTS = 400;
 /* Generous GCC box: Yemen/Oman in the south, Kuwait/north Saudi in the north. */
 const GCC_BOX = Object.freeze({ minLat: 12, maxLat: 33, minLng: 34, maxLng: 60 });
-const COSTINGS = new Set(['auto', 'truck']);
+const COSTINGS = new Set(['auto', 'truck', 'pedestrian']);
 const LANGUAGES = new Set(['ar-SA', 'en-US']);
 const MAX_DEPART_AHEAD_MS = 30 * 24 * 60 * 60_000;
 const MAX_DEPART_BEHIND_MS = 60 * 60_000;
@@ -118,6 +118,15 @@ function parseRouteRequest(raw, { now = Date.now() } = {}) {
     if (!finite(o.use_tracks) || o.use_tracks < 0 || o.use_tracks > 1) return fail('invalid_options');
     options.use_tracks = o.use_tracks;
   }
+  /* Walking («مشي», Build 49): Valhalla `pedestrian` costing options. */
+  if (o.walking_speed != null) {
+    if (!finite(o.walking_speed) || o.walking_speed < 1 || o.walking_speed > 8) return fail('invalid_options');
+    options.walking_speed = o.walking_speed;
+  }
+  if (o.use_hills != null) {
+    if (!finite(o.use_hills) || o.use_hills < 0 || o.use_hills > 1) return fail('invalid_options');
+    options.use_hills = o.use_hills;
+  }
 
   let alternates = 0;
   if (raw.alternates != null) {
@@ -166,10 +175,16 @@ function localDateTime(ms) {
 /** Parsed request → the exact JSON body Valhalla's /route gets. */
 function valhallaRouteBody(req) {
   const co = {};
-  if (req.options.avoid_tolls) co.use_tolls = 0;
-  if (req.options.avoid_highways) co.use_highways = 0;
-  if (req.options.use_tracks != null) co.use_tracks = req.options.use_tracks;
-  if (req.options.avoid_unpaved) co.exclude_unpaved = true;
+  if (req.costing === 'pedestrian') {
+    /* A footpath over sand or a track is fine: none of the car options (tolls, highways, unpaved) apply. */
+    if (req.options.walking_speed != null) co.walking_speed = req.options.walking_speed;
+    if (req.options.use_hills != null) co.use_hills = req.options.use_hills;
+  } else {
+    if (req.options.avoid_tolls) co.use_tolls = 0;
+    if (req.options.avoid_highways) co.use_highways = 0;
+    if (req.options.use_tracks != null) co.use_tracks = req.options.use_tracks;
+    if (req.options.avoid_unpaved) co.exclude_unpaved = true;
+  }
   const body = {
     locations: req.locations.map((p) => ({ lat: p.lat, lon: p.lng, type: 'break' })),
     costing: req.costing,
