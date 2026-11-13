@@ -166,7 +166,7 @@ final class NavSession: ObservableObject {
     /// distances are measured from, no smoothing lag) — else what the map draws otherwise.
     func mapFix(_ f: DeviceFix?, now: Date = Date()) -> DeviceFix? {
         guard phase == .guiding, !rerouting, var m = fresh(matchedFix, now) else { return f }
-        m.heading = HeadingChooser.course(m) ?? f?.heading
+        m.heading = adherence.heading.estimate.goodHeading ?? HeadingChooser.course(m) ?? f?.heading
         return m
     }
 
@@ -924,7 +924,7 @@ final class NavSession: ObservableObject {
         if !rerouting { reroutingSince = now }
         rerouting = true
         let origin = LngLat(lng: f.lng, lat: f.lat)
-        let heading = HeadingChooser.course(f)
+        let heading = adherence.heading.estimate.goodHeading ?? HeadingChooser.course(f)
         forceTask = Task { [weak self] in
             guard let self else { return }
             defer { self.forceTask = nil }

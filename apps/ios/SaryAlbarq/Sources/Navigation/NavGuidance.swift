@@ -188,7 +188,7 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
         let tolerance = Self.offRouteM + min(40, fix.accuracy ?? 10)
         if loc.offset > tolerance {
             offCount += 1
-            if offCount >= 3, !rerouting, now() >= rerouteNotBefore { startReroute(me, heading: fix.heading) }
+            if offCount >= 3, !rerouting, now() >= rerouteNotBefore { startReroute(me, heading: HeadingChooser.course(fix)) }
             return
         }
         offCount = 0
