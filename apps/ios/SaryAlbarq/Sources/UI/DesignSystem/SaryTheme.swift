@@ -164,14 +164,7 @@ private struct SaryAppearanceRoot: ViewModifier {
     var settings: AppearanceSettings
 
     func body(content: Content) -> some View {
-        let prefs = settings.prefs
-        let forced: ColorScheme? = settings.isNight ? .dark : {
-            switch prefs.colorScheme {
-            case .system: return nil
-            case .light: return .light
-            case .dark: return .dark
-            }
-        }()
+        let forced: ColorScheme? = settings.uiScheme
         return content
             .modifier(SaryThemeResolver(settings: settings))
             .environment(settings)
@@ -193,7 +186,7 @@ private struct SaryThemeResolver: ViewModifier {
         let theme = SaryTheme.resolve(
             prefs: settings.prefs,
             scheme: scheme,
-            night: settings.isNight,
+            night: settings.uiNight,
             drive: settings.isDriving,
             systemReduceMotion: reduceMotion,
             increasedContrast: contrast == .increased,

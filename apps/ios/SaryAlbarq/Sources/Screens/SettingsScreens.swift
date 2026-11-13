@@ -553,15 +553,24 @@ struct AdvancedSettingsView: View {
     @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.auto.rawValue
     @AppStorage(OneMapFlag.key) private var oneMap = false
     @AppStorage(NewUI.key) private var newUI = false
+    @Environment(AppearanceSettings.self) private var appearance
 
     var body: some View {
         let p = theme.palette
+        @Bindable var appearance = appearance
         SaryPage(title: "متقدم", back: back) {
             SarySection(title: "تجريبي", footer: OneMapFlag.restartNote) {
                 SaryToggleRow(title: OneMapFlag.settingsTitle, subtitle: OneMapFlag.settingsDetail, systemImage: "map.fill",
                               isOn: $oneMap, id: "dev.oneMap")
                 SaryToggleRow(title: NewUI.settingsTitle, subtitle: NewUI.settingsDetail, systemImage: "sparkles",
                               isOn: $newUI, id: "dev.newUI")
+            }
+            /* `NewUI.enabled` also honours the DEBUG launch argument (`-SaryNewUI`), which the AppStorage flag does not see. */
+            if newUI || NewUI.enabled {
+                SarySection(title: "مظهر الواجهة الجديدة", footer: appearance.themeChoice.detail) {
+                    SarySegmented(options: SaryThemeChoice.allCases, selection: $appearance.themeChoice,
+                                  label: { $0.label }, id: "dev.newUI.theme", optionID: { "dev.newUI.theme.\($0.rawValue)" })
+                }
             }
             SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط الموقع الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {

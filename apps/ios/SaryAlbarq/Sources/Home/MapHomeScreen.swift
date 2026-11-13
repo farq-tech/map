@@ -226,10 +226,23 @@ struct MapHomeScreen: View {
                            onStart: { creating = true },
                            onTile: { openHomeTile($0) },
                            onLast: { if let o = HomeChromeRules.lastOuting(model.history) { model.open(o.id) } },
+                           extra: AnyView(newHomeExtras),
                            bottomInset: g.safeAreaInsets.bottom)
                 .frame(maxHeight: g.size.height * 0.62, alignment: .bottom)
         }
         .onPreferenceChange(HomeCardHeightKey.self) { cardHeight = $0 }
+    }
+
+    /// Nothing from the old collapsed sheet is lost: the running / upcoming outing (one tap resumes it), an invite, a failed list and
+    /// the offline strip stay on the card. The old «start» card is the primary button now. Shortcuts, «البر», the category chips,
+    /// «طلعاتي» and «انضم برابط» are one pull of the handle away (the same expanded sheet).
+    @ViewBuilder
+    private var newHomeExtras: some View {
+        switch stateCard {
+        case .active, .upcoming, .invite, .failed: stateCardView
+        case .start, .none: EmptyView()
+        }
+        if !model.online { SaryOfflineStrip() }
     }
 
     private var homeWeatherHour: WeatherHour? {
@@ -967,6 +980,10 @@ struct MapHomeScreen: View {
                             }
                             if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                         }
+                    }
+                    /* New Home: the coordinates (once) and the elevation of the picked spot (`MapTerrainProbe`, never guessed). */
+                    if NewUI.enabled {
+                        HomeElevationLine(point: point, showCoordinates: s.subtitle != CoordinateShare.displayDecimal(point))
                     }
                 }
                 Spacer(minLength: 0)

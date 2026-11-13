@@ -4,7 +4,7 @@ import Foundation
 /// «البوصلة» while driving (owner's request, 2026-11-12): a round dial bottom-left whose rose turns
 /// with the car (course-up) and whose orange needle leads to the chosen target — «الوجهة»، «الرجعة»،
 /// «القبلة»، «أقرب مطر»، «أقرب ربيع». Pure rules here (unit-tested in `DestinationCompassTests`); the
-/// view is `DestinationCompassView`. Everything is computed on this phone: nothing leaves it except the
+/// view is `DestinationCompassView`. The needle points at the target itself, relative to the car. Everything is computed on this phone: nothing leaves it except the
 /// bbox the rain / spring lookups send (the same as the weather layers, no user id).
 enum DestinationCompass {
     enum Target: String, CaseIterable, Equatable, Identifiable {
@@ -92,7 +92,7 @@ enum DestinationCompass {
 
     struct Reading: Equatable {
         var target: Target
-        /// Absolute bearing (0..<360) of where the needle aims (the lookahead point, or the target).
+        /// Absolute bearing (0..<360) of the path's lookahead point (the target itself when there is no path).
         var aimBearing: Double
         /// Absolute bearing straight to the target itself.
         var targetBearing: Double
@@ -102,33 +102,48 @@ enum DestinationCompass {
         /// A path leads the needle («على المسار»).
         var onPath: Bool
         var offPath: Bool
-        /// The rose turns with the car (a trusted course); otherwise north stays up.
+        /// The rose turns with the car (a trusted GPS course, else the phone's magnetometer); with neither, north stays up.
         var headingUp: Bool
+        /// Where the car's heading came from.
+        var headingSource: HeadingSource
         /// Rotation of the rose (−heading, −180…180), 0 north-up.
         var roseDegrees: Double
-        /// Rotation of the needle from the top of the dial (−180…180).
+        /// Rotation of the needle from the top of the dial (−180…180): the straight line to the target itself,
+        /// relative to the car, always (owner's definition of «بوصلة الوجهة»).
         var needleDegrees: Double
-        /// The small ring marker: the straight-line bearing to the target, only when a path leads the needle.
+        /// The small ring marker: where the path leads (the lookahead point), only when a path exists.
         var markerDegrees: Double?
     }
 
+    enum HeadingSource: String, Equatable { case course, magnetometer, none }
+
     static var kaaba: LngLat { LngLat(lng: Qibla.kaaba.longitude, lat: Qibla.kaaba.latitude) }
 
-    /// `course` / `speed`: my GPS course and speed. Only a trusted course (moving, `Policy.trustedHeading`)
-    /// turns the rose: a parked or crawling car keeps north up, so the dial never spins at a standstill.
-    static func reading(me: LngLat, course: Double?, speed: Double?, target: LngLat, kind: Target, guide: PathGuide? = nil) -> Reading {
+    /// The car's heading: the GPS course while moving (`Policy.trustedHeading`), else the phone's magnetometer
+    /// (`compass`, already accuracy-filtered by `DeviceHeading`), else nil (north stays up).
+    static func heading(course: Double?, speed: Double?, compass: Double?) -> (degrees: Double, source: HeadingSource)? {
+        if let c = Policy.trustedHeading(course, speed: speed) { return (c, .course) }
+        if let m = compass, m.isFinite { return ((m.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360), .magnetometer) }
+        return nil
+    }
+
+    /// `course` / `speed`: my GPS course and speed; `compass`: the magnetometer heading, used only when the course is
+    /// not trusted (parked or crawling). The needle is always the straight-line bearing to the target minus the car's
+    /// heading; the path lookahead is the small marker.
+    static func reading(me: LngLat, course: Double?, speed: Double?, compass: Double? = nil, target: LngLat, kind: Target, guide: PathGuide? = nil) -> Reading {
         let from = CLLocationCoordinate2D(latitude: me.lat, longitude: me.lng)
         let straight = kind == .qibla ? Qibla.distanceKm(from: from) * 1000 : PlanGeo.meters(me, target)
         let targetBearing = kind == .qibla ? Qibla.bearing(from: from) : PlanGeo.bearing(me, target)
         let aimBearing = guide.map { PlanGeo.bearing(me, $0.aim) } ?? targetBearing
-        let heading = Policy.trustedHeading(course, speed: speed)
-        let ref = heading ?? 0
+        let h = heading(course: course, speed: speed, compass: compass)
+        let ref = h?.degrees ?? 0
         return Reading(target: kind, aimBearing: aimBearing, targetBearing: targetBearing,
                        distanceM: guide?.remainingM ?? straight, straightM: straight,
-                       onPath: guide != nil, offPath: guide?.offPath ?? false, headingUp: heading != nil,
-                       roseDegrees: heading.map { NavOffRoad.arrowDegrees(bearing: 0, reference: $0) } ?? 0,
-                       needleDegrees: NavOffRoad.arrowDegrees(bearing: aimBearing, reference: ref),
-                       markerDegrees: guide == nil ? nil : NavOffRoad.arrowDegrees(bearing: targetBearing, reference: ref))
+                       onPath: guide != nil, offPath: guide?.offPath ?? false, headingUp: h != nil,
+                       headingSource: h?.source ?? .none,
+                       roseDegrees: h.map { NavOffRoad.arrowDegrees(bearing: 0, reference: $0.degrees) } ?? 0,
+                       needleDegrees: NavOffRoad.arrowDegrees(bearing: targetBearing, reference: ref),
+                       markerDegrees: guide == nil ? nil : NavOffRoad.arrowDegrees(bearing: aimBearing, reference: ref))
     }
 
     /// The angle to animate to from `previous` (an accumulated angle): the short way round, so

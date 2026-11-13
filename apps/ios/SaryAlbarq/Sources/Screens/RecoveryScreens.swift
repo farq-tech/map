@@ -205,8 +205,52 @@ struct QRScanSheet: View {
     @State private var status = AVCaptureDevice.authorizationStatus(for: .video)
 
     var body: some View {
+        if NewUI.enabled { newBody } else { legacyBody }
+    }
+
+    /// New interface (Build 47, group C): the camera square, and when there is no camera or it was
+    /// refused the ONE primary button is «اكتب الرمز بيدك» (the typing field is the page below).
+    private var newBody: some View {
         let p = theme.palette
-        SaryPage(title: title, close: cancel, scrolls: false) {
+        let noCamera = AVCaptureDevice.default(for: .video) == nil
+        let refused = status == .denied || status == .restricted
+        return SaryScreenScaffold(title: title, closeID: "qr.close", onClose: cancel, scrolls: false) {
+            VStack(spacing: SarySpace.l.rawValue) {
+                if noCamera {
+                    SaryStateView(kind: .error(title: "ما فيه كاميرا", message: "اكتب الرمز بيدك بدل المسح."))
+                } else if refused {
+                    SaryStateView(kind: .error(title: "الكاميرا غير مسموحة", message: "اسمح بها من إعدادات iOS ← سَرى البارق، أو اكتب الرمز بيدك."),
+                                  actionTitle: "افتح الإعدادات", actionID: "qr.settings", actionIcon: nil) {
+                        if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
+                    }
+                } else {
+                    QRCameraView(found: found)
+                        .clipShape(RoundedRectangle(cornerRadius: SaryRadius.card, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: SaryRadius.card, style: .continuous).stroke(p.accent, lineWidth: 2))
+                        .aspectRatio(1, contentMode: .fit)
+                }
+                Text(hint).saryType(.body).foregroundStyle(p.textSecondary).multilineTextAlignment(.center)
+                    .accessibilityIdentifier("qr.hint")
+                if noCamera || refused {
+                    SaryPrimaryButton("اكتب الرمز بيدك", systemImage: "keyboard", id: "qr.type", action: cancel)
+                } else {
+                    SarySecondaryButton("اكتب الرمز بيدك", systemImage: "keyboard", id: "qr.type", action: cancel)
+                }
+            }
+            .padding(.top, SarySpace.s.rawValue)
+        }
+        .accessibilityIdentifier("qr.sheet")
+        .task {
+            if status == .notDetermined {
+                _ = await AVCaptureDevice.requestAccess(for: .video)
+                status = AVCaptureDevice.authorizationStatus(for: .video)
+            }
+        }
+    }
+
+    private var legacyBody: some View {
+        let p = theme.palette
+        return SaryPage(title: title, close: cancel, scrolls: false) {
             VStack(spacing: theme.space(.l)) {
                 Group {
                     if AVCaptureDevice.default(for: .video) == nil {
