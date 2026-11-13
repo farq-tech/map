@@ -68,7 +68,7 @@ Group {
             if official911First {
                 SarySecondaryButton("اطلب إنجاد (واتساب)", systemImage: "message.fill", id: "enjad.whatsapp", action: whatsapp)
             } else {
-                Button(action: whatsapp) { SaryButtonLabel(title: "اطلب إنجاد (واتساب)", systemImage: "message.fill") }.buttonStyle(.sary(.destructive)).accessibilityIdentifier("enjad.whatsapp")
+                Button(action: whatsapp) { SaryButtonLabel(title: "اطلب إنجاد (واتساب)", systemImage: "message.fill") }.buttonStyle(SaryFoundationButtonStyle(kind: .destructive)).accessibilityIdentifier("enjad.whatsapp")
             }
             SarySecondaryButton("اتصل بإنجاد", systemImage: "phone.fill", id: "enjad.call") { openURL(Enjad.callURL) }
             Button { openURL(Enjad.smsURL(text)) } label: { SaryButtonLabel(title: "أرسل رسالة نصية بدل واتساب", systemImage: "text.bubble") }

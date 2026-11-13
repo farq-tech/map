@@ -327,6 +327,8 @@ struct ChatThreadView: View {
             settled = false
         }
         .onChange(of: context.moving) { _, moving in if moving { focused = false } }
+        /* New UI: the container id must not replace the ids of the controls inside (chat.back, chat.close…). */
+        .modifier(ContainChildrenIfNewUI())
         .accessibilityIdentifier("chat.thread")
     }
 
@@ -597,5 +599,13 @@ struct ChatThreadView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
+    }
+}
+
+
+/// New UI only: keeps child accessibility ids under a container id; the old UI is left exactly as it was.
+private struct ContainChildrenIfNewUI: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if NewUI.enabled { content.accessibilityElement(children: .contain) } else { content }
     }
 }
