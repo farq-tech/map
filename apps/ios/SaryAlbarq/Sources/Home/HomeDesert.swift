@@ -35,11 +35,11 @@ enum HomeDesertRules {
         case .gazetteer(.camp)?:
             return "\(CampReason.estimateNote). مرشحة من صور أقمار وبيانات مفتوحة (الثمامة، الدهناء، النفود). \(CampReason.legalNote)."
         case .gazetteer(.nafud)?:
-            return "المسافة لأقرب طرف من الرمل. دليل البر: © OpenStreetMap (ODbL) · GeoNames (CC BY 4.0)."
+            return "المسافة لأقرب طرف من الرمل. دليل البر: © OpenStreetMap (ODbL) • GeoNames (CC BY 4.0)."
         case .rainGreen?:
-            return "مطر: NASA GPM IMERG · خضرة: NASA VIIRS · © OpenStreetMap"
+            return "مطر: NASA GPM IMERG • خضرة: NASA VIIRS • © OpenStreetMap"
         default:
-            return "دليل البر: © OpenStreetMap (ODbL) · GeoNames (CC BY 4.0)."
+            return "دليل البر: © OpenStreetMap (ODbL) • GeoNames (CC BY 4.0)."
         }
     }
 

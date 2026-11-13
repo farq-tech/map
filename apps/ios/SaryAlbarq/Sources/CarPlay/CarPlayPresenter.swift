@@ -69,7 +69,7 @@ struct CarPlayMemberRow: Equatable, Identifiable {
     var shortName: String
     var color: UInt32
     var state: State
-    /// One short line: distance · direction, or how old the position is.
+    /// One short line: distance • direction, or how old the position is.
     var detail: String
     var distanceM: Double?
     /// Their last real fix (nil when none): «أظهره» centres here.
@@ -118,7 +118,7 @@ enum CarPlayPresenter {
     static func distanceAndDirection(from a: LngLat?, to b: LngLat?) -> (m: Double, text: String)? {
         guard let a, let b else { return nil }
         let d = Vehicle.distanceMeters(a, b)
-        return (d, ArabicFormat.distance(d) + " · " + Geo.directionLabel(Vehicle.bearing(a, b)))
+        return (d, ArabicFormat.distance(d) + " • " + Geo.directionLabel(Vehicle.bearing(a, b)))
     }
 
     static func memberRows(_ i: CarPlayInput) -> [CarPlayMemberRow] {
@@ -156,7 +156,7 @@ enum CarPlayPresenter {
             }
             let phone = (m.phone ?? "").isEmpty ? nil : m.phone
             rows.append((CarPlayMemberRow(id: m.user_id, name: m.display_name, shortName: shortName(m.display_name), color: colors[m.user_id] ?? 0xFFFFFF,
-                                          state: state, detail: parts.joined(separator: " · "), distanceM: dd?.m, position: target, phone: phone,
+                                          state: state, detail: parts.joined(separator: " • "), distanceM: dd?.m, position: target, phone: phone,
                                           sos: m.sos != nil, stuck: stuckIds.contains(m.user_id)), idx))
         }
         /* Who needs help first, then the live ones nearest first, then old positions, then paused. */
@@ -192,10 +192,10 @@ enum CarPlayPresenter {
             var label = m.isMe ? "أنت" : shortName(m.name)
             switch m.presence {
             case .live: break
-            case .recent: label += " · " + ArabicFormat.ago(max(0, i.now.timeIntervalSince1970 * 1000 - m.atMs))
-            case .lost: label += " · انقطع"
+            case .recent: label += " • " + ArabicFormat.ago(max(0, i.now.timeIntervalSince1970 * 1000 - m.atMs))
+            case .lost: label += " • انقطع"
             }
-            if m.presence != .live, let r = i.presenceReasons[m.id], !r.isEmpty { label += " · " + r }
+            if m.presence != .live, let r = i.presenceReasons[m.id], !r.isEmpty { label += " • " + r }
             return CarPlayMapCar(id: m.id, position: m.position, color: m.color, label: label, live: m.presence == .live,
                                  heading: m.heading, isMe: m.isMe)
         }
@@ -212,15 +212,15 @@ enum CarPlayPresenter {
     static func destination(_ i: CarPlayInput) -> (position: LngLat, label: String)? {
         guard let d = i.destination else { return nil }
         let name = d.label.isEmpty ? "الوجهة" : d.label
-        /* The pin carries the trip's progress: «روضة خريم · ٦٢٪». */
+        /* The pin carries the trip's progress: «روضة خريم • ٦٢٪». */
         if let t = i.trip {
-            if t.arrived { return (d.position, "\(name) · وصلنا") }
-            if let p = t.percent { return (d.position, "\(name) · \(ArabicFormat.number(Double(p)))٪") }
+            if t.arrived { return (d.position, "\(name) • وصلنا") }
+            if let p = t.percent { return (d.position, "\(name) • \(ArabicFormat.number(Double(p)))٪") }
         }
         return (d.position, name)
     }
 
-    /// «قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م»; nil without a trip. Never a remaining
+    /// «قطعنا ٦٢٪ • باقي ١٢ كم • نوصل ٤:٣٠ م»; nil without a trip. Never a remaining
     /// distance or ETA the phone did not vouch for (an old fix gives just the percent).
     static func tripLine(_ i: CarPlayInput) -> String? {
         guard let t = i.trip else { return nil }
@@ -229,7 +229,7 @@ enum CarPlayPresenter {
         if let p = t.percent { parts.append("قطعنا \(ArabicFormat.number(Double(p)))٪") }
         if let m = t.remainingM { parts.append("باقي \(ArabicFormat.distance(m))" + (t.approximate ? " تقريبًا" : "")) }
         if let e = t.eta { parts.append("نوصل \(NavText.clock(e))") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
     /// Trips the «إلى…» list offers right now (way back first when there is a trail).
@@ -312,7 +312,7 @@ enum CarPlayGuide {
         }
         if st.offTrack {
             return CarPlayGuidance(kind: .wayBack, phase: .offTrack, instruction: "ارجع لمسارك",
-                                   detail: "أنت \(ArabicFormat.distance(st.offsetM)) عن المسار · اتجه \(dir)",
+                                   detail: "أنت \(ArabicFormat.distance(st.offsetM)) عن المسار • اتجه \(dir)",
                                    remainingM: st.remainingM, arrowDegrees: rel, bearing: st.bearing, offsetM: st.offsetM, symbol: symbol(forRelative: rel))
         }
         if st.onGap {
@@ -320,7 +320,7 @@ enum CarPlayGuide {
                                    detail: "مقطع ما انسجل: خط مستقيم تقريبي", remainingM: st.remainingM, arrowDegrees: rel,
                                    bearing: st.bearing, offsetM: st.offsetM, symbol: symbol(forRelative: rel))
         }
-        return CarPlayGuidance(kind: .wayBack, phase: .onTrail, instruction: "تابع مسارك", detail: "على طريقك المسجّل · \(dir)",
+        return CarPlayGuidance(kind: .wayBack, phase: .onTrail, instruction: "تابع مسارك", detail: "على طريقك المسجّل • \(dir)",
                                remainingM: st.remainingM, arrowDegrees: rel, bearing: st.bearing, offsetM: st.offsetM, symbol: symbol(forRelative: rel))
     }
 
@@ -419,7 +419,7 @@ enum CarPlayAlerts {
             if let p = v.positions[m.user_id] {
                 let dd = CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: LngLat(lng: p.lng, lat: p.lat))
                 let at = LiveOutingPresenter.deviceDate(p.recorded_at, view: v) ?? i.now
-                return [CarPlayPresenter.ageText(since: at, now: i.now), dd?.text].compactMap { $0 }.joined(separator: " · ")
+                return [CarPlayPresenter.ageText(since: at, now: i.now), dd?.text].compactMap { $0 }.joined(separator: " • ")
             }
             return "موقعه غير معروف"
         }
@@ -427,7 +427,7 @@ enum CarPlayAlerts {
         let at = LiveOutingPresenter.deviceDate(fix.recorded_at, view: v) ?? i.now
         /* The SOS fix may be old: say how old unless it is fresh. */
         let age = i.now.timeIntervalSince(at) > 45 ? CarPlayPresenter.ageText(since: at, now: i.now) : nil
-        return [dd?.text, age].compactMap { $0 }.joined(separator: " · ")
+        return [dd?.text, age].compactMap { $0 }.joined(separator: " • ")
     }
 }
 

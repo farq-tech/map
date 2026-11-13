@@ -65,7 +65,7 @@ final class PTTChannelsTests: XCTestCase {
     func testArabicLabels() {
         XCTAssertEqual(PTTChannels.publicName("3"), "تردد ٣")
         XCTAssertEqual(PTTChannels.publicList.map(\.name), ["تردد ١", "تردد ٢", "تردد ٣", "تردد ٤", "تردد ٥"])
-        XCTAssertEqual(PTTChannels.systemLabel("تردد ٣"), "قناة الطلعة · تردد ٣", "what the Lock Screen shows")
+        XCTAssertEqual(PTTChannels.systemLabel("تردد ٣"), "قناة الطلعة • تردد ٣", "what the Lock Screen shows")
         XCTAssertEqual(PTTChannels.chipLabel(nil), "تردد ١")
         XCTAssertEqual(PTTChannels.inviteText("الأمامية"), "أمير الطلعة دعاك إلى تردد خاص: الأمامية")
         let names = ["a": "فهد", "b": "سعد", "c": "نورة", "d": "ريم"]
@@ -246,7 +246,7 @@ final class PTTChannelsTests: XCTestCase {
         w.switchChannel("3")
         XCTAssertEqual(w.channelId, "3")
         XCTAssertEqual(OutingWalkieTalkie.savedChannel(w.outingId, defaults: d), "3", "kept per outing")
-        XCTAssertEqual(w.systemChannelName, "قناة الطلعة · تردد ٣")
+        XCTAssertEqual(w.systemChannelName, "قناة الطلعة • تردد ٣")
         w.switchChannel(priv)
         XCTAssertEqual(w.channelId, "3", "not a channel we know (no invitation): ignored")
 
@@ -293,7 +293,7 @@ final class PTTChannelsTests: XCTestCase {
         w.switchChannel(priv)
         XCTAssertEqual(w.channelId, priv)
         XCTAssertNil(w.pendingInvite, "switching to it is seeing it")
-        XCTAssertEqual(w.systemChannelName, "قناة الطلعة · الأمامية")
+        XCTAssertEqual(w.systemChannelName, "قناة الطلعة • الأمامية")
 
         w.receiveChannel(.kicked(channel: priv, reason: "removed"))
         XCTAssertEqual(w.channelId, "1")

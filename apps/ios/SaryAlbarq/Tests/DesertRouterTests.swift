@@ -961,7 +961,7 @@ final class NavSurfaceStyleTests: XCTestCase {
 
     func testKmLineIsArabicWithOneDecimalInOwnerFormat() {
         let k = NavSurfaceKm(paved: 23_400, unpaved: 8_100, offRoad: 3_000, unknown: 10)
-        XCTAssertEqual(NavSurfaceKmStrip.line(k), "أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم", "specks under 50 m are not listed")
+        XCTAssertEqual(NavSurfaceKmStrip.line(k), "أسفلت ٢٣٫٤ كم • ترابي ٨٫١ كم • خارج الطريق ٣٫٠ كم", "specks under 50 m are not listed")
         XCTAssertEqual(NavSurfaceKmStrip.items(NavSurfaceKm(paved: 5_000, unknown: 2_000)).map(\.family), [.paved, .unknown])
         let r = NavRoute(id: "r", coordinates: line(10), distanceM: 10_000, durationS: 600, steps: [])
         XCTAssertNil(NavSurfaceKmStrip.km(for: r), "no surface data: no claim")

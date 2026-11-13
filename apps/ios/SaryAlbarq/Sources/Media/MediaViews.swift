@@ -32,7 +32,7 @@ struct MediaEntryCard: View {
         if let s = center.shared, center.availability == .ready {
             return "\(center.name(of: s.controller_user_id)) يشغّل: \(center.title(for: s.video_id, fallback: s.title))"
         }
-        return "قناتي · قناة الطلعة"
+        return "قناتي • قناة الطلعة"
     }
 }
 
@@ -282,7 +282,7 @@ private struct MineTab: View {
             if let item = center.privateItem, center.activeChannel == .mine {
                 PlayerBlock(center: center)
                 NowPlayingLine(title: center.title(for: item.videoId, fallback: item.title),
-                               detail: "لك وحدك · \(MediaFormat.ltr(MediaFormat.time(center.reading?.position ?? item.start)))")
+                               detail: "لك وحدك • \(MediaFormat.ltr(MediaFormat.time(center.reading?.position ?? item.start)))")
                 HStack(spacing: theme.space(.s)) {
                     Button { center.reading?.playing == true ? center.engine.pause() : center.resumePrivate() } label: {
                         SaryButtonLabel(title: center.reading?.playing == true ? "إيقاف مؤقت" : "شغّل", systemImage: center.reading?.playing == true ? SaryIcon.pause : SaryIcon.play)
@@ -377,7 +377,7 @@ private struct OutingTab: View {
                 PlayerBlock(center: center)
             }
             NowPlayingLine(title: center.title(for: s.video_id, fallback: s.title),
-                           detail: "\(s.playing ? "يشتغل" : "موقّف") · \(MediaFormat.ltr(MediaFormat.time(pos)))")
+                           detail: "\(s.playing ? "يشتغل" : "موقّف") • \(MediaFormat.ltr(MediaFormat.time(pos)))")
             HStack(spacing: theme.space(.s)) {
                 Image(systemName: SaryIcon.crown).font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentText)
                 Text("يتحكم: \(center.name(of: s.controller_user_id))").saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)

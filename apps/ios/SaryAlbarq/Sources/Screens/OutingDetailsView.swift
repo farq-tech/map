@@ -606,7 +606,7 @@ struct TripSummarySection: View {
                 }
                 if let a = m.avgMovingKmh {
                     SaryDivider()
-                    row("speedometer", "متوسط السرعة · أعلى سرعة", SaryFormat.speed(kmh: a) + (m.maxKmh.map { " · " + SaryFormat.speed(kmh: $0) } ?? ""))
+                    row("speedometer", "متوسط السرعة • أعلى سرعة", SaryFormat.speed(kmh: a) + (m.maxKmh.map { " • " + SaryFormat.speed(kmh: $0) } ?? ""))
                 }
             }
             .padding(.vertical, theme.space(.xs))

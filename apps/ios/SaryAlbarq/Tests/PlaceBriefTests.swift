@@ -86,7 +86,7 @@ final class PlaceBriefRulesTests: XCTestCase {
         XCTAssertEqual(PlaceBriefRules.uvBand(7), "عالٍ")
         XCTAssertEqual(PlaceBriefRules.uvBand(9), "عالٍ جدًا")
         XCTAssertEqual(PlaceBriefRules.uvBand(11), "شديد")
-        XCTAssertEqual(PlaceBriefRules.uvText(9.4), "٩ · عالٍ جدًا")
+        XCTAssertEqual(PlaceBriefRules.uvText(9.4), "٩ • عالٍ جدًا")
         XCTAssertEqual(PlaceBriefRules.uvText(nil), "غير متاح")
     }
 
@@ -99,14 +99,14 @@ final class PlaceBriefRulesTests: XCTestCase {
         XCTAssertNil(PlaceBriefRules.slopeDeg(center: 700, east: nil, west: 694, north: 700, south: 700, spacingM: 60), "a missing DEM sample: no slope")
         XCTAssertEqual(PlaceBriefRules.slopeLabel(1), "مستوٍ تقريبًا")
         XCTAssertEqual(PlaceBriefRules.slopeLabel(14), "منحدر شديد")
-        XCTAssertEqual(PlaceBriefRules.slopeText(TerrainSample(elevationM: 700, slopeDeg: 4.4)), "الميل نحو ٤° · ميل خفيف")
+        XCTAssertEqual(PlaceBriefRules.slopeText(TerrainSample(elevationM: 700, slopeDeg: 4.4)), "الميل نحو ٤° • ميل خفيف")
     }
 
     func testDistanceAndBearingFromMe() {
         XCTAssertNil(PlaceBriefRules.distanceText(from: nil, to: Desert.point))
         XCTAssertEqual(PlaceBriefRules.distanceText(from: Desert.point, to: LngLat(lng: 46.9201, lat: 25.1901)), "عند موقعك")
         let s = PlaceBriefRules.distanceText(from: LngLat(lng: 46.92, lat: 25.10), to: Desert.point)
-        XCTAssertEqual(s, "على بعد \(SaryFormat.distance(meters: PlanGeo.meters(LngLat(lng: 46.92, lat: 25.10), Desert.point))) · شمال منك")
+        XCTAssertEqual(s, "على بعد \(SaryFormat.distance(meters: PlanGeo.meters(LngLat(lng: 46.92, lat: 25.10), Desert.point))) • شمال منك")
     }
 
     func testSunriseSunsetAndDaylight() throws {
@@ -125,7 +125,7 @@ final class PlaceBriefRulesTests: XCTestCase {
         XCTAssertTrue(PlaceBriefRules.daylightText(s, now: noon, timeZone: riyadh).hasPrefix("باقي ٥ س"))
         let night = PlaceBriefRules.sun(now: noon.addingTimeInterval(10 * 3600), lat: 25.19, lng: 46.92)
         XCTAssertFalse(night.isDay)
-        XCTAssertEqual(PlaceBriefRules.daylightText(night, now: noon.addingTimeInterval(10 * 3600), timeZone: riyadh), "الشمس غاربة · الشروق ٦:٠٢ ص")
+        XCTAssertEqual(PlaceBriefRules.daylightText(night, now: noon.addingTimeInterval(10 * 3600), timeZone: riyadh), "الشمس غاربة • الشروق ٦:٠٢ ص")
     }
 
     // MARK: camping / outing assessment
@@ -178,7 +178,7 @@ final class PlaceBriefRulesTests: XCTestCase {
     func testRainStormsAndFloods() {
         let rain = PlaceBriefRules.assessment(rep { i, h in if i == 4 { h.precipitationProbability = 60 } }, now: at)
         XCTAssertEqual(rain.level, .caution)
-        XCTAssertEqual(rain.reasons.first, "مطر متوقع خلال ٤ س · احتمال ٦٠٪")
+        XCTAssertEqual(rain.reasons.first, "مطر متوقع خلال ٤ س • احتمال ٦٠٪")
         let flood = PlaceBriefRules.assessment(rep { i, h in if (3...6).contains(i) { h.precipitationMm = 2.5; h.precipitationProbability = 90 } }, now: at)
         XCTAssertEqual(flood.level, .poor)
         XCTAssertTrue(flood.reasons.contains { $0.hasPrefix("مطر قد يجري الأودية: ١٠ مم") }, "\(flood.reasons)")
@@ -211,14 +211,14 @@ final class PlaceBriefRulesTests: XCTestCase {
         /* Build 36 item 12: the clock time the data arrived, beside its age (Riyadh: at = 11:30 ص). */
         let riyadh = TimeZone(identifier: "Asia/Riyadh")!
         let w = PlaceWeather(report: rep(fetchedAt: at.addingTimeInterval(-5 * 60)), provider: .openMeteo)
-        XCTAssertEqual(PlaceBriefRules.sourceLine(w, now: at, failed: nil, timeZone: riyadh).text, "المصدر: Open-Meteo · ١١:٢٥ ص (قبل ٥ د)")
+        XCTAssertEqual(PlaceBriefRules.sourceLine(w, now: at, failed: nil, timeZone: riyadh).text, "المصدر: Open-Meteo • ١١:٢٥ ص (قبل ٥ د)")
         XCTAssertFalse(PlaceBriefRules.sourceLine(w, now: at, failed: nil, timeZone: riyadh).stale)
         let old = PlaceWeather(report: rep(fetchedAt: at.addingTimeInterval(-3 * 3600)), provider: .openMeteo)
         let line = PlaceBriefRules.sourceLine(old, now: at, failed: .offline, timeZone: riyadh)
         XCTAssertTrue(line.stale)
-        XCTAssertEqual(line.text, "المصدر: Open-Meteo · بيانات محفوظة ٨:٣٠ ص (قبل ٣ س) — ليست حالية · بلا إنترنت")
+        XCTAssertEqual(line.text, "المصدر: Open-Meteo • بيانات محفوظة ٨:٣٠ ص (قبل ٣ س) — ليست حالية • بلا إنترنت")
         XCTAssertEqual(PlaceBriefRules.sourceLine(PlaceWeather(report: w.report, provider: .weatherKit), now: at, failed: nil, timeZone: riyadh).text,
-                       "المصدر: Apple Weather · ١١:٢٥ ص (قبل ٥ د)")
+                       "المصدر: Apple Weather • ١١:٢٥ ص (قبل ٥ د)")
     }
 
     func testPresenterPhases() throws {
@@ -233,12 +233,12 @@ final class PlaceBriefRulesTests: XCTestCase {
         XCTAssertEqual(fresh.temp, "٣٠°")
         XCTAssertEqual(fresh.feelsLike, "يُحس كأنها ٢٧°")
         XCTAssertEqual(fresh.humidity, "الرطوبة ٢٠٪")
-        XCTAssertEqual(fresh.dust, "غبار كثيف · PM10 ١٢٣٣ µg/m³")
+        XCTAssertEqual(fresh.dust, "غبار كثيف • PM10 ١٢٣٣ µg/m³")
         XCTAssertEqual(fresh.visibility, "قد تقل بسبب الغبار")
         XCTAssertEqual(fresh.hours.count, 12)
         XCTAssertEqual(fresh.hours.first?.label, "الآن")
         XCTAssertEqual(fresh.wind?.name, "رياح جنوبية")
-        XCTAssertEqual(fresh.source, "المصدر: Open-Meteo · ١١:١٥ ص (الآن)")
+        XCTAssertEqual(fresh.source, "المصدر: Open-Meteo • ١١:١٥ ص (الآن)")
 
         let stale = PlaceBriefPresenter.build(PlaceWeather(report: try Desert.report(), provider: .openMeteo), loading: false, failed: .offline,
                                               point: Desert.point, now: Desert.currentAt.addingTimeInterval(2 * 3600))
@@ -254,7 +254,7 @@ final class PlaceBriefRulesTests: XCTestCase {
 
     func testCompactLine() throws {
         let ui = PlaceBriefPresenter.build(PlaceWeather(report: try Desert.report(), provider: .openMeteo), loading: false, failed: nil, point: Desert.point, now: Desert.currentAt)
-        XCTAssertEqual(PlaceBriefPresenter.compactLine(ui), "٣٠° · رياح ٢٣ كم/س · غبار كثيف")
+        XCTAssertEqual(PlaceBriefPresenter.compactLine(ui), "٣٠° • رياح ٢٣ كم/س • غبار كثيف")
     }
 
     func testWeatherKitHasNoDustAndSaysSo() throws {

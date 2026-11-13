@@ -144,7 +144,7 @@ final class CarPlayManeuverTests: XCTestCase {
                     CarPlayRouteOption(id: "other", distanceM: 9500, durationS: 700, via: nil)]
         let c = CarPlayManeuverMapper.choices(opts)
         XCTAssertEqual(c.map(\.id), ["long-fast", "short-slow", "other"])
-        XCTAssertEqual(c[0].summary, ["الأسرع · طريق الملك فهد", "الأسرع"])
+        XCTAssertEqual(c[0].summary, ["الأسرع • طريق الملك فهد", "الأسرع"])
         XCTAssertEqual(c[1].summary, ["الأقصر"])
         XCTAssertEqual(c[2].summary, ["طريق ثاني"])
         XCTAssertTrue(c[1].info[0].contains("فيه ترابي"))

@@ -20,7 +20,7 @@ struct NavVoiceStats: Equatable {
     mutating func dropped(_ d: Drop) { drops[d, default: 0] += 1 }
 
     var line: String {
-        "صوت: طُلب \(requested) · قيل \(spoken) · بديل \(deviceFallback) · " + Drop.allCases.map { "\($0.rawValue) \(drops[$0] ?? 0)" }.joined(separator: " · ")
+        "صوت: طُلب \(requested) • قيل \(spoken) • بديل \(deviceFallback) • " + Drop.allCases.map { "\($0.rawValue) \(drops[$0] ?? 0)" }.joined(separator: " • ")
     }
 
     /// The running navigation's counters, for the diagnostics row.

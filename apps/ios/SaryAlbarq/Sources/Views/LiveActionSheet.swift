@@ -101,7 +101,7 @@ enum LiveActionCatalog {
             ] + (s.backTracking ? [] : [
                 /* While it runs, its panel's «أنهِ الرجعة» is the one way out (no second stop here). */
                 LiveActionItem(id: "backtrack", title: "طريق الرجعة", systemImage: SaryIcon.backTrack, accessibilityID: "trail.backtrack",
-                               subtitle: "ترجع على مسارك لين نقطة البداية · بدون إنترنت"),
+                               subtitle: "ترجع على مسارك لين نقطة البداية • بدون إنترنت"),
             ])),
             LiveActionGroup(title: "الأصدقاء", items: (s.channels ? [
                 LiveActionItem(id: "channels", title: "الترددات", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-ptt-channels"),
@@ -177,7 +177,7 @@ enum LiveActionCatalog {
         guard !s.ended else { return [] }
         return (s.guideAllTarget.map { t in
             [LiveActionItem(id: "guideAll", title: "وجّه الكل إلى \(t)", systemImage: "location.north.line.fill", accessibilityID: "outing-guide-all",
-                            subtitle: "يبدأ التوجيه على جوال كل عضو · يقدر كل واحد يوقفه عنده")]
+                            subtitle: "يبدأ التوجيه على جوال كل عضو • يقدر كل واحد يوقفه عنده")]
         } ?? []) + [
             .init(id: "follow", title: s.following ? "أوقف اتباع الخطة" : "اتبع الخطة",
                   systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", accessibilityID: "plan.follow",

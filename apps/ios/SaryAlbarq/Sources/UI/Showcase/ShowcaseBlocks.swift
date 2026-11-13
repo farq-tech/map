@@ -184,7 +184,7 @@ private struct ButtonsBlocks: View {
                 Button("غادر الطلعة") {}.buttonStyle(.sary(.plainDestructive))
             }
         }
-        ShowcaseBlock(index: 1, title: "الحالات", note: "عادي · معطل · جارٍ التحميل (بلا قفز في العرض)") {
+        ShowcaseBlock(index: 1, title: "الحالات", note: "عادي • معطل • جارٍ التحميل (بلا قفز في العرض)") {
             VStack(spacing: 10) {
                 Button {} label: { SaryButtonLabel(title: "انضم", systemImage: "person.badge.plus") }
                     .buttonStyle(.saryPrimary).disabled(true)
@@ -249,7 +249,7 @@ private struct ControlsBlocks: View {
                     .buttonStyle(.sary(.secondary, compact: true))
             }
         }
-        ShowcaseBlock(index: 1, title: "زر منفرد", note: "عادي · مفعّل (يتبع موقعي) · مع شارة") {
+        ShowcaseBlock(index: 1, title: "زر منفرد", note: "عادي • مفعّل (يتبع موقعي) • مع شارة") {
             ShowcaseMapStrip(height: 120) {
                 HStack(spacing: 16) {
                     SaryMapControlButton(item: .init(id: "a", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate")) {}
@@ -276,18 +276,18 @@ private struct StatusBlocks: View {
                 SaryStatusCapsule(outingName: "طلعة الثمامة", status: .active, connection: .connected, sharing: .sharing, warnings: [], expanded: $e1)
             }
         }
-        ShowcaseBlock(index: 1, title: "جارٍ الاتصال · موقع ضعيف") {
+        ShowcaseBlock(index: 1, title: "جارٍ الاتصال • موقع ضعيف") {
             ShowcaseMapStrip(height: 96, alignment: .top) {
                 SaryStatusCapsule(outingName: "طلعة الثمامة", status: .active, connection: .connecting, sharing: .starting, warnings: [.weakGPS], expanded: $e2)
             }
         }
-        ShowcaseBlock(index: 2, title: "بلا إنترنت · التنبيهات مفتوحة", note: "اضغط الشريط لفتح أو طي التنبيهات") {
+        ShowcaseBlock(index: 2, title: "بلا إنترنت • التنبيهات مفتوحة", note: "اضغط الشريط لفتح أو طي التنبيهات") {
             ShowcaseMapStrip(height: 300, alignment: .top) {
                 SaryStatusCapsule(outingName: "طلعة نفود الدهناء الكبرى مع الشباب", status: .active, connection: .offline, sharing: .sharing,
                                   warnings: [.noInternet, .weakGPS, .keepScreenOn], expanded: $e3)
             }
         }
-        ShowcaseBlock(index: 3, title: "الطلعة متوقفة · الموقع مقفل") {
+        ShowcaseBlock(index: 3, title: "الطلعة متوقفة • الموقع مقفل") {
             ShowcaseMapStrip(height: 96, alignment: .top) {
                 SaryStatusCapsule(outingName: "كشتة العيد", status: .paused, connection: .connected, sharing: .paused, warnings: [.locationOff], expanded: $e4)
             }
@@ -303,7 +303,7 @@ private struct AlertsBlocks: View {
     @State private var n = 0
 
     var body: some View {
-        ShowcaseBlock(index: 0, title: "تحت الشريط، لا تغطيه", note: "الأحدث أولًا · أقصى ٣ · الباقي يتجمع") {
+        ShowcaseBlock(index: 0, title: "تحت الشريط، لا تغطيه", note: "الأحدث أولًا • أقصى ٣ • الباقي يتجمع") {
             ShowcaseMapStrip(height: 400, alignment: .top) {
                 VStack(spacing: 10) {
                     SaryStatusCapsule(outingName: "طلعة الثمامة", status: .active, connection: .connected, sharing: .sharing, warnings: [], expanded: $expanded)
@@ -319,7 +319,7 @@ private struct AlertsBlocks: View {
                 Button("إعادة") { alerts = Mock.alerts }.buttonStyle(.sary(.secondary, compact: true))
             }
         }
-        ShowcaseBlock(index: 1, title: "الصوت والإشعار القصير", note: "تشغيل · جارٍ التحميل · نص قصير") {
+        ShowcaseBlock(index: 1, title: "الصوت والإشعار القصير", note: "تشغيل • جارٍ التحميل • نص قصير") {
             ShowcaseMapStrip(height: 260, alignment: .top) {
                 VStack(spacing: 10) {
                     SaryVoiceBanner(clip: Mock.voicePlaying)
@@ -339,7 +339,7 @@ private struct SOSBlocks: View {
     @State private var showFull = false
 
     var body: some View {
-        ShowcaseBlock(index: 0, title: "اضغط مطولًا ثانية", note: "حلقة تمتلئ · اهتزاز يتصاعد · ثم إرسال") {
+        ShowcaseBlock(index: 0, title: "اضغط مطولًا ثانية", note: "حلقة تمتلئ • اهتزاز يتصاعد • ثم إرسال") {
             ShowcaseMapStrip(height: 170) {
                 HStack(spacing: 34) {
                     VStack(spacing: 8) {
@@ -403,7 +403,7 @@ private struct PTTBlocks: View {
                 }
             }
         }
-        ShowcaseBlock(index: 1, title: "جرّبه", note: "اضغط مع الاستمرار وتكلم · ارفع إصبعك لتتوقف") {
+        ShowcaseBlock(index: 1, title: "جرّبه", note: "اضغط مع الاستمرار وتكلم • ارفع إصبعك لتتوقف") {
             ShowcaseMapStrip(height: 190) {
                 SaryPTTButton(state: state, actions: .init(
                     pressBegan: {
@@ -521,7 +521,7 @@ private struct ParticipantsBlocks: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
-        ShowcaseBlock(index: 0, title: "صفوف المشاركين", note: "مباشر · قديم (رمادي، حلقة متقطعة، قبل ٤ د) · متوقف (رمز إيقاف)") {
+        ShowcaseBlock(index: 0, title: "صفوف المشاركين", note: "مباشر • قديم (رمادي، حلقة متقطعة، قبل ٤ د) • متوقف (رمز إيقاف)") {
             VStack(spacing: 0) {
                 ForEach(Mock.all) { p in
                     SaryParticipantRow(participant: p, now: Mock.now)
@@ -568,7 +568,7 @@ private struct RallyBlocks: View {
             SaryRallyCard(rally: Mock.rally, canManage: true)
             SaryRallyCard(rally: Mock.rallyDone, canManage: false)
         }
-        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "أمير الطلعة · عضو") {
+        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "أمير الطلعة • عضو") {
             SaryRallyCard(rally: nil, canManage: true)
             SaryRallyCard(rally: nil, canManage: false)
         }
@@ -590,7 +590,7 @@ private struct RallyBlocks: View {
 private struct OverlaysBlocks: View {
     @Environment(\.sary) private var theme
     var body: some View {
-        ShowcaseBlock(index: 0, title: "الأسماء والسيارات", note: "أنت · مباشر · قديم · متوقف") {
+        ShowcaseBlock(index: 0, title: "الأسماء والسيارات", note: "أنت • مباشر • قديم • متوقف") {
             ShowcaseMapStrip(height: 230) {
                 HStack(alignment: .bottom, spacing: 20) {
                     marker(Mock.me, heading: 20)
@@ -662,7 +662,7 @@ private struct StatesBlocks: View {
         }
         ShowcaseBlock(index: 3, title: "بلا إنترنت") {
             SaryStateView(kind: .offline(message: nil)).sarySurface(radius: SaryRadius.l)
-            SaryBanner(text: "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال", tone: .warning, systemImage: SaryIcon.offline)
+            SaryBanner(text: "بلا إنترنت • نرسل موقعك أول ما يرجع الاتصال", tone: .warning, systemImage: SaryIcon.offline)
             SaryBanner(text: "انتهت صلاحية الرابط", tone: .error)
             SaryBanner(text: "تم حفظ المنطقة للاستخدام بلا إنترنت", tone: .success, systemImage: SaryIcon.checkCircle)
         }
@@ -687,7 +687,7 @@ private struct InputsBlocks: View {
                 SaryTextField(title: "اسم الطلعة", placeholder: "مثل: طلعة الثمامة", text: $name, id: "outing-name-input", maxLength: 40)
                 SaryTextField(title: "اسمك", placeholder: "كيف يشوفك الأصدقاء", text: $empty, id: "name-empty", help: "يظهر فوق سيارتك")
                 SaryTextField(title: "رقم الجوال", placeholder: "05XXXXXXXX", text: $phone, id: "phone", keyboard: .phonePad,
-                              state: .error("الرقم ناقص · اكتب ١٠ أرقام تبدأ بـ ٠٥"))
+                              state: .error("الرقم ناقص • اكتب ١٠ أرقام تبدأ بـ ٠٥"))
                 SaryTextField(title: "رمز الاسترجاع", placeholder: "XXXX-XXXX", text: $code, id: "recovery", state: .success("الرمز صحيح"))
                 SaryTextField(title: "معطّل", placeholder: "—", text: .constant("لا يمكن التعديل"), id: "disabled", disabled: true)
             }

@@ -13,7 +13,7 @@ enum HomeChromeRules {
 
     static func isCompact(screenHeight: Double) -> Bool { screenHeight < compactHeight }
 
-    /// «٢٤° صافي · ريح شرقية خفيفة»: from the model's current value. Nil when there is no reading (never a made-up one).
+    /// «٢٤° صافي • ريح شرقية خفيفة»: from the model's current value. Nil when there is no reading (never a made-up one).
     static func weatherLine(_ h: WeatherHour?) -> String? {
         guard let h, h.temperatureC != nil else { return nil }
         var parts: [String] = []
@@ -21,7 +21,7 @@ enum HomeChromeRules {
         if let from = h.windFromDeg, let kmh = h.windKmh {
             parts.append("ريح \(WeatherRules.windName(from: from)) \(windWord(kmh))")
         }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 
     /// «صحو» is said «صافي» on the home card.
@@ -57,7 +57,7 @@ enum HomeChromeRules {
             bits.append(f.string(from: d))
         }
         bits.append(o.participantsLabel)
-        return HomeLastOuting(id: o.id, title: o.name, detail: bits.joined(separator: " · "))
+        return HomeLastOuting(id: o.id, title: o.name, detail: bits.joined(separator: " • "))
     }
 }
 
@@ -347,7 +347,7 @@ struct HomeCardContent: View {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 16, weight: .semibold)).foregroundStyle(p.accentText)
                     .frame(width: 40, height: 40).background(Circle().fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("آخر طلعة · \(l.title)").font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.8)
+                    Text("آخر طلعة • \(l.title)").font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.8)
                     Text(l.detail).font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
@@ -370,7 +370,7 @@ struct HomeCardHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-/// «٢٤٫٥٠٠٠٠، ٤٥٫٠٠٠٠٠ · الارتفاع ٦٠٠ م» under a picked spot's name: the elevation comes from the map's DEM tiles once they
+/// «٢٤٫٥٠٠٠٠، ٤٥٫٠٠٠٠٠ • الارتفاع ٦٠٠ م» under a picked spot's name: the elevation comes from the map's DEM tiles once they
 /// have loaded (a few tries), else «الارتفاع غير متاح». Nothing is made up.
 struct HomeElevationLine: View {
     var point: LngLat
@@ -379,7 +379,7 @@ struct HomeElevationLine: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
-        let coords = showCoordinates ? CoordinateShare.displayDecimal(point) + " · " : ""
+        let coords = showCoordinates ? CoordinateShare.displayDecimal(point) + " • " : ""
         Text(coords + elevation)
             .saryNumber(.footnote)
             .foregroundStyle(theme.palette.textSecondary)

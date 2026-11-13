@@ -35,9 +35,9 @@ struct MapMember: Equatable, Identifiable {
     var chipLabel: String {
         let base = isMe ? "أنت" : name
         switch presence {
-        case .recent: return base + " · آخر موقع"
-        case .lost: return base + " · انقطع"
-        case .live: return approximate ? base + " · تقريبي" : base
+        case .recent: return base + " • آخر موقع"
+        case .lost: return base + " • انقطع"
+        case .live: return approximate ? base + " • تقريبي" : base
         }
     }
 }

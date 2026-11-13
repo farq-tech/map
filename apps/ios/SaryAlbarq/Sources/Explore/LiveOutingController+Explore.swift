@@ -48,11 +48,11 @@ enum ExploreRules {
     static func offlineNote(_ layer: MapLayer, areas: Int, topoAreas: Int) -> String {
         switch layer {
         case .satellite:
-            return areas > 0 ? "يعمل بلا إنترنت في مناطقك المحفوظة" : "يحتاج إنترنت · احفظ منطقة لاستخدامه بلا إنترنت"
+            return areas > 0 ? "يعمل بلا إنترنت في مناطقك المحفوظة" : "يحتاج إنترنت • احفظ منطقة لاستخدامه بلا إنترنت"
         case .topo:
-            return topoAreas > 0 ? "يعمل بلا إنترنت في المناطق المحفوظة مع الطبوغرافي" : "يحتاج إنترنت · احفظ منطقة مع «الطبوغرافي» لاستخدامه بلا إنترنت"
+            return topoAreas > 0 ? "يعمل بلا إنترنت في المناطق المحفوظة مع الطبوغرافي" : "يحتاج إنترنت • احفظ منطقة مع «الطبوغرافي» لاستخدامه بلا إنترنت"
         case .standard:
-            return "يحتاج إنترنت دائمًا · لا يُحفظ بلا إنترنت"
+            return "يحتاج إنترنت دائمًا • لا يُحفظ بلا إنترنت"
         }
     }
 }
@@ -70,7 +70,7 @@ extension LiveOutingController {
         exploreAuto = auto
         sheetDetent = .peek
         exploreActive = true
-        if auto { toast("وضع الاستكشاف · «ارجع للطلعة» يرجعك") }
+        if auto { toast("وضع الاستكشاف • «ارجع للطلعة» يرجعك") }
     }
 
     /// «ارجع للرحلة»: back to the trip, the group framed again.

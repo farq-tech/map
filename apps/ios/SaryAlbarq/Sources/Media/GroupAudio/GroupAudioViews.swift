@@ -289,7 +289,7 @@ private struct NowPlayingCard: View {
         if !item.live, let e = center.elapsed { parts.append(MediaFormat.ltr(GroupAudioFormat.time(e))) }
         if item.source == .quran { parts.append("المصدر: mp3quran.net") }
         if item.source == .audius { parts.append("على Audius") }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 }
 
@@ -402,7 +402,7 @@ private struct AudiusPicker: View {
                             Button { Task { await center.play(t.item) } } label: {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(t.title).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
-                                    Text([t.user?.name ?? "", t.duration.map { MediaFormat.ltr(GroupAudioFormat.time($0)) } ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                                    Text([t.user?.name ?? "", t.duration.map { MediaFormat.ltr(GroupAudioFormat.time($0)) } ?? ""].filter { !$0.isEmpty }.joined(separator: " • "))
                                         .saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)

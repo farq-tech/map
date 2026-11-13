@@ -93,7 +93,7 @@ enum TrailRawLog {
     }
 }
 
-/// The honest numbers under «مساري» while recording: «الدقة ±٨ م · ١٢ نقطة/دقيقة».
+/// The honest numbers under «مساري» while recording: «الدقة ±٨ م • ١٢ نقطة/دقيقة».
 struct TrailHealth: Equatable {
     /// Last fix's accuracy, m.
     var accuracyM: Double?
@@ -109,12 +109,12 @@ struct TrailHealth: Equatable {
         return TrailHealth(accuracyM: acc, fixesPerMinute: lastMinute.count, preciseOff: preciseOff, whenInUseOnly: whenInUseOnly, lowPower: lowPower)
     }
 
-    /// «الدقة ±٨ م · ١٢ نقطة/دقيقة».
+    /// «الدقة ±٨ م • ١٢ نقطة/دقيقة».
     var line: String {
         var parts: [String] = []
         if let a = accuracyM { parts.append("الدقة ±\(SaryFormat.number(Int(a.rounded()))) م") } else { parts.append("بانتظار الموقع") }
         parts.append("\(SaryFormat.number(fixesPerMinute)) نقطة/دقيقة")
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 
     /// What to fix, most important first.

@@ -36,7 +36,7 @@ struct TripAutoNavState: Codable, Equatable {
     var active = false
     /// The leader's group command already handled (its note time), so it is acted on once.
     var broadcastAt: String?
-    /// The leader's «للكل» arrived while the setting is off: «أمير الرحلة بدأ التوجيه · ابدأ».
+    /// The leader's «للكل» arrived while the setting is off: «أمير الرحلة بدأ التوجيه • ابدأ».
     var offered = false
     /// Planned stops already reached (`TripAutoNav.key`), in the order reached.
     var reachedStops: [String] = []
@@ -259,7 +259,7 @@ enum NavBroadcast {
         case ignored
         /// Start now (the setting accepts it without asking).
         case start
-        /// The setting is off: offer it («أمير الرحلة بدأ التوجيه · ابدأ»).
+        /// The setting is off: offer it («أمير الرحلة بدأ التوجيه • ابدأ»).
         case offer
     }
 

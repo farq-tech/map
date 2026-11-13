@@ -35,7 +35,7 @@ struct TripPanelUI: Equatable {
     var maxKmh: Double?
     /// My last fix is too old for «باقي» / «نوصل»: «آخر موقع قبل …».
     var myFixStaleSince: Date?
-    /// «وصل أول: فهد، ثم سلطان · باقي: نورة».
+    /// «وصل أول: فهد، ثم سلطان • باقي: نورة».
     var arrivalLine: String?
     var everyoneArrived: Bool = false
     var arrivedCount: Int = 0

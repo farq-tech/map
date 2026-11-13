@@ -311,7 +311,7 @@ final class VoiceNoteCenter: ObservableObject {
         if !autoplay, !isForeground() {
             /* Woken for it, but it must not play by itself: give the system its session back and say it waits. */
             walkie?.returnSystemSpeaker()
-            Notifier.post(title: "\(p.speaker) · قناة الطلعة", body: "🎙️ رسالة صوتية — افتح الطلعة وتسمعها", outingId: outingId, kind: "voice_note")
+            Notifier.post(title: "\(p.speaker) • قناة الطلعة", body: "🎙️ رسالة صوتية — افتح الطلعة وتسمعها", outingId: outingId, kind: "voice_note")
         }
         receive(p.note)
     }
@@ -372,7 +372,7 @@ final class VoiceNoteCenter: ObservableObject {
                 guard let how else {
                     /* Locked, and no PushToTalk channel to borrow: a time-sensitive note says it is waiting. */
                     self.playing = nil
-                    Notifier.post(title: "\(name) · قناة الطلعة", body: "🎙️ رسالة صوتية (\(n.seconds) ث) — افتح الطلعة وتسمعها", outingId: self.outingId, kind: "voice_note")
+                    Notifier.post(title: "\(name) • قناة الطلعة", body: "🎙️ رسالة صوتية (\(n.seconds) ث) — افتح الطلعة وتسمعها", outingId: self.outingId, kind: "voice_note")
                     return
                 }
                 self.speaker = how

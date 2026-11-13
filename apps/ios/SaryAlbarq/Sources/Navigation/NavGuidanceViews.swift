@@ -100,9 +100,9 @@ enum NavHUD {
         return Int(k.rounded()) > l
     }
 
-    /// «١٩ كم · ١٢:٥٦ ص» under the time left.
+    /// «١٩ كم • ١٢:٥٦ ص» under the time left.
     static func tripLine(meters: Double?, eta: Date?) -> String {
-        [meters.map { SaryFormat.distance(meters: $0) }, eta.map { NavText.clock($0) }].compactMap { $0 }.joined(separator: " · ")
+        [meters.map { SaryFormat.distance(meters: $0) }, eta.map { NavText.clock($0) }].compactMap { $0 }.joined(separator: " • ")
     }
 
     /// «مشاركة الوصول»: plain text the person sends themselves (no link, no tracking).
@@ -110,7 +110,7 @@ enum NavHUD {
         var s = "في الطريق" + (target.map { $0.isEmpty ? "" : " إلى \(NavText.arabicDigitsOnly($0))" } ?? "")
         if let eta { s += "، أوصل تقريبًا \(NavText.clock(eta))" }
         if let seconds { s += " (بعد \(NavText.remaining(seconds: seconds)))" }
-        return s + " · سَرى"
+        return s + " • سَرى"
     }
 }
 
@@ -238,9 +238,9 @@ enum NavDriveLayout {
         return min(1, max(0, 1 - r / t))
     }
 
-    /// «١٨ كم · وصول ٥:٤٢ م».
+    /// «١٨ كم • وصول ٥:٤٢ م».
     static func tripLine(meters: Double?, eta: Date?) -> String {
-        [meters.map { SaryFormat.distance(meters: $0) }, eta.map { "وصول \(NavText.clock($0))" }].compactMap { $0 }.joined(separator: " · ")
+        [meters.map { SaryFormat.distance(meters: $0) }, eta.map { "وصول \(NavText.clock($0))" }].compactMap { $0 }.joined(separator: " • ")
     }
 
     /// The time left split for the big number: («٢٥», «د»), («١ س ٥», «د»); under a minute the
@@ -585,7 +585,7 @@ struct NavManeuverBanner: View {
     }
 }
 
-/// The header's bottom line, always while guiding: «توصل ٧:٤٢ م · باقي ١٨ د» on the right, «١٢٫٤ كم» on the left.
+/// The header's bottom line, always while guiding: «توصل ٧:٤٢ م • باقي ١٨ د» on the right, «١٢٫٤ كم» on the left.
 struct NavETARow: View {
     @ObservedObject var nav: NavSession
     @Environment(\.sary) private var theme
@@ -607,7 +607,7 @@ struct NavETARow: View {
                     }
                     if let s = nav.remainingSeconds {
                         let left = NavText.remaining(seconds: s)
-                        Text("· باقي \(left)").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
+                        Text("• باقي \(left)").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
                             .contentTransition(SaryTransition.number(s, theme))
                             .animation(theme.animation(.snappy), value: left)
                             .accessibilityIdentifier("nav.remainingTime")
@@ -644,7 +644,7 @@ struct NavETARow: View {
     private var label: String {
         [nav.target.map { "إلى \($0.name)" }, nav.etaDate.map { "توصل \(NavText.clock($0))" },
          nav.remainingSeconds.map { "باقي \(NavText.remaining(seconds: $0))" }, nav.remainingMeters.map { SaryFormat.distance(meters: $0) }]
-            .compactMap { $0 }.joined(separator: " · ")
+            .compactMap { $0 }.joined(separator: " • ")
     }
 }
 
@@ -811,7 +811,7 @@ struct NavArrivalCard: View {
     }
 }
 
-/// The bottom bar in the sheet's peek (v2): the time left big and coloured, «١٩ كم · ١٢:٥٦ ص» under it,
+/// The bottom bar in the sheet's peek (v2): the time left big and coloured, «١٩ كم • ١٢:٥٦ ص» under it,
 /// and a clear red «أوقف التوجيه». Drag the sheet up for «المسارات»، «مشاركة الوصول»، «الصوت» (`NavTripOptions`).
 /// It fits the 70 pt peek and a 320 pt window (`NavBarLayout`): the numbers are capped at xLarge,
 /// the stale note waits for the sheet raised, and a compact row replaces the full one when it
@@ -882,7 +882,7 @@ struct NavBottomBar: View {
         .accessibilityIdentifier("nav.bottomBar")
     }
 
-    /// «١٨ كم · وصول ٥:٤٢ م» and the destination on the right, the time left big on the left.
+    /// «١٨ كم • وصول ٥:٤٢ م» and the destination on the right, the time left big on the left.
     private var v2Numbers: some View {
         let p = theme.palette
         let trip = NavDriveLayout.tripLine(meters: nav.remainingMeters, eta: nav.etaDate)
@@ -1011,7 +1011,7 @@ struct NavBottomBar: View {
         }
     }
 
-    /// The time left, big, and «١٩ كم · ١٢:٥٦ ص» under it (both roll as they change).
+    /// The time left, big, and «١٩ كم • ١٢:٥٦ ص» under it (both roll as they change).
     private var numbers: some View {
         let p = theme.palette
         let left = nav.remainingSeconds.map { NavText.remaining(seconds: $0) }
@@ -1103,7 +1103,7 @@ struct NavBottomBar: View {
     private var label: String {
         [nav.target.map { "إلى \($0.name)" }, nav.remainingSeconds.map { "باقي \(NavText.remaining(seconds: $0))" },
          nav.remainingMeters.map { SaryFormat.distance(meters: $0) }, nav.etaDate.map { "الوصول \(NavText.clock($0))" }]
-            .compactMap { $0 }.joined(separator: " · ")
+            .compactMap { $0 }.joined(separator: " • ")
     }
 }
 
@@ -1337,7 +1337,7 @@ struct GuidancePromptRow: View {
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(Text("\(leaderName) بدأ التوجيه · ابدأ"))
+            .accessibilityLabel(Text("\(leaderName) بدأ التوجيه • ابدأ"))
             .accessibilityIdentifier("nav.auto.leaderBanner")
         case .resume, .start:
             Button(action: start) {

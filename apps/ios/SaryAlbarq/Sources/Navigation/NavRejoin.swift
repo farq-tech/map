@@ -153,9 +153,9 @@ enum NavRejoin {
         return Decision(connector: c, shortcutCostS: shortcut, tracksCostS: tracks)
     }
 
-    /// The connector's map text: «٩٠ م · ٢٠ ث».
+    /// The connector's map text: «٩٠ م • ٢٠ ث».
     static func label(_ c: NavConnector) -> String {
-        "\(SaryFormat.distance(meters: c.distanceM)) · \(NavText.remaining(seconds: c.etaS))"
+        "\(SaryFormat.distance(meters: c.distanceM)) • \(NavText.remaining(seconds: c.etaS))"
     }
 
     /// The grid for a connector, if one of the bundled regions holds both ends (offline, cached).

@@ -23,7 +23,7 @@ struct WaypointsSection: View {
                 case let .failed(msg):
                     SaryBanner(text: msg, tone: .warning).padding(.vertical, theme.space(.s))
                 case let .cached(at):
-                    SaryBanner(text: "بلا اتصال · آخر نسخة \(SaryFormat.elapsed(since: at, now: Date()))", tone: .info, systemImage: SaryIcon.offline)
+                    SaryBanner(text: "بلا اتصال • آخر نسخة \(SaryFormat.elapsed(since: at, now: Date()))", tone: .info, systemImage: SaryIcon.offline)
                         .padding(.vertical, theme.space(.s))
                 case .loading where features.waypoints.isEmpty:
                     ProgressView().frame(maxWidth: .infinity).padding(theme.space(.m))
@@ -90,7 +90,7 @@ struct WaypointRow: View {
                 SaryWaypointGlyph(kind: waypoint.kind, size: theme.drive ? 40 : 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(waypoint.title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
-                    Text("\(waypoint.kind.label) · \(by)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
+                    Text("\(waypoint.kind.label) • \(by)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if let from {
@@ -187,8 +187,8 @@ struct ConvoySection: View {
     private func status(_ e: ConvoyMath.Evaluation?) -> some View {
         if let e {
             if e.leadMissing || e.tailMissing {
-                SaryBanner(text: e.leadMissing && e.tailMissing ? "المقدمة والمؤخرة بلا موقع مباشر · التنبيهات متوقفة حتى يرجع موقعهم"
-                           : e.leadMissing ? "المقدمة بلا موقع مباشر · لا ننبّه عن من سبقها" : "المؤخرة بلا موقع مباشر · لا ننبّه عن من تأخر",
+                SaryBanner(text: e.leadMissing && e.tailMissing ? "المقدمة والمؤخرة بلا موقع مباشر • التنبيهات متوقفة حتى يرجع موقعهم"
+                           : e.leadMissing ? "المقدمة بلا موقع مباشر • لا ننبّه عن من سبقها" : "المؤخرة بلا موقع مباشر • لا ننبّه عن من تأخر",
                            tone: .info)
             } else if e.alerts.isEmpty {
                 SaryBanner(text: "كل السيارات المباشرة ضمن القافلة", tone: .success, systemImage: SaryIcon.checkCircle)
@@ -471,7 +471,7 @@ struct WaypointCard: View {
 
     private func subtitle(_ w: Waypoint) -> String {
         let at = ISODate.parse(w.created_at).map { SaryFormat.elapsed(since: $0, now: Date()) } ?? ""
-        return "\(w.kind.label) · أضافها \(features.creatorName(w))" + (at.isEmpty ? "" : " · \(at)")
+        return "\(w.kind.label) • أضافها \(features.creatorName(w))" + (at.isEmpty ? "" : " • \(at)")
     }
 
     @ViewBuilder
@@ -485,7 +485,7 @@ struct WaypointCard: View {
                     .rotationEffect(.degrees(LiveOutingPresenter.relative(b, mapBearing: controller.overlay.projection.bearing)))
                     .environment(\.layoutDirection, .leftToRight)
                     .foregroundStyle(p.accentText)
-                Text("\(SaryFormat.distance(meters: Geo.haversineMeters(f.coordinate, to))) · \(SaryFormat.compass(b))")
+                Text("\(SaryFormat.distance(meters: Geo.haversineMeters(f.coordinate, to))) • \(SaryFormat.compass(b))")
                     .saryNumber(.headline, weight: .bold).foregroundStyle(p.textPrimary)
             }
             .accessibilityElement(children: .combine)
@@ -644,7 +644,7 @@ struct PastWaypointDetail: View {
                     SaryWaypointGlyph(kind: w.kind, size: 44)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(w.title).saryText(.title2).foregroundStyle(p.textPrimary)
-                        Text(w.kind.label + (ISODate.parse(w.created_at).map { " · " + SaryFormat.elapsed(since: $0, now: Date()) } ?? ""))
+                        Text(w.kind.label + (ISODate.parse(w.created_at).map { " • " + SaryFormat.elapsed(since: $0, now: Date()) } ?? ""))
                             .saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                 }
@@ -729,9 +729,9 @@ struct TripWaypointsSection: View {
             let cached = WaypointCache.load(outingId)?.waypoints
             list = cached ?? []
             if FeatureAvailability.notDeployed(error) {
-                note = cached == nil ? FeatureAvailability.notDeployedText : "المحفوظة على جوالك · " + FeatureAvailability.notDeployedText
+                note = cached == nil ? FeatureAvailability.notDeployedText : "المحفوظة على جوالك • " + FeatureAvailability.notDeployedText
             } else {
-                note = cached == nil ? FeatureAvailability.arabic(error) : "بلا اتصال · المحفوظة على جوالك"
+                note = cached == nil ? FeatureAvailability.arabic(error) : "بلا اتصال • المحفوظة على جوالك"
             }
         }
     }

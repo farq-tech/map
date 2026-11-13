@@ -29,14 +29,14 @@ struct NavTarget: Equatable {
     var position: LngLat
     /// The member's id for `.member` (to tell them apart, and to say «تحرّك» later).
     var memberId: String? = nil
-    /// `.lastKnown`: when that fix was taken. Shown as «آخر موقع معروف · قبل ١٤ د», never as live.
+    /// `.lastKnown`: when that fix was taken. Shown as «آخر موقع معروف • قبل ١٤ د», never as live.
     var lastKnownAt: Date? = nil
 
-    /// «آخر موقع معروف · قبل ١٤ د» for a last-known target, else nil.
+    /// «آخر موقع معروف • قبل ١٤ د» for a last-known target, else nil.
     func staleNote(now: Date = Date()) -> String? {
         guard source == .lastKnown else { return nil }
         guard let at = lastKnownAt else { return "آخر موقع معروف" }
-        return "آخر موقع معروف · \(SilenceText.ago(at, now: now))"
+        return "آخر موقع معروف • \(SilenceText.ago(at, now: now))"
     }
 }
 

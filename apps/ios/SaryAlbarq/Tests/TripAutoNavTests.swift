@@ -90,7 +90,7 @@ final class TripAutoNavDecisionTests: XCTestCase {
         XCTAssertEqual(TripAutoNav.decide(i), .none)
         XCTAssertTrue(TripAutoNav.waitsForFix(i), "«ننتظر موقعك…» instead of silence")
         let wait = NavFixWait(pending: .auto, since: now)
-        XCTAssertEqual(NavFixWait.text(accuracyM: 35, slow: wait.slow(now: now)), "ننتظر موقعك… · الدقة ±٣٥ م")
+        XCTAssertEqual(NavFixWait.text(accuracyM: 35, slow: wait.slow(now: now)), "ننتظر موقعك… • الدقة ±٣٥ م")
         XCTAssertEqual(NavFixWait.text(accuracyM: nil, slow: wait.slow(now: now.addingTimeInterval(46))), "ما قدرنا نحدد موقعك، اطلع لمكان مكشوف")
         /* A fresh fix: decided again, it starts. */
         loc.ingest(fix(olaya, accuracy: 8).with(atMs: nowMs + 1000), nowMs: nowMs + 1000)
@@ -585,7 +585,7 @@ final class NavSessionAutoTests: XCTestCase {
         XCTAssertNil(n.active, "never a made-up route")
         XCTAssertEqual(n.offRoad?.to, campPos)
         XCTAssertEqual(n.offRoad?.from, olaya, "straight line from where I am")
-        XCTAssertEqual(NavOffRoad.title(direct: n.direct, fallback: n.fallback), "بلا إنترنت · اتجاه مباشر")
+        XCTAssertEqual(NavOffRoad.title(direct: n.direct, fallback: n.fallback), "بلا إنترنت • اتجاه مباشر")
         XCTAssertTrue(n.activityLine?.text.hasPrefix("بلا إنترنت: اتجه مع السهم") == true)
         XCTAssertEqual(n.snapshot.offRoadInstruction?.hasPrefix("بلا إنترنت") , true, "CarPlay says it too")
         /* Still offline: a retry changes nothing. */
@@ -608,7 +608,7 @@ final class NavSessionAutoTests: XCTestCase {
         XCTAssertEqual(n.fallback, .routeFailed)
         XCTAssertNil(n.active, "never a made-up route")
         let title = NavOffRoad.title(direct: n.direct, fallback: n.fallback)
-        XCTAssertEqual(title, "تعذّر حساب الطريق · اتجاه مباشر")
+        XCTAssertEqual(title, "تعذّر حساب الطريق • اتجاه مباشر")
         XCTAssertFalse(title.contains("إنترنت"))
         XCTAssertFalse(NavOffRoad.note(fallback: n.fallback, bearing: 90).contains("إنترنت"))
         XCTAssertFalse(n.activityLine?.text.contains("إنترنت") ?? true)

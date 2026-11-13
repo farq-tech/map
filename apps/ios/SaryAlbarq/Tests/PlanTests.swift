@@ -725,7 +725,7 @@ final class PlaceSearchTests: XCTestCase {
     }
 
     func testSubtitle() {
-        XCTAssertEqual(PlaceSearch.Place(id: "1", name: "x", detail: "العليا، الرياض", point: Self.me, category: "مطعم").subtitle, "مطعم · العليا، الرياض")
+        XCTAssertEqual(PlaceSearch.Place(id: "1", name: "x", detail: "العليا، الرياض", point: Self.me, category: "مطعم").subtitle, "مطعم • العليا، الرياض")
         XCTAssertNil(PlaceSearch.Place(id: "1", name: "x", detail: nil, point: Self.me).subtitle)
     }
 }

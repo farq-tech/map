@@ -107,14 +107,14 @@ enum HiResZoom {
         (21.25, 39.05, 21.95, 39.35), // Jeddah
         (21.30, 39.70, 21.52, 40.00), // Makkah
         (24.35, 39.45, 24.60, 39.75), // Madinah
-        (26.10, 49.90, 26.60, 50.25), // Dammam · Khobar · Dhahran
+        (26.10, 49.90, 26.60, 50.25), // Dammam • Khobar • Dhahran
         (26.90, 49.55, 27.10, 49.75), // Jubail
         (21.20, 40.30, 21.35, 40.50), // Taif
-        (18.15, 42.45, 18.35, 42.85), // Abha · Khamis Mushait
-        (26.25, 43.85, 26.45, 44.05), // Buraidah · Unaizah (north)
+        (18.15, 42.45, 18.35, 42.85), // Abha • Khamis Mushait
+        (26.25, 43.85, 26.45, 44.05), // Buraidah • Unaizah (north)
         (28.33, 36.48, 28.45, 36.65), // Tabuk
         (27.45, 41.62, 27.58, 41.75), // Hail
-        (25.30, 49.50, 25.45, 49.65), // Al-Hofuf · Al-Mubarraz
+        (25.30, 49.50, 25.45, 49.65), // Al-Hofuf • Al-Mubarraz
     ]
 
     static func isCity(lat: Double, lng: Double) -> Bool {

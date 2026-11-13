@@ -147,7 +147,7 @@ final class MemberSilenceTests: XCTestCase {
         XCTAssertEqual(go.source, .lastKnown)
         XCTAssertEqual(go.name, "آخر موقع فهد")
         XCTAssertEqual(go.position, LngLat(lng: 46.7, lat: 24.7))
-        XCTAssertEqual(go.staleNote(now: t0), "آخر موقع معروف · قبل ١٠ د")
+        XCTAssertEqual(go.staleNote(now: t0), "آخر موقع معروف • قبل ١٠ د")
 
         let noPhone = OutingView(snap(silent: [SilentInfo(user_id: "b", since: bLastAt, level: 30, last: nil)], phone: nil), deviceNow: t0)
         let n = try XCTUnwrap(LiveOutingPresenter.silentAlert("b", in: noPhone, now: t0))

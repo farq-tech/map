@@ -109,7 +109,7 @@ enum PTTChannels {
     static var publicList: [PTTChannelInfo] { publicIds.map { PTTChannelInfo(id: $0, kind: .public, name: publicName($0)) } }
 
     /// What the system Push to Talk UI shows on the Lock Screen / Dynamic Island.
-    static func systemLabel(_ channelName: String) -> String { "قناة الطلعة · \(channelName)" }
+    static func systemLabel(_ channelName: String) -> String { "قناة الطلعة • \(channelName)" }
 
     /// The chip on the button: «تردد ٣» / «🔒 الأمامية» (the lock is an icon in the view).
     static func chipLabel(_ c: PTTChannelInfo?) -> String { c?.name ?? publicName(defaultId) }

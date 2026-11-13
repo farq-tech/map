@@ -18,11 +18,11 @@ extension LiveOutingController {
         let my = location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) }
         func away(_ p: LngLat) -> String? { my.map { SaryFormat.distance(meters: Vehicle.distanceMeters($0, p)) } }
         if case let .success(t) = NavTargets.destination(navDestination()) {
-            rows.append(.init(id: "destination", title: "الوجهة", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " · "),
+            rows.append(.init(id: "destination", title: "الوجهة", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " • "),
                               icon: "flag.checkered", color: Color(rgb: SaryPalette.navBlueDay), result: .success(t)))
         }
         if case let .success(t) = NavTargets.rally(rallyPoint) {
-            rows.append(.init(id: "rally", title: "نقطة التجمع", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " · "),
+            rows.append(.init(id: "rally", title: "نقطة التجمع", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " • "),
                               icon: SaryIcon.rally, color: nil, result: .success(t)))
         }
         if case let .success(t) = NavTargets.planRouteEnd(navPlanRoute()) {
@@ -37,7 +37,7 @@ extension LiveOutingController {
             switch r {
             case let .success(t): sub = away(t.position) ?? "مباشر"
             case let .failure(e):
-                if case let .memberStale(_, since) = e { sub = SaryFormat.lastUpdate(since: since, now: Date()) + " · موقع قديم" } else { sub = "لا يشارك موقعه" }
+                if case let .memberStale(_, since) = e { sub = SaryFormat.lastUpdate(since: since, now: Date()) + " • موقع قديم" } else { sub = "لا يشارك موقعه" }
             }
             rows.append(.init(id: "member.\(p.id)", title: "روح لـ\(p.name)", subtitle: sub, icon: "person.fill",
                               color: Color(rgb: v.colors[p.id] ?? 0x888888), result: r))
@@ -220,7 +220,7 @@ extension LiveOutingController {
             if let best = nav.routes.first {
                 d.labels = nav.routes.map { r in
                     .init(id: r.id, at: Self.labelPoint(r, others: nav.routes),
-                          text: "\(NavText.remaining(seconds: r.durationS)) · \(SaryFormat.distance(meters: r.distanceM))" + (r.id == best.id ? "" : " · \(NavRouteChoice.delta(r, best: best))"),
+                          text: "\(NavText.remaining(seconds: r.durationS)) • \(SaryFormat.distance(meters: r.distanceM))" + (r.id == best.id ? "" : " • \(NavRouteChoice.delta(r, best: best))"),
                           selected: r.id == sel)
                 }
             }

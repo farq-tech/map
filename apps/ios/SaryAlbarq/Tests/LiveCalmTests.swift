@@ -13,7 +13,7 @@ final class LiveCalmTests: XCTestCase {
 
     func testConvoyLineCountsLiveFriendsAndTheFarthest() {
         let list = [p("me", me: true, .live, nil), p("a", .live, 900), p("b", .live, 1_240), p("c", .stale(since: Date()), 6_100)]
-        XCTAssertEqual(LiveCalmRules.convoyLine(list), "٢ مباشر · الأبعد ١٫٢ كم")
+        XCTAssertEqual(LiveCalmRules.convoyLine(list), "٢ مباشر • الأبعد ١٫٢ كم")
     }
 
     func testConvoyLineAloneOrWithoutDistances() {
@@ -109,7 +109,7 @@ final class LiveCalmTests: XCTestCase {
         let now = Date()
         XCTAssertFalse(NameChipAge.shows(.live, now: now))
         XCTAssertFalse(NameChipAge.shows(.stale(since: now.addingTimeInterval(-90)), now: now), "«قبل ١ د» is noise")
-        XCTAssertTrue(NameChipAge.shows(.stale(since: now.addingTimeInterval(-240)), now: now), "«خالد · قبل ٤ د»")
+        XCTAssertTrue(NameChipAge.shows(.stale(since: now.addingTimeInterval(-240)), now: now), "«خالد • قبل ٤ د»")
         XCTAssertTrue(NameChipAge.shows(.paused, now: now))
     }
 
@@ -169,23 +169,23 @@ final class LiveCalmTests: XCTestCase {
         XCTAssertEqual(SaryPTTButton.label(for: .talking(seconds: 5, remaining: 55), notes: false), "على الهواء ٠:٠٥")
         XCTAssertEqual(SaryPTTButton.label(for: .listening(name: "فهد", color: 0), notes: true), "رسالة من فهد")
         XCTAssertEqual(SaryPTTButton.label(for: .listening(name: "فهد", color: 0), notes: false), "فهد يتكلم")
-        XCTAssertEqual(SaryPTTButton.label(for: .unavailable, notes: false), "اللاسلكي واقف · ما فيه شبكة", "persistent, with the reason")
+        XCTAssertEqual(SaryPTTButton.label(for: .unavailable, notes: false), "اللاسلكي واقف • ما فيه شبكة", "persistent, with the reason")
     }
 
     func testSourceLineFoldsAndComesBackWhenItChanges() {
         let v = VisualsSourceView()
-        v.set(source: "الأجواء من الطقس: غبار · Open-Meteo", slope: nil)
+        v.set(source: "الأجواء من الطقس: غبار • Open-Meteo", slope: nil)
         XCTAssertGreaterThan(v.fit(maxWidth: 300).height, 0, "shown when it appears")
         let folded = expectation(description: "folded")
         v.onExpire = { folded.fulfill() }
         v.armFold()
         wait(for: [folded], timeout: 7)
         XCTAssertEqual(v.fit(maxWidth: 300).height, 0, "gone after 5 s")
-        v.set(source: "الأجواء من الطقس: غبار · Open-Meteo", slope: nil)
+        v.set(source: "الأجواء من الطقس: غبار • Open-Meteo", slope: nil)
         XCTAssertEqual(v.fit(maxWidth: 300).height, 0, "the same line does not come back by itself")
         v.armFold()
         XCTAssertEqual(v.fit(maxWidth: 300).height, 0, "arming again does not bring it back")
-        v.set(source: "الأجواء من الطقس: مطر · Open-Meteo", slope: nil)
+        v.set(source: "الأجواء من الطقس: مطر • Open-Meteo", slope: nil)
         XCTAssertGreaterThan(v.fit(maxWidth: 300).height, 0, "a new line shows again")
     }
 }

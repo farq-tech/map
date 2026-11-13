@@ -144,7 +144,7 @@ enum SaryFormat {
         return names[Int((d + 22.5) / 45) % 8]
     }
 
-    /// Peek summary line of the live sheet: "٣ مشارك · ٢ مباشر · الأقرب ٩٠٠ م".
+    /// Peek summary line of the live sheet: "٣ مشارك • ٢ مباشر • الأقرب ٩٠٠ م".
     static func peekSummary(_ participants: [ParticipantUI]) -> String {
         let others = participants.filter { !$0.isMe }
         let live = participants.filter { $0.presence == .live }.count
@@ -152,7 +152,7 @@ enum SaryFormat {
         if let nearest = others.compactMap(\.distanceMeters).min() {
             parts.append("الأقرب \(distance(meters: nearest))")
         }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 
     // MARK: Saudi phone

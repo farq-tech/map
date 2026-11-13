@@ -256,7 +256,7 @@ struct MapLayersSheet: View {
         SarySection(title: "بلا إنترنت") {
             SaryNavRow(title: "الخرائط بلا إنترنت",
                        detail: offline.completeAreas > 0
-                           ? "\(SaryFormat.number(offline.completeAreas)) منطقة محفوظة · \(SaryFormat.number(offline.topoAreas)) منها مع الطبوغرافي"
+                           ? "\(SaryFormat.number(offline.completeAreas)) منطقة محفوظة • \(SaryFormat.number(offline.topoAreas)) منها مع الطبوغرافي"
                            : "ما حفظت مناطق بعد",
                        systemImage: "arrow.down.circle.fill", id: "explore-offline") {
                 controller.modal = nil

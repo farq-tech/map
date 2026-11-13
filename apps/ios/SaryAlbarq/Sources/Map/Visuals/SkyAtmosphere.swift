@@ -139,13 +139,13 @@ struct SkyAtmosphere: Equatable {
         return s
     }
 
-    /// «الأجواء من الطقس: غبار · الرؤية ١٫٨ كم · Open-Meteo» (+ the data's age once it is over an hour).
+    /// «الأجواء من الطقس: غبار • الرؤية ١٫٨ كم • Open-Meteo» (+ the data's age once it is over an hour).
     static func sourceLine(_ w: SkyWeather, dust d: Double, grey g: Double, now: Date) -> String {
         var what: [String] = []
         if d >= 0.15 { what.append(d >= 0.6 ? "غبار كثيف" : "غبار") }
         if w.foggy { what.append("ضباب") } else if w.wet { what.append("مطر") } else if g >= 0.25 { what.append("غيوم") }
         if let v = w.visibilityM, v < 10_000 { what.append("الرؤية \(SaryFormat.distance(meters: v))") }
-        var line = "الأجواء من الطقس: " + (what.isEmpty ? "رؤية منخفضة" : what.joined(separator: " · ")) + " · Open-Meteo"
+        var line = "الأجواء من الطقس: " + (what.isEmpty ? "رؤية منخفضة" : what.joined(separator: " • ")) + " • Open-Meteo"
         let ageMin = Int(now.timeIntervalSince(w.fetchedAt) / 60)
         if ageMin >= 60 { line += " (قبل \(SaryFormat.number(ageMin / 60)) س)" }
         return line

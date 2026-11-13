@@ -140,7 +140,7 @@ final class ShowcaseLab {
         if settings.isDriving { s.append("قيادة") }
         s.append(settings.forceGlassFallback ? "بديل ١٧" : "زجاج ٢٦")
         if typeSize != .large { s.append("نص \(typeSize.shortLabel)") }
-        return s.joined(separator: " · ")
+        return s.joined(separator: " • ")
     }
 }
 
@@ -203,7 +203,7 @@ private struct ShowcaseIndex: View {
             VStack(alignment: .leading, spacing: theme.space(.l)) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("سَرى البارق").saryText(.display).foregroundStyle(theme.palette.textPrimary)
-                    Text("نظام التصميم · iOS").saryText(.callout).foregroundStyle(theme.palette.textSecondary)
+                    Text("نظام التصميم • iOS").saryText(.callout).foregroundStyle(theme.palette.textSecondary)
                 }
                 ShowcaseLabBar(lab: lab)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {

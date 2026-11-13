@@ -137,7 +137,7 @@ struct ParticipantUI: Equatable, Identifiable {
         case .member: break
         }
         if isMe { parts.append("أنت") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 }
 

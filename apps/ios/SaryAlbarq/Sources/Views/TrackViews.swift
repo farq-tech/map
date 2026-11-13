@@ -9,7 +9,7 @@ enum FollowIcon {
 
 // MARK: - the three big numbers
 
-/// The dark card under a track: «المسافة · أعلى سرعة · مدة القيادة» and «اسلك هذا المسار».
+/// The dark card under a track: «المسافة • أعلى سرعة • مدة القيادة» and «اسلك هذا المسار».
 /// Always dark (it sits on satellite imagery), in our sand / ember palette.
 struct TrackStatsCard: View {
     var stats: TrackStats
@@ -284,13 +284,13 @@ struct FollowTrackPanel: View {
         case .waitingFix: return "ننتظر موقعك…"
         case .arrived: return ui.name
         case .far:
-            return "أقرب نقطة منه على بعد \(ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? "") · \(ui.directionLabel)"
+            return "أقرب نقطة منه على بعد \(ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? "") • \(ui.directionLabel)"
         case .offTrack:
             let m = ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? ""
-            return "أنت على بعد \(m) من المسار · ارجع له باتجاه السهم (\(ui.directionLabel))"
+            return "أنت على بعد \(m) من المسار • ارجع له باتجاه السهم (\(ui.directionLabel))"
         case .onTrack:
             if ui.onGap { return "هذا الجزء لم يُسجَّل: خط مستقيم تقريبي، انتبه للطريق" }
-            return "باقي على المسار \(dir) · \(ui.directionLabel)"
+            return "باقي على المسار \(dir) • \(ui.directionLabel)"
         }
     }
 }

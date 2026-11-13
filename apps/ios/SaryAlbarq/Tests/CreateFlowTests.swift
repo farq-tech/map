@@ -391,7 +391,7 @@ final class CreateProgressTests: XCTestCase {
         XCTAssertEqual(f.waitingText(now: t0.addingTimeInterval(3)), "ننشئ الطلعة على الخادم… ٣ ث")
         let slow = f.waitingText(now: t0.addingTimeInterval(12)) ?? ""
         XCTAssertTrue(slow.hasPrefix("ننشئ الطلعة على الخادم…\n"), slow)
-        XCTAssertTrue(slow.hasSuffix("الشبكة بطيئة، ما زلنا نحاول · ١٢ ث"), slow)
+        XCTAssertTrue(slow.hasSuffix("الشبكة بطيئة، ما زلنا نحاول • ١٢ ث"), slow)
         f.advance(.destination)
         XCTAssertEqual(f.waitingText(now: t0.addingTimeInterval(5)), "انحفظت الطلعة. نحفظ الوجهة فيها… ٥ ث")
     }

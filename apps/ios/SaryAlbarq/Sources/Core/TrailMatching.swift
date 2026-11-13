@@ -476,7 +476,7 @@ enum TrailGPX {
         let trail = TrailStore.load(outingId, in: dir) ?? Trail.rebuild(raw)
         guard !raw.isEmpty || !trail.points.isEmpty else { return nil }
         let matched = TrailDisplay.compose(trail.points, TrailMatchStore.load(outingId, in: dir))
-        let doc = document(name: "سَرى البارق · \(outingId)", raw: raw, filtered: trail.points, matched: matched)
+        let doc = document(name: "سَرى البارق • \(outingId)", raw: raw, filtered: trail.points, matched: matched)
         let u = FileManager.default.temporaryDirectory.appendingPathComponent("sary-trail-\(TrailStore.fileName(outingId).replacingOccurrences(of: ".json", with: "")).gpx")
         do { try Data(doc.utf8).write(to: u, options: .atomic) } catch { return nil }
         return u

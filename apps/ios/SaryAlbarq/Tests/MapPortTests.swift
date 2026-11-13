@@ -520,13 +520,13 @@ final class FramingAndLightTests: XCTestCase {
         var c = MapMember(id: "a", position: LngLat(lng: 46.6, lat: 24.7), color: 0, name: "نورة", presence: .live, heading: nil, accuracyM: 8, atMs: 0, note: nil, isMe: false)
         XCTAssertEqual(c.chipLabel, "نورة")
         c.presence = .recent
-        XCTAssertEqual(c.chipLabel, "نورة · آخر موقع")
+        XCTAssertEqual(c.chipLabel, "نورة • آخر موقع")
         c.presence = .lost
-        XCTAssertEqual(c.chipLabel, "نورة · انقطع")
+        XCTAssertEqual(c.chipLabel, "نورة • انقطع")
         c.presence = .live
         c.accuracyM = 80
         XCTAssertTrue(c.approximate)
-        XCTAssertEqual(c.chipLabel, "نورة · تقريبي")
+        XCTAssertEqual(c.chipLabel, "نورة • تقريبي")
         c.isMe = true
         c.accuracyM = 5
         XCTAssertEqual(c.chipLabel, "أنت")

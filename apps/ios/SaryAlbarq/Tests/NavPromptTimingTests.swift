@@ -77,7 +77,7 @@ final class NavPromptTimingTests: XCTestCase {
             let over = spoken.filter { $0.said! > $0.endM + 0.5 }
             let maxOver = over.map { $0.said! - $0.endM }.max() ?? 0
             let maxErr = spoken.filter { $0.cueM <= 1_000 }.map { abs($0.endM - $0.said!) }.max() ?? 0
-            print("[prompt-timing] \(name): \(os.count) cues · overstated \(over.count) (worst +\(Int(maxOver)) m) · max |error| \(Int(maxErr)) m")
+            print("[prompt-timing] \(name): \(os.count) cues • overstated \(over.count) (worst +\(Int(maxOver)) m) • max |error| \(Int(maxErr)) m")
             return (over.count, maxOver, maxErr)
         }
         let b = report("build 21", before)

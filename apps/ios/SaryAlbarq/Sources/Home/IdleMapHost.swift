@@ -97,7 +97,11 @@ struct IdleSheetContent: View {
                                     }
                                     if let action { DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.performAction(action) } }
                                 },
-                                close: { toolsOpen = false })
+                                close: { toolsOpen = false },
+                                search: {
+                                    toolsOpen = false
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { searchQuery = "" }
+                                })
                 .presentationDetents([.medium, .large])
                 .saryPresented(appearance)
         }

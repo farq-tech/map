@@ -226,7 +226,7 @@ final class StandaloneNavDriveShotsUITests: XCTestCase {
     }
 }
 
-/// Owner, Build 39: «اتجه» stuck on «ننتظر موقعك… · الدقة ±٨ م» with a good fix — guidance had started
+/// Owner, Build 39: «اتجه» stuck on «ننتظر موقعك… • الدقة ±٨ م» with a good fix — guidance had started
 /// and was brought back to idle. It must start again by itself.
 final class StandaloneNavRestartUITests: XCTestCase {
     func testGuidanceBackToIdleStartsAgain() {

@@ -344,7 +344,7 @@ struct SOSCountdownView: View {
 
 // MARK: - My SOS strip
 
-/// Red strip after I sent SOS: «أرسلت طوارئ · قبل ١ د» + «أنا بخير».
+/// Red strip after I sent SOS: «أرسلت طوارئ • قبل ١ د» + «أنا بخير».
 struct SaryMySOSStrip: View {
     var since: Date
     var now: Date
@@ -392,7 +392,7 @@ struct SaryMySOSStrip: View {
             .saryPulse(.urgent, style: .dim)
         VStack(alignment: .leading, spacing: 0) {
             Text("أرسلت طوارئ").saryText(.headline)
-            Text("\(withLocation ? "الكل يشوف موقعك" : "وصل التنبيه للكل · بدون موقع") · \(SaryFormat.elapsed(since: since, now: now))")
+            Text("\(withLocation ? "الكل يشوف موقعك" : "وصل التنبيه للكل • بدون موقع") • \(SaryFormat.elapsed(since: since, now: now))")
                 .saryText(.footnote, weight: .medium).opacity(0.9)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -556,7 +556,7 @@ struct SaryFriendSOSAlert: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
-                Text("يحتاج مساعدة · \(SaryFormat.elapsed(since: alert.since, now: now))")
+                Text("يحتاج مساعدة • \(SaryFormat.elapsed(since: alert.since, now: now))")
                     .saryText(.title2, weight: .medium)
                     .opacity(0.92)
             }

@@ -37,9 +37,9 @@ struct SaryComponentsGallery: View {
                 if show("loading") { SarySkeletonList(rows: 4) }
                 if show("list") {
                     SaryListGroup {
-                        SaryListRow(title: "طلعة الثمامة", subtitle: "الجمعة · ٤ أصدقاء · ٦٢ كم", systemImage: "flag.fill",
+                        SaryListRow(title: "طلعة الثمامة", subtitle: "الجمعة • ٤ أصدقاء • ٦٢ كم", systemImage: "flag.fill",
                                     id: "components-row-1", action: { taps += 1 })
-                        SaryListRow(title: "روضة الثمامة الشمالية الكبيرة عند نفود الثويرات الغربية", subtitle: "ربيع واضح · ٦ كم²",
+                        SaryListRow(title: "روضة الثمامة الشمالية الكبيرة عند نفود الثويرات الغربية", subtitle: "ربيع واضح • ٦ كم²",
                                     systemImage: "leaf.fill", trailing: "١٤ كم", id: "components-row-2", action: { taps += 1 })
                         SaryListRow(title: "إعدادات الخصوصية", systemImage: "lock.fill", id: "components-row-3", action: { taps += 1 })
                     }

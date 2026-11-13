@@ -187,7 +187,7 @@ struct InviteJoinSheet: View {
         let stepValue = step.accessibilityValue
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-SaryJoinDiagnostics") {
-            return "\(stepValue) · auth=\(location.authorization.rawValue) · pending=\(model.hasPendingInviteJoinAttempt(token))"
+            return "\(stepValue) • auth=\(location.authorization.rawValue) • pending=\(model.hasPendingInviteJoinAttempt(token))"
         }
         #endif
         return stepValue

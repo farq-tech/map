@@ -328,7 +328,7 @@ enum TrackGradient {
 
 // MARK: - the three big numbers
 
-/// «المسافة · أعلى سرعة · مدة القيادة» for a track. Never invented: a number we cannot
+/// «المسافة • أعلى سرعة • مدة القيادة» for a track. Never invented: a number we cannot
 /// stand behind is nil and shows «—».
 struct TrackStats: Equatable {
     /// Recorded length of the drawn line (gaps not counted), m.

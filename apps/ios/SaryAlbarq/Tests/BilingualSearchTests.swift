@@ -127,7 +127,7 @@ final class BilingualSearchTests: XCTestCase {
         XCTAssertEqual(r.count, 2)
         XCTAssertEqual(r[0].name, "ستاربكس", "Arabic name first")
         XCTAssertEqual(r[0].altName, "Starbucks")
-        XCTAssertEqual(r[0].subtitle, "Starbucks · مقهى")
+        XCTAssertEqual(r[0].subtitle, "Starbucks • مقهى")
         XCTAssertEqual(r[1].name, "ستاربكس", "an English-only branch gets its Arabic name from the lexicon")
         /* Build 36 item 11: the row keeps the languages apart — the English name on its own small line. */
         XCTAssertEqual(r[0].secondaryName, "Starbucks")
@@ -139,8 +139,8 @@ final class BilingualSearchTests: XCTestCase {
     func testRowFieldsKeepTheLanguagesApart() {
         var p = PlaceSearch.Place(id: "1", name: "روضة خريم", detail: "أقرب طرف منك", point: Self.me, category: "روضة", altName: "Rawdat Khuraim")
         XCTAssertEqual(p.secondaryName, "Rawdat Khuraim")
-        XCTAssertEqual(p.rowDetail, "روضة · أقرب طرف منك")
-        XCTAssertEqual(p.subtitle, "Rawdat Khuraim · روضة · أقرب طرف منك", "the older one-line subtitle is unchanged")
+        XCTAssertEqual(p.rowDetail, "روضة • أقرب طرف منك")
+        XCTAssertEqual(p.subtitle, "Rawdat Khuraim • روضة • أقرب طرف منك", "the older one-line subtitle is unchanged")
         p.altName = "روضه خريم"
         XCTAssertNil(p.secondaryName, "the same name twice is not shown")
         p.altName = "  "

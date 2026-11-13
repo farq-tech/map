@@ -525,7 +525,7 @@ final class LiveOutingController: ObservableObject {
     /// «غرّزت» heard phone to phone (SOS and notes show through the merged picture).
     private func nearbyEvent(_ e: MeshEvent) {
         guard e.k == .stuck, let v = session.displayView, let m = v.members[e.u] else { return }
-        let text = ["غرّز", e.text].compactMap { $0 }.joined(separator: " · ") + " · عبر الأجهزة القريبة"
+        let text = ["غرّز", e.text].compactMap { $0 }.joined(separator: " • ") + " • عبر الأجهزة القريبة"
         pushAlert(LiveAlertUI(id: "stuck:\(e.id)", kind: .note(senderName: m.display_name, senderColor: v.colors[e.u] ?? 0xFFFFFF, text: text)), ttl: 60)
     }
 

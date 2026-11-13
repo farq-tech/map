@@ -93,7 +93,7 @@ enum PlaceBriefRules {
 
     static func uvText(_ uv: Double?) -> String {
         guard let uv else { return "غير متاح" }
-        return "\(SaryFormat.number(Int(uv.rounded()))) · \(uvBand(uv))"
+        return "\(SaryFormat.number(Int(uv.rounded()))) • \(uvBand(uv))"
     }
 
     // MARK: sun
@@ -138,13 +138,13 @@ enum PlaceBriefRules {
         return b
     }
 
-    /// «باقي ٣ س ١٠ د من النهار» / «الشمس غربت · الشروق ٦:١٢ ص».
+    /// «باقي ٣ س ١٠ د من النهار» / «الشمس غربت • الشروق ٦:١٢ ص».
     static func daylightText(_ s: SunDay, now: Date, timeZone: TimeZone = .current) -> String {
         if s.isDay, let set = s.sunset {
             let left = Int(set.timeIntervalSince(now))
             return left < 60 ? "الغروب الآن" : "باقي \(SaryFormat.duration(seconds: left)) من النهار"
         }
-        if let rise = s.sunrise { return "الشمس غاربة · الشروق \(WeatherFormat.clock(rise, timeZone: timeZone))" }
+        if let rise = s.sunrise { return "الشمس غاربة • الشروق \(WeatherFormat.clock(rise, timeZone: timeZone))" }
         return "أوقات الشمس غير متاحة"
     }
 
@@ -173,22 +173,22 @@ enum PlaceBriefRules {
 
     static func slopeText(_ t: TerrainSample) -> String? {
         guard let d = t.slopeDeg, d.isFinite else { return nil }
-        return "الميل نحو \(SaryFormat.number(Int(d.rounded())))° · \(slopeLabel(d))"
+        return "الميل نحو \(SaryFormat.number(Int(d.rounded())))° • \(slopeLabel(d))"
     }
 
     // MARK: header
 
-    /// «على بعد ١٢٫٤ كم · شمال غرب منك» (straight line), «عند موقعك» when very close.
+    /// «على بعد ١٢٫٤ كم • شمال غرب منك» (straight line), «عند موقعك» when very close.
     static func distanceText(from me: LngLat?, to p: LngLat) -> String? {
         guard let me else { return nil }
         let d = PlanGeo.meters(me, p)
         if d < 30 { return "عند موقعك" }
-        return "على بعد \(SaryFormat.distance(meters: d)) · \(Geo.directionLabel(PlanGeo.bearing(me, p))) منك"
+        return "على بعد \(SaryFormat.distance(meters: d)) • \(Geo.directionLabel(PlanGeo.bearing(me, p))) منك"
     }
 
     // MARK: freshness / source
 
-    /// «المصدر: Open-Meteo · ١١:٢٥ ص (قبل ٥ د)», never pretending old data is current. The clock time
+    /// «المصدر: Open-Meteo • ١١:٢٥ ص (قبل ٥ د)», never pretending old data is current. The clock time
     /// is when the data arrived on this phone (Build 36 item 12: «when was this updated?»).
     static func sourceLine(_ w: PlaceWeather, now: Date, failed: WeatherFetchFailure?, timeZone: TimeZone = .current) -> (text: String, stale: Bool) {
         let age = SaryFormat.elapsed(since: w.report.fetchedAt, now: now)
@@ -197,7 +197,7 @@ enum PlaceBriefRules {
         var parts = ["المصدر: \(w.provider.label)", "\(clock) (\(age))"]
         if stale { parts[1] = "بيانات محفوظة \(clock) (\(age)) — ليست حالية" }
         if failed == .offline { parts.append("بلا إنترنت") } else if failed == .server { parts.append("تعذّر التحديث") }
-        return (parts.joined(separator: " · "), stale)
+        return (parts.joined(separator: " • "), stale)
     }
 
     // MARK: assessment
@@ -250,7 +250,7 @@ enum PlaceBriefRules {
         if WeatherRules.floodRain(r, now: now) {
             poor.append("مطر قد يجري الأودية: \(WeatherFormat.mm(WeatherRules.rainTotal(r, now: now, hours: WeatherThresholds.floodHours))) خلال ٢٤ س — لا تخيّم في بطن وادٍ")
         } else if let first = next12.first(where: WeatherRules.rainExpected) {
-            let chance = next12.compactMap(\.precipitationProbability).max().map { " · احتمال \(SaryFormat.percent(Int($0.rounded())))" } ?? ""
+            let chance = next12.compactMap(\.precipitationProbability).max().map { " • احتمال \(SaryFormat.percent(Int($0.rounded())))" } ?? ""
             caution.append("مطر متوقع \(WeatherAlerts.when(first.time, now: now))\(chance)")
         } else if next12.contains(where: { $0.precipitationProbability != nil }) {
             checked.append("لا مطر متوقع خلال ١٢ س")
@@ -353,7 +353,7 @@ enum PlaceBriefPresenter {
         ui.humidity = h.humidity.map { "الرطوبة \(SaryFormat.percent(Int($0.rounded())))" } ?? "الرطوبة غير متاحة"
         if r.airAvailable, let d = DustLevel.of(h.dust) {
             ui.dustLevel = d
-            ui.dust = d.label + (h.pm10.map { " · PM10 \(SaryFormat.number(Int($0.rounded()))) µg/m³" } ?? "")
+            ui.dust = d.label + (h.pm10.map { " • PM10 \(SaryFormat.number(Int($0.rounded()))) µg/m³" } ?? "")
         } else {
             ui.dust = w.provider == .weatherKit ? "الغبار غير متاح من Apple Weather" : "الغبار غير متاح"
         }
@@ -367,22 +367,22 @@ enum PlaceBriefPresenter {
         return ui
     }
 
-    /// «احتمال ٣٠٪ · نحو ١٫٢ مم خلال ١٢ س» / «لا مطر متوقع خلال ١٢ س».
+    /// «احتمال ٣٠٪ • نحو ١٫٢ مم خلال ١٢ س» / «لا مطر متوقع خلال ١٢ س».
     static func rainText(_ r: WeatherReport, now: Date) -> String {
         guard let chance = WeatherRules.maxRainChance(r, now: now) else { return "احتمال المطر غير متاح" }
         let total = WeatherRules.rainTotal(r, now: now, hours: WeatherThresholds.rainHours)
         if chance < 10, total < 0.1 { return "لا مطر متوقع خلال ١٢ س" }
         var s = "احتمال المطر حتى \(SaryFormat.percent(Int(chance.rounded())))"
-        if total >= 0.1 { s += " · نحو \(WeatherFormat.mm(total))" }
+        if total >= 0.1 { s += " • نحو \(WeatherFormat.mm(total))" }
         return s + " خلال ١٢ س"
     }
 
-    /// The driving one-liner: «٣١° · رياح ٢٢ كم/س · غبار كثيف».
+    /// The driving one-liner: «٣١° • رياح ٢٢ كم/س • غبار كثيف».
     static func compactLine(_ ui: PlaceBriefUI) -> String {
         guard ui.phase == .ready else { return "" }
         var bits = [ui.temp]
         if let w = ui.wind { bits.append("رياح \(w.speed)") }
         if let d = ui.dustLevel, d >= .light { bits.append(d.label) }
-        return bits.joined(separator: " · ")
+        return bits.joined(separator: " • ")
     }
 }

@@ -531,14 +531,14 @@ extension ReturnRoute {
     /// car on a drawn street), so offline this is false and the outbound city part is retraced.
     static func roadRouting(online: Bool, offlineRoadGraph: Bool = false) -> Bool { online || offlineRoadGraph }
 
-    static let cityTrailNote = "ما فيه نت · نكمل على طريق رحتك في المدينة، مو أسرع طريق"
+    static let cityTrailNote = "ما فيه نت • نكمل على طريق رحتك في المدينة، مو أسرع طريق"
     static let fastestRoadNote = "نكمل بأسرع طريق إلى نقطة البداية"
 
     /// Said when an on-phone return starts on its desert leg.
     static func desertNote(_ p: PhonePlan, roadRouting: Bool) -> String {
         guard p.junctionKnown else { return "نرجّعك على كامل مسارك من جوالك: هذا طريق رحتك، مو أسرع طريق" }
         return roadRouting ? "نرجع على نفس دربك في البر، وبعده أسرع طريق في المدينة"
-                           : "ما فيه نت · نرجع على نفس دربك في البر، وبعده طريق رحتك في المدينة"
+                           : "ما فيه نت • نرجع على نفس دربك في البر، وبعده طريق رحتك في المدينة"
     }
 
     /// Said when the city leg starts.
@@ -685,13 +685,13 @@ enum ArrivalOrder {
         return (done, waiting)
     }
 
-    /// «وصل أول: فهد، ثم سلطان · باقي: نورة».
+    /// «وصل أول: فهد، ثم سلطان • باقي: نورة».
     static func line(arrivals: [String: Double], members: [(id: String, name: String)], myId: String) -> String? {
         let s = split(arrivals: arrivals, members: members.map { ($0.id, $0.id == myId ? "أنت" : $0.name) })
         guard let first = s.arrived.first else { return nil }
         var text = "وصل أول: \(first.name)"
         if s.arrived.count > 1 { text += "، ثم " + s.arrived.dropFirst().map(\.name).joined(separator: "، ") }
-        if s.waiting.isEmpty { text += " · وصل الجميع" } else { text += " · باقي: " + s.waiting.joined(separator: "، ") }
+        if s.waiting.isEmpty { text += " • وصل الجميع" } else { text += " • باقي: " + s.waiting.joined(separator: "، ") }
         return text
     }
 

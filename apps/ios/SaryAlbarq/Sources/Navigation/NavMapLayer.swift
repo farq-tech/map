@@ -37,7 +37,7 @@ struct MapNavDrawing: Equatable {
     var connector: [LngLat]? = nil
     var target: LngLat? = nil
     var targetName = ""
-    /// «آخر موقع معروف · قبل ١٤ د» under the name for a last-known target (never shown as live).
+    /// «آخر موقع معروف • قبل ١٤ د» under the name for a last-known target (never shown as live).
     var targetNote: String? = nil
     var labels: [Label] = []
     /// The next turn drawn on the route: a short white arrow along the line through the
@@ -586,7 +586,7 @@ struct NavTargetPin: View {
     }
 }
 
-/// «١٢ د · ٨٫٤ كم» on an alternative; tap to choose it.
+/// «١٢ د • ٨٫٤ كم» on an alternative; tap to choose it.
 struct NavRouteLabel: View {
     var text: String
     var selected: Bool

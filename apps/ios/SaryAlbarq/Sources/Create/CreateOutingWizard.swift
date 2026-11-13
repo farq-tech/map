@@ -559,7 +559,7 @@ private struct CompanionsStep: View {
                     Text(d.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(2)
                     let est = weather.estimate(departure: Date())
                     Text([est.map { SaryFormat.distance(meters: $0.distanceM) }, weather.arrivalLine(departure: Date()).map { "الجو وقت وصولكم \($0)" }]
-                        .compactMap { $0 }.joined(separator: " · "))
+                        .compactMap { $0 }.joined(separator: " • "))
                         .saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
                 }
                 Spacer()
@@ -618,7 +618,7 @@ private struct WeatherStep: View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: theme.space(.l)) {
                 destinationRow
-                SaryTextField(title: "اسم الطلعة · اختياري", placeholder: "اسم مقترح من الوجهة", text: $flow.name, id: "create.name", maxLength: ServerRules.outingNameMax,
+                SaryTextField(title: "اسم الطلعة • اختياري", placeholder: "اسم مقترح من الوجهة", text: $flow.name, id: "create.name", maxLength: ServerRules.outingNameMax,
                               state: flow.error == CreateFlowState.Issue.nameEmpty.arabic ? .error(CreateFlowState.Issue.nameEmpty.arabic) : .normal,
                               disabled: flow.creating,
                               help: "نقترح اسمًا من وجهتك تلقائيًا؛ تقدر تعدّله.")
@@ -745,7 +745,7 @@ private struct WeatherStep: View {
         return VStack(alignment: .leading, spacing: theme.space(.s)) {
             Label(est.map { "وقت وصولكم المتوقع \(WeatherFormat.clock($0.eta))" } ?? "وقت الانطلاق \(WeatherFormat.clock(flow.departure))", systemImage: "flag.checkered")
                 .saryNumber(.headline, weight: .bold).foregroundStyle(p.textPrimary)
-            Text(est.map { "\(SaryFormat.distance(meters: $0.distanceM)) بخط مستقيم · بافتراض \(WeatherFormat.speed($0.speedKmh)) · تقديري" }
+            Text(est.map { "\(SaryFormat.distance(meters: $0.distanceM)) بخط مستقيم • بافتراض \(WeatherFormat.speed($0.speedKmh)) • تقديري" }
                  ?? "ما نعرف موقعك، فنعرض الجو وقت الانطلاق.")
                 .saryNumber(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
             if let h = hour {

@@ -52,7 +52,7 @@ struct CarPlayTripProgress: Equatable {
 
 protocol CarPlayFeatureSource: AnyObject {
     func carPlayDestination() -> CarPlayDestination?
-    /// «قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م».
+    /// «قطعنا ٦٢٪ • باقي ١٢ كم • نوصل ٤:٣٠ م».
     func carPlayTripProgress() -> CarPlayTripProgress?
     func carPlayStuckMembers() -> [CarPlayStuck]
     func carPlayConvoy() -> CarPlayConvoy?

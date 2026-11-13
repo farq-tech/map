@@ -58,7 +58,7 @@ enum WindRainPresenter {
     static func wind(_ w: WindReading, subject: CloudOutlookSubject = .me) -> CloudOutlookPresenter.Display? {
         guard w.ok else { return nil }
         let age = w.model_age_min.map { "نموذج محدَّث قبل \(CloudOutlookPresenter.ageText($0))" } ?? "نموذج جوي"
-        let foot = "\(age) · توقّع للساعة الحالية، مو قياس ولا بث حي · شبكة ~١٥٠ كم"
+        let foot = "\(age) • توقّع للساعة الحالية، مو قياس ولا بث حي • شبكة ~١٥٠ كم"
         let at = subject == .me ? "عندك" : "عند وجهتك"
         if w.calm == true || w.speed_kmh < 2 {
             return .init(arrowDegrees: nil, headline: "الجو شبه هادئ \(at)", detail: "الريح أقل من ٢ كم/س بحسب النموذج", footnote: foot)
@@ -67,21 +67,21 @@ enum WindRainPresenter {
         let kmh = SaryFormat.number(Int(w.speed_kmh.rounded()))
         return .init(arrowDegrees: w.toward_deg,
                      headline: "\(from) \(at) بسرعة ~\(kmh) كم/س",
-                     detail: "\(strength(w.speed_kmh)) · تهب \(CloudOutlookPresenter.directionText(w.toward_deg))",
+                     detail: "\(strength(w.speed_kmh)) • تهب \(CloudOutlookPresenter.directionText(w.toward_deg))",
                      footnote: foot)
     }
 
     static func rain(_ r: RainMotion, subject: CloudOutlookSubject = .me) -> CloudOutlookPresenter.Display? {
         guard r.ok, r.confidence >= max(minConfidence, r.min_confidence ?? 0) else { return nil }
         let age = r.image_age_min.map { "بحسب صور مطر قبل \(CloudOutlookPresenter.ageText($0))" } ?? "بحسب آخر صور المطر"
-        let foot = "\(age) · متأخرة، والحركة جزء منها تقدير نموذج ناسا · مو توقع مطر"
+        let foot = "\(age) • متأخرة، والحركة جزء منها تقدير نموذج ناسا • مو توقع مطر"
         switch r.state {
         case "moving":
             guard let m = r.motion else { return nil }
             let kmh = SaryFormat.number(Int(m.speed_kmh.rounded()))
             return .init(arrowDegrees: m.bearing_deg,
                          headline: "المطر كان يتجه \(CloudOutlookPresenter.directionText(m.bearing_deg)) بسرعة ~\(kmh) كم/س",
-                         detail: "±\(SaryFormat.number(m.margin_deg))° و±\(SaryFormat.number(m.margin_kmh)) كم/س · وقت آخر صورة",
+                         detail: "±\(SaryFormat.number(m.margin_deg))° و±\(SaryFormat.number(m.margin_kmh)) كم/س • وقت آخر صورة",
                          footnote: foot)
         case "stationary":
             return .init(arrowDegrees: nil, headline: "المطر كان شبه ثابت", detail: "وقت آخر صورة، حول \(subject == .me ? "موقعك" : "وجهتك")", footnote: foot)

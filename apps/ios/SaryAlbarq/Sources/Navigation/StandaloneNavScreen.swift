@@ -55,7 +55,7 @@ enum StandaloneNavRules {
         gate == .waitingForFix && !started && !alreadyAsked
     }
 
-    /// Owner, Build 39: «ننتظر موقعك… · الدقة ±٨ م» with the spinner, forever, though the map followed a
+    /// Owner, Build 39: «ننتظر موقعك… • الدقة ±٨ م» with the spinner, forever, though the map followed a
     /// good fix. The screen kept a one-way `started` flag: once guidance had started, anything that
     /// brought it back to idle (`nav.end()` from a disappear/appear, a refused start) left it idle for
     /// good, and the idle card said «ننتظر موقعك» even with the gate ready. Now the guidance phase
@@ -70,7 +70,7 @@ enum StandaloneNavRules {
     }
 
     /// One small line under the waiting card (owner's phone, remote diagnosis): accepted / refused fixes
-    /// by reason, and the age of the last fix — «مقبولة ٣٠ · مرفوضة: قديمة ١٢ · آخر قراءة قبل ٤ ث».
+    /// by reason, and the age of the last fix — «مقبولة ٣٠ • مرفوضة: قديمة ١٢ • آخر قراءة قبل ٤ ث».
     static func diagnostics(accepted: Int, rejected: [FixRejection: Int], lastFixAgeS: Double?) -> String {
         let names: [FixRejection: String] = [.stale: "قديمة", .coarse: "ضعيفة", .teleport: "قفزة", .invalid: "غير صالحة"]
         let refused = FixRejection.allCases.compactMap { r -> String? in
@@ -80,10 +80,10 @@ enum StandaloneNavRules {
         var parts = ["مقبولة \(ArabicFormat.number(Double(accepted)))"]
         parts.append(refused.isEmpty ? "مرفوضة ٠" : "مرفوضة: " + refused.joined(separator: "، "))
         if let a = lastFixAgeS, a.isFinite { parts.append("آخر قراءة قبل \(ArabicFormat.number(a.rounded())) ث") }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 
-    /// The waiting line: «ننتظر موقعك… · الدقة ±N م», then the open-sky hint (the live screen's words).
+    /// The waiting line: «ننتظر موقعك… • الدقة ±N م», then the open-sky hint (the live screen's words).
     static func waitText(accuracyM: Double?, waitingSince: Date?, now: Date) -> String {
         NavFixWait.text(accuracyM: accuracyM, slow: waitSlow(waitingSince: waitingSince, now: now))
     }

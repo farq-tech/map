@@ -180,7 +180,7 @@ struct DestinationRow: View {
                 Text(destination.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
                 if let me, fresh {
                     let d = PlanGeo.meters(me, dest)
-                    Text("\(SaryFormat.distance(meters: d)) · \(Geo.directionLabel(PlanGeo.bearing(me, dest))) · ≈ \(SaryFormat.duration(seconds: PlanETA.seconds(meters: d * 1.3)))")
+                    Text("\(SaryFormat.distance(meters: d)) • \(Geo.directionLabel(PlanGeo.bearing(me, dest))) • ≈ \(SaryFormat.duration(seconds: PlanETA.seconds(meters: d * 1.3)))")
                         .saryNumber(.footnote).foregroundStyle(p.textSecondary)
                         .accessibilityIdentifier("destination.distance")
                 } else {

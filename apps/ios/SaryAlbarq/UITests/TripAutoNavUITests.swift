@@ -114,7 +114,7 @@ final class TripAutoNavUITests: XCTestCase {
         XCTAssertFalse(el(app, "nav.banner").exists, "the leader's old command does not restart it")
     }
 
-    /// The setting off: «أمير الرحلة بدأ التوجيه · ابدأ», one tap.
+    /// The setting off: «أمير الرحلة بدأ التوجيه • ابدأ», one tap.
     func testMemberBannerWhenTheSettingIsOff() {
         let app = launch(Self.member + ["-SaryAutoNavAsk", "-SaryDemoLeaderBroadcast", "5"])
         let banner = el(app, "nav.auto.leaderBanner")
@@ -211,7 +211,7 @@ final class TripAutoNavUITests: XCTestCase {
          * so the offline title is checked on its own element — the same words, the same moment. */
         let title = el(app, "nav.offroad.title")
         XCTAssertTrue(title.exists, "the panel's title")
-        XCTAssertTrue(title.label.contains("بلا إنترنت · اتجاه مباشر"), title.label)
+        XCTAssertTrue(title.label.contains("بلا إنترنت • اتجاه مباشر"), title.label)
         XCTAssertTrue(el(app, "nav.offroad.distance").exists, "how far, with the arrow")
         XCTAssertFalse(el(app, "nav.banner").exists, "no made-up route")
         sleep(1)

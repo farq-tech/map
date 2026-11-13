@@ -94,7 +94,7 @@ final class QuickStartLayoutUITests: XCTestCase {
     func testQuickStartDoesNotOverlapAtLargeText() { check(largeText: true) }
 }
 
-/// The km split under a route («أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم»): the swatch, the word and the
+/// The km split under a route («أسفلت ٢٣٫٤ كم • ترابي ٨٫١ كم • خارج الطريق ٣٫٠ كم»): the swatch, the word and the
 /// number of each surface sit side by side or one under the other, never on top of each other, on a small phone
 /// and with accessibility text sizes. Owner's request (Build 43 route all blue).
 final class SurfaceKmLayoutUITests: XCTestCase {
@@ -139,7 +139,7 @@ final class SurfaceKmLayoutUITests: XCTestCase {
         }
         /* Owner's words and digits: Arabic, in the accessibility label of the strip. */
         let label = app.descendants(matching: .any).matching(identifier: "nav.surfaceKm").firstMatch.label
-        XCTAssertEqual(label, "أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم")
+        XCTAssertEqual(label, "أسفلت ٢٣٫٤ كم • ترابي ٨٫١ كم • خارج الطريق ٣٫٠ كم")
         /* At most two lines at normal text: the strip must not grow the card into a tall block. */
         if !largeText {
             let strip = app.descendants(matching: .any).matching(identifier: "nav.surfaceKm").firstMatch.frame

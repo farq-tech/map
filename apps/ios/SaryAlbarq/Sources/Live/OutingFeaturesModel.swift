@@ -106,7 +106,7 @@ final class OutingFeaturesModel: ObservableObject {
             upsert(w)
             if w.user_id != myId {
                 let name = creatorName(w)
-                pushAlert(LiveAlertUI(id: "waypoint:\(w.id)", kind: .toast("\(name) أضاف نقطة: \(w.kind.label) · \(w.title)")), 6)
+                pushAlert(LiveAlertUI(id: "waypoint:\(w.id)", kind: .toast("\(name) أضاف نقطة: \(w.kind.label) • \(w.title)")), 6)
             }
         case let .waypointRemoved(id):
             waypoints.removeAll { $0.id == id }
@@ -136,7 +136,7 @@ final class OutingFeaturesModel: ObservableObject {
     /// we never guess one — the person long-presses the map instead.
     func composeAtMe(_ fix: DeviceFix?, now: Date = Date()) {
         guard let f = fix, now.timeIntervalSince1970 * 1000 - f.atMs <= LiveOutingPresenter.myLiveMaxAgeMs else {
-            toast("ما عندنا موقع حي لك الآن · اضغط مطولًا على الخريطة في مكان النقطة")
+            toast("ما عندنا موقع حي لك الآن • اضغط مطولًا على الخريطة في مكان النقطة")
             return
         }
         compose(at: LngLat(lng: f.lng, lat: f.lat))

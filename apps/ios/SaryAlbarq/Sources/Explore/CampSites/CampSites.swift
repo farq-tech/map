@@ -285,11 +285,11 @@ enum CampReason {
         return out
     }
 
-    /// «الريح الليلة: شمالية ٢٥ كم/س · المكان في ظل طعس من الشمال».
+    /// «الريح الليلة: شمالية ٢٥ كم/س • المكان في ظل طعس من الشمال».
     static func windLine(_ s: CampSite, night: CampNight) -> String {
         var t = "الريح الليلة: \(windAdjective(night.fromDeg)) \(SaryFormat.number(Int(night.windKmh.rounded()))) كم/س"
         if night.gustKmh >= night.windKmh + 8 { t += "، هبّات \(SaryFormat.number(Int(night.gustKmh.rounded())))" }
-        if let w = shelterLine(s, night: night) { t += " · المكان \(w)" } else { t += " · المكان مكشوف لها" }
+        if let w = shelterLine(s, night: night) { t += " • المكان \(w)" } else { t += " • المكان مكشوف لها" }
         return t
     }
 
@@ -321,7 +321,7 @@ struct CampPlaceName: Equatable {
         case inside
         /// On the edge of the outline, within `CampNaming.edgeMeters` («على طرف نفود الثمامة»).
         case edge
-        /// Near a gazetteer place, `meters` away («قرب روضة نورة · ٣ كم»).
+        /// Near a gazetteer place, `meters` away («قرب روضة نورة • ٣ كم»).
         case near(meters: Double)
         /// The build's own `near_name` (a famous camping place within 4 km of the cell).
         case famous
@@ -339,7 +339,7 @@ struct CampPlaceName: Equatable {
     var lat: Double
     var lng: Double
 
-    /// The card's title: «في نفود الثمامة»، «قرب روضة نورة · ٣ كم»، «موقع كشتة».
+    /// The card's title: «في نفود الثمامة»، «قرب روضة نورة • ٣ كم»، «موقع كشتة».
     var title: String {
         switch relation {
         case .unnamed: return "موقع كشتة"
@@ -365,7 +365,7 @@ struct CampPlaceName: Equatable {
         guard case .near(let m) = relation else { return "" }
         let km = Int((m / 1000).rounded())
         /* RLM around the dot keeps it between the name and the digits in an RTL line. */
-        let sep = " \u{200F}·\u{200F} "
+        let sep = " \u{200F}•\u{200F} "
         return km < 1 ? "\(sep)أقل من ١ كم" : "\(sep)\(SaryFormat.number(km)) كم"
     }
 
@@ -374,7 +374,7 @@ struct CampPlaceName: Equatable {
     var subtitle: String? {
         if relation == .unnamed {
             let c = "\(SaryFormat.digits(String(format: "%.3f", lat)))، \(SaryFormat.digits(String(format: "%.3f", lng)))"
-            return "ما له اسم معروف" + (region.map { " · \($0)" } ?? "") + " · \(c)"
+            return "ما له اسم معروف" + (region.map { " • \($0)" } ?? "") + " • \(c)"
         }
         return kind
     }

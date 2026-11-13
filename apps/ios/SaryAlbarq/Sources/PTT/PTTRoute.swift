@@ -30,7 +30,7 @@ protocol PTTRoute: AnyObject {
     func endTransmit()
     /// Someone else is on air (nil: nobody). `callbacks.playbackReady` when the speaker is ready.
     func setRemote(_ name: String?)
-    /// «ترددات»: the channel name the system UI shows («قناة الطلعة · تردد ٣»).
+    /// «ترددات»: the channel name the system UI shows («قناة الطلعة • تردد ٣»).
     func setChannelName(_ name: String)
 }
 
@@ -228,7 +228,7 @@ final class PTTSystemRoute: NSObject, PTTRoute {
     private(set) var manager: PTChannelManager?
     private(set) var channelUUID: UUID?
     private var outingId: String?
-    /// What the system PTT UI calls the channel: «قناة الطلعة · تردد ٣».
+    /// What the system PTT UI calls the channel: «قناة الطلعة • تردد ٣».
     private var outingName = "قناة الطلعة"
     /// Set by the delegate when a push names the speaker: who to show.
     private(set) var joinedSystem = false

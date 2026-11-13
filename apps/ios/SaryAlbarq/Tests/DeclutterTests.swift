@@ -143,13 +143,13 @@ final class DeclutterTests: XCTestCase {
 
     func testHeaderTitleAndLine() {
         let t = trip(.underway, eta: Date(timeIntervalSince1970: 0))
-        /* Lovable: the outing's name on top, «إلى <الوجهة> · باقي … · نوصل …» under it. */
+        /* Lovable: the outing's name on top, «إلى <الوجهة> • باقي … • نوصل …» under it. */
         XCTAssertEqual(TripHeaderPresenter.title(outingName: "طلعة الثمامة", trip: t), "طلعة الثمامة")
         XCTAssertEqual(TripHeaderPresenter.title(outingName: "طلعة الثمامة", trip: trip(.needsDestination(canSet: true))), "طلعة الثمامة")
         XCTAssertEqual(TripHeaderPresenter.title(outingName: "طلعة الثمامة", trip: nil), "طلعة الثمامة")
         let line = TripHeaderPresenter.line(status: .active, trip: t, follow: nil, connection: .connected, nearbyCars: 0) ?? ""
-        XCTAssertTrue(line.hasPrefix("إلى روضة الثمامة · باقي ١٢ كم"), line)
-        XCTAssertTrue(line.contains(" · نوصل "), line)
+        XCTAssertTrue(line.hasPrefix("إلى روضة الثمامة • باقي ١٢ كم"), line)
+        XCTAssertTrue(line.contains(" • نوصل "), line)
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: trip(.notStarted), follow: nil, connection: .connected, nearbyCars: 0), "ما بدأت")
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: t, follow: "على المسار", connection: .connected, nearbyCars: 0), "على المسار")
         XCTAssertEqual(TripHeaderPresenter.line(status: .paused, trip: t, follow: nil, connection: .connected, nearbyCars: 0), "الطلعة متوقفة مؤقتًا")
@@ -400,7 +400,7 @@ final class DeclutterTests: XCTestCase {
     }
 
     func testThreeTabs() {
-        /* Lovable: «الخريطة · الأصدقاء · الطلعة» in the sheet (the word dictionary); the settings behind the header's gear. */
+        /* Lovable: «الخريطة • الأصدقاء • الطلعة» in the sheet (the word dictionary); the settings behind the header's gear. */
         XCTAssertEqual(LiveTabUI.sheetTabs.map(\.label), ["الخريطة", "الأصدقاء", "الطلعة"])
         XCTAssertEqual(LiveTabUI.more.label, "الإعدادات")
     }

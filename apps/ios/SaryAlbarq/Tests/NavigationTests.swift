@@ -569,7 +569,7 @@ final class LocalGuidanceTests: XCTestCase {
         XCTAssertEqual(t.name, "آخر موقع Alwald")
         XCTAssertEqual(t.position, LngLat(lng: 46.67, lat: 24.71))
         XCTAssertNil(t.memberId, "not a live member: no «تحرّك» follow-up")
-        XCTAssertEqual(t.staleNote(now: t0), "آخر موقع معروف · قبل ١٤ د", "never presented as live")
+        XCTAssertEqual(t.staleNote(now: t0), "آخر موقع معروف • قبل ١٤ د", "never presented as live")
         XCTAssertEqual(NavTargets.lastKnown(name: "Alwald", lat: nil, lng: 46.6, at: t0), .failure(.missing))
         /* «روح له» still refuses the same stale member: the last-known path is the silent card's only. */
         XCTAssertEqual(NavTargets.member(id: "u", name: "Alwald", isMe: false, position: riyadh, presence: .stale(since: t0)),
@@ -758,7 +758,7 @@ final class NavHUDTests: XCTestCase {
 
     func testTripLineAndShare() {
         let eta = Date(timeIntervalSince1970: 1_762_466_160) // 00:56 Riyadh
-        XCTAssertEqual(NavHUD.tripLine(meters: 19_000, eta: eta), "١٩ كم · ١٢:٥٦ ص")
+        XCTAssertEqual(NavHUD.tripLine(meters: 19_000, eta: eta), "١٩ كم • ١٢:٥٦ ص")
         let s = NavHUD.shareText(target: "حطين", eta: eta, seconds: 22 * 60)
         XCTAssertTrue(s.contains("إلى حطين") && s.contains("١٢:٥٦ ص") && s.contains("٢٢ د"), s)
     }
@@ -1251,7 +1251,7 @@ final class NavDriveLayoutTests: XCTestCase {
         let line = NavDriveLayout.tripLine(meters: 18_000, eta: Date())
         XCTAssertTrue(line.contains("كم"), line)
         XCTAssertTrue(line.contains("وصول "), line)
-        XCTAssertTrue(line.contains(" · "), line)
+        XCTAssertTrue(line.contains(" • "), line)
         XCTAssertEqual(NavDriveLayout.tripLine(meters: nil, eta: nil), "")
         let t = NavDriveLayout.timeParts(seconds: 25 * 60)
         XCTAssertEqual(t.unit, "د")

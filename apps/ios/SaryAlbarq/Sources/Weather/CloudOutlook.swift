@@ -76,7 +76,7 @@ enum CloudOutlookPresenter {
         guard o.ok, o.state != "uncertain", o.confidence >= max(minConfidence, o.min_confidence ?? 0) else { return nil }
         guard let motion = o.motion else { return nil }
         let age = o.image_age_min.map { "بحسب صور قبل \(ageText($0))" } ?? "بحسب آخر صور القمر"
-        let foot = "\(age) · مو حيّة، وهذا تقدير لحركة السحاب فقط، مو توقع مطر"
+        let foot = "\(age) • مو حيّة، وهذا تقدير لحركة السحاب فقط، مو توقع مطر"
         let at = subject.at
         let reach = subject.reach
         let margin = o.margin_minutes.map { " (±\(durationText($0)))" } ?? ""

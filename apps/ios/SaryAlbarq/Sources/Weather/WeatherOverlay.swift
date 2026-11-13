@@ -186,7 +186,7 @@ final class WeatherOverlay {
         case .wind:
             if drawn?.kind != .wind { removeAll(m); drawn = Drawn(kind: .wind, key: "wind-pending"); windFetchedAt = nil }
             installWind(m)
-            legend.time = "الريح الحين · نموذج"
+            legend.time = "الريح الحين • نموذج"
         case .green:
             install(m, kind: .green, key: "green", sources: [("green", WeatherLayerAPI.greenTiles())], min: 4, max: 12, bounds: [34, 16, 56, 33])
             legend.time = "آخر ٨ أيام مقارنة بالصيف"
@@ -531,7 +531,7 @@ final class WeatherOverlay {
         legend.frameIndex = i
         legend.frameCount = frames.count
         legend.age = Self.ageLabel(frames[i].time)
-        legend.time = "الساعة \(frames[i].label_ar)" + (i == frames.count - 1 ? " · آخر صورة" : "")
+        legend.time = "الساعة \(frames[i].label_ar)" + (i == frames.count - 1 ? " • آخر صورة" : "")
         legend.progress = frames.count > 1 ? Double(i) / Double(frames.count - 1) : 1
     }
 
@@ -636,7 +636,7 @@ final class WeatherLegendModel: ObservableObject {
     var onScrub: (Int) -> Void = { _ in }
 }
 
-/// «السحاب الآن · الساعة ٢:٠٠ م» + colour key + the source's credit line.
+/// «السحاب الآن • الساعة ٢:٠٠ م» + colour key + the source's credit line.
 struct WeatherLegendCard: View {
     @ObservedObject var model: WeatherLegendModel
     @Environment(\.sary) private var theme

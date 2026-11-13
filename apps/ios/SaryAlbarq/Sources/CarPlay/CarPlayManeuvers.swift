@@ -148,11 +148,11 @@ enum CarPlayManeuverMapper {
             let label = o.id == fastest ? (o.id == shortest ? "الأسرع والأقصر" : "الأسرع") : (o.id == shortest ? "الأقصر" : "طريق ثاني")
             let time = NavText.remaining(seconds: o.durationS)
             let dist = ArabicFormat.distance(o.distanceM)
-            var info = "\(time) · \(dist)"
-            if o.hasUnpaved { info += " · فيه ترابي" }
+            var info = "\(time) • \(dist)"
+            if o.hasUnpaved { info += " • فيه ترابي" }
             let via = (o.via ?? "").trimmingCharacters(in: .whitespaces)
-            return ChoiceText(id: o.id, summary: via.isEmpty ? [label] : ["\(label) · \(via)", label],
-                              info: [info], selection: [label + " · " + time])
+            return ChoiceText(id: o.id, summary: via.isEmpty ? [label] : ["\(label) • \(via)", label],
+                              info: [info], selection: [label + " • " + time])
         }
     }
 
@@ -240,7 +240,7 @@ enum CarPlayDestinations {
                                     symbol: "flag.fill", action: .trip(.rally)))
             case .wayBack:
                 let d = trail.start.flatMap { st in i.myPosition.map { Vehicle.distanceMeters($0, st.position) } }
-                outing.append(.init(title: SaryCopy.backTrack, detail: "على مسارك المسجّل" + (d.map { " · البداية على بعد \(ArabicFormat.distance($0))" } ?? ""),
+                outing.append(.init(title: SaryCopy.backTrack, detail: "على مسارك المسجّل" + (d.map { " • البداية على بعد \(ArabicFormat.distance($0))" } ?? ""),
                                     symbol: "arrow.uturn.backward", action: .trip(.wayBack)))
             case .place: break
             }

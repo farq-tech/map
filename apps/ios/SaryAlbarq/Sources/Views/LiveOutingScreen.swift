@@ -627,12 +627,12 @@ struct LiveOutingScreen: View {
         }
     }
 
-    /// «كشتة النفود الكبير · وصلتوا مخيم النفود» (Lovable's end card).
+    /// «كشتة النفود الكبير • وصلتوا مخيم النفود» (Lovable's end card).
     private func endedSubtitle(_ ui: LiveOutingUIState) -> String {
         if case .arrived = controller.tripPanel.phase, !controller.tripPanel.destinationName.isEmpty {
-            return "\(ui.outingName) · وصلتوا \(controller.tripPanel.destinationName)"
+            return "\(ui.outingName) • وصلتوا \(controller.tripPanel.destinationName)"
         }
-        return "\(ui.outingName) · ما أحد يشارك موقعه الآن"
+        return "\(ui.outingName) • ما أحد يشارك موقعه الآن"
     }
 
     /// The map's side (stopped): «تتبعني» and «أدوات» (+ «طريق العودة» when it fits the moment).
@@ -901,7 +901,7 @@ private struct LiveTopStack: View {
                 .transition(SaryTransition.banner(theme))
             if let moved = controller.navMemberMovedMeters, let t = nav.target {
                 Button { controller.navigateToMember(t.memberId ?? "") } label: {
-                    SaryButtonLabel(title: "\(t.name) تحرّك \(SaryFormat.distance(meters: moved)) · حدّث الطريق", systemImage: SaryIcon.retry)
+                    SaryButtonLabel(title: "\(t.name) تحرّك \(SaryFormat.distance(meters: moved)) • حدّث الطريق", systemImage: SaryIcon.retry)
                 }
                 .buttonStyle(.sary(.secondary, compact: true))
                 .accessibilityIdentifier("nav.memberMoved")
@@ -1024,10 +1024,10 @@ struct BackTrackPanel: View {
         case .arrived: return "هنا دخلت أول مرة."
         case .offTrack:
             let m = ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? ""
-            return "أنت على بعد \(m) من مسارك · ارجع له باتجاه السهم (\(ui.directionLabel))"
+            return "أنت على بعد \(m) من مسارك • ارجع له باتجاه السهم (\(ui.directionLabel))"
         case .onTrail:
             if ui.onGap { return "هذا الجزء لم يُسجَّل: خط مستقيم تقريبي، انتبه للطريق" }
-            return "باقي إلى نقطة البداية على مسارك · \(ui.directionLabel)"
+            return "باقي إلى نقطة البداية على مسارك • \(ui.directionLabel)"
         }
     }
 }
@@ -1039,7 +1039,7 @@ struct EndedTripBanner: View {
     var home: () -> Void
     /// «المزيد»: what still makes sense after the end (explore, search, weather…) — «أدوات الطلعة».
     var more: (() -> Void)? = nil
-    /// «كشتة النفود الكبير · وصلتوا مخيم النفود».
+    /// «كشتة النفود الكبير • وصلتوا مخيم النفود».
     var subtitle: String = "ما أحد يشارك موقعه الآن."
     @Environment(\.sary) private var theme
 

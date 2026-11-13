@@ -227,7 +227,7 @@ enum WeatherAlerts {
             let gust = soon.compactMap(\.gustKmh).max() ?? worst.gustKmh ?? 0
             out.append(WeatherAlertUI(kind: .wind, forDestination: forDestination, level: lvl,
                                       title: prefix + (lvl == 2 ? "رياح شديدة" : "رياح قوية"),
-                                      detail: "هبّات حتى \(WeatherFormat.speed(gust)) \(when(worst.time, now: now)) · ثبّت الخيام وانتبه للأبواب"))
+                                      detail: "هبّات حتى \(WeatherFormat.speed(gust)) \(when(worst.time, now: now)) • ثبّت الخيام وانتبه للأبواب"))
         }
 
         /* Dust reducing visibility */
@@ -237,7 +237,7 @@ enum WeatherAlerts {
             let lvl = dustNow == .heavy ? 2 : 1
             out.append(WeatherAlertUI(kind: .dust, forDestination: forDestination, level: lvl,
                                       title: prefix + (dustNow == .heavy ? "غبار كثيف يحجب الرؤية" : "\(dustNow.label) يقلل الرؤية"),
-                                      detail: dustNow == .heavy ? "الرؤية قد تقل إلى كيلو أو أقل · خفّف السرعة وشغّل الأنوار" : "خفّفوا السرعة وشغّلوا الأنوار وتلاحقوا"))
+                                      detail: dustNow == .heavy ? "الرؤية قد تقل إلى كيلو أو أقل • خفّف السرعة وشغّل الأنوار" : "خفّفوا السرعة وشغّلوا الأنوار وتلاحقوا"))
         }
 
         /* Rain, and floods near a wadi */
@@ -248,13 +248,13 @@ enum WeatherAlerts {
             var bits = [when(first.time, now: now)]
             if let chance { bits.append("احتمال \(SaryFormat.percent(Int(chance.rounded())))") }
             if total >= 0.1 { bits.append("نحو \(WeatherFormat.mm(total))") }
-            out.append(WeatherAlertUI(kind: .rain, forDestination: forDestination, level: 1, title: prefix + "مطر متوقع", detail: bits.joined(separator: " · ")))
+            out.append(WeatherAlertUI(kind: .rain, forDestination: forDestination, level: 1, title: prefix + "مطر متوقع", detail: bits.joined(separator: " • ")))
         }
         if let w = wadi, w.distanceM <= WeatherThresholds.wadiNearM, WeatherRules.floodRain(r, now: now) {
             let where_ = w.distanceM <= WeatherThresholds.wadiInsideM ? "أنتم في مجرى وادٍ أو بجانبه" : "وادٍ على بعد \(SaryFormat.distance(meters: w.distanceM))"
             out.append(WeatherAlertUI(kind: .flood, forDestination: forDestination, level: w.distanceM <= WeatherThresholds.wadiInsideM ? 2 : 1,
                                       title: prefix + "انتبهوا من السيول في الشعبان والأودية",
-                                      detail: "\(where_) ومطر متوقع \(WeatherFormat.mm(WeatherRules.rainTotal(r, now: now, hours: WeatherThresholds.floodHours))) · لا تخيّموا في بطن الوادي. تقدير، تابع تحذيرات المركز الوطني للأرصاد"))
+                                      detail: "\(where_) ومطر متوقع \(WeatherFormat.mm(WeatherRules.rainTotal(r, now: now, hours: WeatherThresholds.floodHours))) • لا تخيّموا في بطن الوادي. تقدير، تابع تحذيرات المركز الوطني للأرصاد"))
         }
         return out
     }

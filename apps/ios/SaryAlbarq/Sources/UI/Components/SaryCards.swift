@@ -157,7 +157,7 @@ struct SaryStationRow: View {
                         HStack(spacing: 6) {
                             SaryDistanceLabel(meters: station.distanceMeters, bearing: station.bearingDegrees, style: .footnote)
                             if let d = station.detail {
-                                Text("· \(d)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
+                                Text("• \(d)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                             }
                         }
                     }

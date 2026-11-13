@@ -160,7 +160,7 @@ struct ChatHomeView: View {
                         }
                         ForEach(former, id: \.self) { w in
                             row(w, title: context.name(w.peer ?? "", fallback: chat.threads[w]?.latest?.sender_name), color: nil,
-                                subtitle: "للقراءة فقط · " + (chat.threads[w]?.latest.map(ChatPreview.line) ?? ""))
+                                subtitle: "للقراءة فقط • " + (chat.threads[w]?.latest.map(ChatPreview.line) ?? ""))
                         }
                     }
                     .sarySurface(radius: SaryRadius.l)
@@ -483,7 +483,7 @@ struct ChatThreadView: View {
 
     private func accessibility(_ m: ChatMessage) -> String {
         let who = m.sender_id == context.me ? "أنت" : context.name(m.sender_id, fallback: m.sender_name)
-        return "\(who): \(ChatPreview.line(m)) · \(time(m.created_at))"
+        return "\(who): \(ChatPreview.line(m)) • \(time(m.created_at))"
     }
 
     private func time(_ iso: String) -> String {

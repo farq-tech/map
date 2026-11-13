@@ -208,7 +208,7 @@ enum MetricsExtract {
             if let sig = int(m["signal"]) { parts.append("signal \(sig)") }
             if let t = int(m["exceptionType"]) { parts.append("exception \(t)") }
             if let r = m["terminationReason"] as? String { parts.append(String(r.prefix(120))) }
-            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+            return parts.isEmpty ? nil : parts.joined(separator: " • ")
         case "cpu": return (m["totalCPUTime"] as? String).map { "CPU \($0)" }
         case "diskWrite": return (m["writesCaused"] as? String).map { "كتابة \($0)" }
         case "launch": return (m["launchDuration"] as? String).map { "الفتح \($0)" }

@@ -378,7 +378,7 @@ final class LiveChannelTests: XCTestCase {
         XCTAssertGreaterThan(ch.diagnostics.retryInMs, 0)
         clock.advance(1_000)
         XCTAssertEqual(ch.diagnostics.reconnects, 1)
-        XCTAssertEqual(PTTLinkText.line(ch.diagnostics, nowMs: clock.nowMs), "الاتصال: يعيد الاتصال… (المحاولة 2) · آخر انقطاع: 1006 (انقطع)")
+        XCTAssertEqual(PTTLinkText.line(ch.diagnostics, nowMs: clock.nowMs), "الاتصال: يعيد الاتصال… (المحاولة 2) • آخر انقطاع: 1006 (انقطع)")
         sockets[1].onOpen()
         ready(sockets[1])
         XCTAssertTrue(PTTLinkText.line(ch.diagnostics, nowMs: clock.nowMs + 180_000).hasPrefix("الاتصال: متصل منذ 3 د"))

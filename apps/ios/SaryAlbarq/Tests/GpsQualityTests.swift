@@ -234,7 +234,7 @@ final class GpsQualityTests: XCTestCase {
         XCTAssertEqual(LocationTuning.plan(n), .init(desiredAccuracy: kCLLocationAccuracyBestForNavigation, distanceFilter: kCLDistanceFilterNone, activityType: .automotiveNavigation))
         n.onRoad = false
         XCTAssertEqual(LocationTuning.plan(n)?.activityType, .otherNavigation, "dunes: no road snapping")
-        XCTAssertEqual(LocationTuning.describe(LocationTuning.plan(n)), "nav · none · otherNav")
+        XCTAssertEqual(LocationTuning.describe(LocationTuning.plan(n)), "nav • none • otherNav")
     }
 
     func testBackgroundCadenceStaysInsideTheLiveWindow() {
@@ -438,7 +438,7 @@ final class MetricsSummaryTests: XCTestCase {
         XCTAssertNil(MetricsExtract.seconds("12 kB"))
         XCTAssertEqual(MetricsExtract.exitReason("cumulativeAppWatchdogExitCount"), "appWatchdog")
         XCTAssertEqual(MetricsExtract.exitReason("cumulativeNormalAppExitCount"), "normalApp")
-        XCTAssertEqual(MetricsLabels.exitLabel("foreground.appWatchdog"), "بالواجهة · تعليق طويل (watchdog)")
+        XCTAssertEqual(MetricsLabels.exitLabel("foreground.appWatchdog"), "بالواجهة • تعليق طويل (watchdog)")
     }
 
     private func summary(_ i: Int) -> MetricsSummary {

@@ -671,7 +671,7 @@ struct LivePanelView: View {
                 if !controller.legs.timeline.isEmpty { OutingLegTimeline(legs: controller.legs.timeline, now: ui.now) }
                 if let d = controller.legPicked {
                     Button { controller.flowTapped(.changeDestination) } label: {
-                        Label("الوجهة \(d.name) · غيّر", systemImage: "arrow.triangle.swap").saryText(.footnote, weight: .bold)
+                        Label("الوجهة \(d.name) • غيّر", systemImage: "arrow.triangle.swap").saryText(.footnote, weight: .bold)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("flow.changeDestination")
@@ -752,7 +752,7 @@ struct TrailSettingsSection: View {
                 .padding(.bottom, theme.space(.s))
             }
             SaryDivider()
-            SaryToggleRow(title: "طابق مساري مع الطرق", subtitle: "يرسمه على الشوارع اللي مشيت فيها · في البر يبقى مثل ما سجّله الجوال", systemImage: "road.lanes",
+            SaryToggleRow(title: "طابق مساري مع الطرق", subtitle: "يرسمه على الشوارع اللي مشيت فيها • في البر يبقى مثل ما سجّله الجوال", systemImage: "road.lanes",
                           isOn: Binding(get: { card.matchOn }, set: { controller.setTrailMatching($0) }), id: "trail.match")
                 .disabled(!card.recordingOn)
             SaryDivider()
@@ -804,7 +804,7 @@ struct TrailSettingsSection: View {
     private var backgroundSubtitle: String {
         if !card.backgroundOn { return "متوقف: يُسجَّل والتطبيق مفتوح فقط" }
         if !card.backgroundAllowed { return "يحتاج إذن الموقع من iOS" }
-        return card.recordingInBackground ? "يُسجَّل الآن والشاشة مقفلة" : "على جوالك فقط · يستهلك بطارية أكثر"
+        return card.recordingInBackground ? "يُسجَّل الآن والشاشة مقفلة" : "على جوالك فقط • يستهلك بطارية أكثر"
     }
 }
 
@@ -1071,7 +1071,7 @@ struct NearestStationsView: View {
                 }
             }
             /* ODbL: the attribution must stay readable (secondary, also at night). */
-            Text("© OpenStreetMap contributors · ODbL").saryText(.micro).foregroundStyle(theme.palette.textSecondary)
+            Text("© OpenStreetMap contributors • ODbL").saryText(.micro).foregroundStyle(theme.palette.textSecondary)
                 .environment(\.layoutDirection, .leftToRight)
         }
         .padding(theme.space(.l))

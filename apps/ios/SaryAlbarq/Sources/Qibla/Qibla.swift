@@ -389,7 +389,7 @@ struct QiblaView: View {
                 .font(NewUI.enabled ? .system(size: 52, weight: .bold, design: .rounded).monospacedDigit() : .sary(44, .bold))
                 .foregroundStyle(p.textPrimary)
                 .accessibilityIdentifier("qibla.degrees")
-            Text("اتجاه القبلة من الشمال الحقيقي · مكة على بعد \(SaryFormat.number(Int(Qibla.distanceKm(from: c).rounded()))) كم")
+            Text("اتجاه القبلة من الشمال الحقيقي • مكة على بعد \(SaryFormat.number(Int(Qibla.distanceKm(from: c).rounded()))) كم")
                 .saryText(.footnote).foregroundStyle(p.textSecondary)
                 .multilineTextAlignment(.center)
         }

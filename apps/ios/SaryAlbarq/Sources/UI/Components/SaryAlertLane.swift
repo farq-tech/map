@@ -121,7 +121,7 @@ struct SaryAlertCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("خرجت عن المسار").saryText(theme.drive ? .headline : .callout, weight: .bold)
                         .foregroundStyle(theme.palette.textPrimary).lineLimit(1)
-                    Text("على بعد \(SaryFormat.distance(meters: o.meters)) من «\(o.trackName)» · ارجع باتجاه السهم")
+                    Text("على بعد \(SaryFormat.distance(meters: o.meters)) من «\(o.trackName)» • ارجع باتجاه السهم")
                         .saryNumber(.footnote, weight: detailWeight).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
                 }
             }

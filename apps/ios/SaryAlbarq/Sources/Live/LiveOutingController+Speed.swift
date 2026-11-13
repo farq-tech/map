@@ -27,7 +27,7 @@ extension LiveOutingController {
         if speedState.gate.update(speed.current, nowMs: nowMs) {
             /* A gentle nudge: soft tap + one line in the alert lane (rate-limited by the gate). */
             UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.8)
-            pushAlert(LiveAlertUI(id: "speed-limit", kind: .toast("تجاوزت \(SaryFormat.speed(kmh: Double(limit))) · خفّف السرعة")), ttl: 6)
+            pushAlert(LiveAlertUI(id: "speed-limit", kind: .toast("تجاوزت \(SaryFormat.speed(kmh: Double(limit))) • خفّف السرعة")), ttl: 6)
         }
     }
 

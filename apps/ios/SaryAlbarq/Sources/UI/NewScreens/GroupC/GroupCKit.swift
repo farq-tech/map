@@ -14,7 +14,7 @@ struct ChatHomePage<Content: View>: View {
 
     var body: some View {
         if NewUI.enabled {
-            SaryScreenScaffold(title: "المحادثات", subtitle: "\(outingName) · \(SaryFormat.digits(String(count))) في الطلعة",
+            SaryScreenScaffold(title: "المحادثات", subtitle: "\(outingName) • \(SaryFormat.digits(String(count))) في الطلعة",
                                closeID: "chat.home.close", onClose: close) {
                 VStack(alignment: .leading, spacing: SarySpace.l.rawValue) { content }
             }

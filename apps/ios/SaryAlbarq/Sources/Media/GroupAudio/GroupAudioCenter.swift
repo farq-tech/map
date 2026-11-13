@@ -412,7 +412,7 @@ final class GroupAudioCenter: ObservableObject {
     private func updateNowPlaying() {
         guard let item = state.item else { return }
         let who = state.by.map { name(of: $0) } ?? ""
-        let artist = [item.subtitle, who.isEmpty ? "" : "شغّلها \(who)"].filter { !$0.isEmpty }.joined(separator: " · ")
+        let artist = [item.subtitle, who.isEmpty ? "" : "شغّلها \(who)"].filter { !$0.isEmpty }.joined(separator: " • ")
         nowPlaying.update(title: item.title, artist: artist, live: item.live, position: engine.position, duration: item.duration_s ?? engine.duration,
                           playing: state.playing && ducking.shouldPlay)
     }

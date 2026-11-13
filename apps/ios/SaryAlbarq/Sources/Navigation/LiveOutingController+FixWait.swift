@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Guidance asked for while my fix is old or missing (build 21 regression: the trip's guidance
 /// waited for a fresh fix in silence — no banner, no line, no word). Now the wait is said
-/// («ننتظر موقعك… · الدقة ±N م»), the GPS is asked at its best at once, and the guidance starts
+/// («ننتظر موقعك… • الدقة ±N م»), the GPS is asked at its best at once, and the guidance starts
 /// by itself with the first fresh fix. Past `slowAfterS`: «اطلع لمكان مكشوف», still trying.
 struct NavFixWait: Equatable {
     enum Pending: Equatable {
@@ -33,7 +33,7 @@ struct NavFixWait: Equatable {
     static func text(accuracyM: Double?, slow: Bool) -> String {
         if slow { return "ما قدرنا نحدد موقعك، اطلع لمكان مكشوف" }
         guard let a = accuracyM, a >= 0, a.isFinite else { return "ننتظر موقعك…" }
-        return "ننتظر موقعك… · الدقة ±\(ArabicFormat.number(a.rounded())) م"
+        return "ننتظر موقعك… • الدقة ±\(ArabicFormat.number(a.rounded())) م"
     }
 }
 
@@ -106,7 +106,7 @@ extension LiveOutingController {
     #endif
 }
 
-/// «ننتظر موقعك… · الدقة ±٣٥ م» with «إلغاء» (the top stack of the live screen).
+/// «ننتظر موقعك… • الدقة ±٣٥ م» with «إلغاء» (the top stack of the live screen).
 struct NavFixWaitRow: View {
     var text: String
     var slow: Bool

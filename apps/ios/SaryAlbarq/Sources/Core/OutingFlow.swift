@@ -255,13 +255,13 @@ struct WaitingLeaderInfo: Equatable {
     /// «أمير الطلعة فهد متصل الآن» / «… آخر ظهور قبل ١٢ د» / «… غير متصل الآن».
     var leader: String
     var leaderOnline: Bool
-    /// «الأصدقاء ٤ · المتصلين ٢».
+    /// «الأصدقاء ٤ • المتصلين ٢».
     var members: String
-    /// Nil while my connection is up; «اتصالك: بلا إنترنت · آخر حالة وصلتنا» otherwise.
+    /// Nil while my connection is up; «اتصالك: بلا إنترنت • آخر حالة وصلتنا» otherwise.
     var connection: String?
 
     /// The one line under the button.
-    var line: String { "\(connection ?? leader) · \(members)" }
+    var line: String { "\(connection ?? leader) • \(members)" }
     /// Everything, for VoiceOver.
     var accessibility: String {
         var parts = ["ما بدأت الطلعة", leader, members]
@@ -292,9 +292,9 @@ enum WaitingLeader {
             leaderText = "ما نعرف حالة \(SaryCopy.leader)"
         }
         let connected = members.filter { $0.user_id == myId ? myLinkUp : $0.online == true }.count
-        let membersText = "\(SaryCopy.members) \(SaryFormat.number(members.count)) · المتصلين \(SaryFormat.number(connected))"
+        let membersText = "\(SaryCopy.members) \(SaryFormat.number(members.count)) • المتصلين \(SaryFormat.number(connected))"
         return WaitingLeaderInfo(leader: leaderText, leaderOnline: online, members: membersText,
-                                 connection: myLinkUp ? nil : "اتصالك: \(myLinkText) · آخر حالة وصلتنا")
+                                 connection: myLinkUp ? nil : "اتصالك: \(myLinkText) • آخر حالة وصلتنا")
     }
 }
 
@@ -332,14 +332,14 @@ enum OutingFlow {
             /* «… مباشر» is the sheet's line (SarySheetSummary): the header does not repeat the count. */
             return OutingFlowUI(state: s, line: liveLine(0), primary: endFirst ? .endOuting : .whereTo)
         case let .picked(d):
-            return OutingFlowUI(state: s, line: "الوجهة \(d.name) · جاهزين؟", primary: .startLeg)
+            return OutingFlowUI(state: s, line: "الوجهة \(d.name) • جاهزين؟", primary: .startLeg)
         case let .onLeg(leg):
             /* «أوقف التوجيه» is not an arrival: the leg goes on and its one primary action brings the
              * guidance back. «وصلنا» stays in the «الرحلة» card for when we really are there. */
             let paused = i.guidance == .paused
             let parts = ["في الطريق إلى \(leg.destination.name)", i.remainingM.map { SaryFormat.distance(meters: $0) }, minutesLine(i.eta, now: i.now),
                          paused ? "التوجيه موقّف" : nil]
-            return OutingFlowUI(state: s, line: parts.compactMap { $0 }.joined(separator: " · "), primary: paused ? .resumeGuidance : .arrived)
+            return OutingFlowUI(state: s, line: parts.compactMap { $0 }.joined(separator: " • "), primary: paused ? .resumeGuidance : .arrived)
         case let .stopped(at, _):
             return OutingFlowUI(state: s, line: "واقفين عند \(at)", primary: endFirst ? .endOuting : .whereTo)
         case .ended:
@@ -347,9 +347,9 @@ enum OutingFlow {
         }
     }
 
-    /// «الطلعة شغّالة · ٤ مباشر».
+    /// «الطلعة شغّالة • ٤ مباشر».
     static func liveLine(_ n: Int) -> String {
-        n > 0 ? "الطلعة شغّالة · \(SaryFormat.number(n)) مباشر" : "الطلعة شغّالة"
+        n > 0 ? "الطلعة شغّالة • \(SaryFormat.number(n)) مباشر" : "الطلعة شغّالة"
     }
 
     /// «١٨ د» / «١ س ٥ د»; nil without an ETA. Whole minutes counted the way the guidance bar counts

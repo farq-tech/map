@@ -378,7 +378,7 @@ struct SaryParticipantRow: View {
     }
 }
 
-/// «عن أمير الرحلة ١٫٢ كم» / «عن المقدمة …» · «واقف منذ ٤ د» on a member's row (unit-tested).
+/// «عن أمير الرحلة ١٫٢ كم» / «عن المقدمة …» • «واقف منذ ٤ د» on a member's row (unit-tested).
 enum SaryConvoyLine {
     /// Shown once a live car has stood still this long (a red light is not «واقف»).
     static let stoppedAfterS: TimeInterval = 60
@@ -391,7 +391,7 @@ enum SaryConvoyLine {
         if let s = p.stoppedSince, p.presence.isLive, now.timeIntervalSince(s) >= stoppedAfterS {
             parts.append("واقف منذ \(SaryFormat.number(Int(now.timeIntervalSince(s) / 60))) د")
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 }
 
@@ -457,10 +457,10 @@ struct SaryParticipantCard: View {
 
             if let r = p.presenceReason {
                 /* Why they are not live, and what fixes it — never a vague «انقطع». */
-                SaryInlineMessage(text: [r.text, r.fix].compactMap { $0 }.joined(separator: " · "), tone: r == .hidden ? .info : .warning)
+                SaryInlineMessage(text: [r.text, r.fix].compactMap { $0 }.joined(separator: " • "), tone: r == .hidden ? .info : .warning)
                     .accessibilityIdentifier("participant.reason")
             } else if case .stale(let since) = p.presence {
-                SaryInlineMessage(text: "\(SaryFormat.lastUpdate(since: since, now: state.now)) · قد يكون مكانه تغيّر", tone: .warning)
+                SaryInlineMessage(text: "\(SaryFormat.lastUpdate(since: since, now: state.now)) • قد يكون مكانه تغيّر", tone: .warning)
             }
             if state.canNudge {
                 Button(action: actions.nudge) { SaryButtonLabel(title: "نبّهه", systemImage: "bell.badge.fill") }

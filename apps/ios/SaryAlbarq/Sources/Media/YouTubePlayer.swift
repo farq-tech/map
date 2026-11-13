@@ -208,7 +208,7 @@ final class StubMediaPlayer: MediaPlayerEngine {
         self.videoId = videoId
         base = start
         since = play ? Date() : nil
-        label.text = "مشغّل تجريبي · \(videoId)"
+        label.text = "مشغّل تجريبي • \(videoId)"
         onEvent(play ? .playing : .paused)
     }
     func play() { guard since == nil, videoId != nil else { return }; since = Date(); onEvent(.playing) }

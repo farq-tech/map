@@ -129,7 +129,7 @@ extension View {
 
 // MARK: - Summary line
 
-/// «٣ مشارك · ٢ مباشر · الأقرب ٩٠٠ م» — the whole minimized sheet. Tapping it
+/// «٣ مشارك • ٢ مباشر • الأقرب ٩٠٠ م» — the whole minimized sheet. Tapping it
 /// expands to «نصف».
 struct SarySheetSummary: View {
     var participants: [ParticipantUI]
@@ -211,7 +211,7 @@ struct SarySheetSummary: View {
     }
 
     private var dot: some View {
-        Text("·").foregroundStyle(theme.palette.textTertiary)
+        Text("•").foregroundStyle(theme.palette.textTertiary)
     }
 }
 

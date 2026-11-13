@@ -60,7 +60,7 @@ enum Enjad {
             var gps: [String] = []
             if let a = f.accuracy, a >= 0 { gps.append("دقة الموقع: ±\(SaryFormat.number(Int(a.rounded()))) م") }
             gps.append("آخر تحديث: \(NavText.clock(Date(timeIntervalSince1970: f.atMs / 1000)))")
-            l.append(gps.joined(separator: " · "))
+            l.append(gps.joined(separator: " • "))
         } else {
             l.append("الموقع: غير متوفر (ما وصلنا موقع من الجوال)")
         }
@@ -68,7 +68,7 @@ enum Enjad {
         if let b = i.batteryPercent { extra.append("البطارية: \(SaryFormat.percent(b))") }
         if let n = i.memberCount { extra.append("عدد الأفراد في الطلعة: \(SaryFormat.number(n))") }
         if let c = i.car, !c.isEmpty { extra.append("السيارة: \(c)") }
-        if !extra.isEmpty { l.append(extra.joined(separator: " · ")) }
+        if !extra.isEmpty { l.append(extra.joined(separator: " • ")) }
         if let ln = i.leaderName, !ln.isEmpty {
             l.append("أمير الطلعة: \(ln)\((i.leaderPhone ?? "").isEmpty ? "" : " — \(i.leaderPhone!)")")
         }

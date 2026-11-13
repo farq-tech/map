@@ -700,7 +700,7 @@ final class OutingWalkieTalkie: ObservableObject {
         updateSystemChannelName()
     }
 
-    /// «قناة الطلعة · تردد ٣» on the Lock Screen / Dynamic Island.
+    /// «قناة الطلعة • تردد ٣» on the Lock Screen / Dynamic Island.
     private func updateSystemChannelName() {
         route.setChannelName(systemChannelName)
     }

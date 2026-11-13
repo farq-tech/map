@@ -274,7 +274,7 @@ struct GpsQualityStats: Equatable {
     var source: String = "—"
     var accepted = 0
     var rejected: [FixRejection: Int] = [:]
-    /// The settings in use, e.g. "nav · none · otherNav".
+    /// The settings in use, e.g. "nav • none • otherNav".
     var settings: String = "—"
     var motion: MotionClass = .parked
     var precise = true
@@ -291,12 +291,12 @@ struct GpsQualityStats: Equatable {
     /// One line per row, Latin digits (it is read by whoever fixes it).
     var lines: [String] {
         func n(_ v: Double?, _ unit: String) -> String { v.map { String(format: "%.0f", $0) + unit } ?? "—" }
-        let r = FixRejection.allCases.map { "\($0.rawValue) \(rejected[$0] ?? 0)" }.joined(separator: " · ")
+        let r = FixRejection.allCases.map { "\($0.rawValue) \(rejected[$0] ?? 0)" }.joined(separator: " • ")
         return [
-            "الدقة ±\(n(lastAccuracyM, " m")) · السرعة ±\(lastSpeedAccuracy.map { String(format: "%.1f m/s", $0) } ?? "—") · الاتجاه ±\(n(lastCourseAccuracy, "°"))",
-            "\(String(format: "%.1f", hz)) Hz · العمر \(lastAgeMs.map { String(format: "%.1f s", $0 / 1000) } ?? "—") · \(source)\(precise ? "" : " · تقريبي")",
-            "مقبول \(accepted) · مرفوض \(rejectedTotal) (\(r))",
-            "\(motion.rawValue) · \(settings) · heading \(headingSource.rawValue)",
+            "الدقة ±\(n(lastAccuracyM, " m")) • السرعة ±\(lastSpeedAccuracy.map { String(format: "%.1f m/s", $0) } ?? "—") • الاتجاه ±\(n(lastCourseAccuracy, "°"))",
+            "\(String(format: "%.1f", hz)) Hz • العمر \(lastAgeMs.map { String(format: "%.1f s", $0 / 1000) } ?? "—") • \(source)\(precise ? "" : " • تقريبي")",
+            "مقبول \(accepted) • مرفوض \(rejectedTotal) (\(r))",
+            "\(motion.rawValue) • \(settings) • heading \(headingSource.rawValue)",
         ]
     }
 }

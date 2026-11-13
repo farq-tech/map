@@ -153,7 +153,7 @@ struct OfflineMapsView: View {
         parts.append(a.layers.contains(.topo) ? "قمر صناعي + طبوغرافي" : "قمر صناعي")
         parts.append(a.isComplete ? "جاهزة بلا إنترنت" : "ناقصة \(SaryFormat.percent(Int(Double(a.completed) / Double(max(1, a.required)) * 100))) — نزّلها مرة ثانية")
         if let d = a.createdAt { parts.append(SaryFormat.elapsed(since: d, now: Date())) }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 }
 
@@ -241,7 +241,7 @@ struct OfflineAreaPicker: View {
             default: EmptyView()
             }
             SaryTextField(title: "اسم المنطقة", placeholder: "مثل: نفود الثويرات", text: $name, id: "offline.name", maxLength: 40)
-            SaryToggleRow(title: "مع الخريطة الطبوغرافية", subtitle: "خطوط الكنتور والارتفاعات بلا إنترنت · يزيد الحجم",
+            SaryToggleRow(title: "مع الخريطة الطبوغرافية", subtitle: "خطوط الكنتور والارتفاعات بلا إنترنت • يزيد الحجم",
                           systemImage: MapLayer.topo.systemImage, isOn: $withTopo, id: "offline.topo")
                 .onChange(of: withTopo) { _, _ in if let b = box { scheduleEstimate(b) } }
             Button {

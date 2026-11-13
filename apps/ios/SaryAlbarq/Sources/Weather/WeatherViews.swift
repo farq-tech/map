@@ -104,7 +104,7 @@ struct WeatherCardView: View {
             if let w = ui.wind {
                 HStack(spacing: theme.space(.s)) {
                     WindArrow(degrees: w.arrowDeg, size: 18, tint: w.level > 0 ? p.warningText : p.accentText)
-                    Text([w.name, w.speed, w.gust].compactMap { $0 }.joined(separator: " · "))
+                    Text([w.name, w.speed, w.gust].compactMap { $0 }.joined(separator: " • "))
                         .saryNumber(.subhead, weight: w.level > 0 ? .bold : .medium)
                         .foregroundStyle(w.level > 0 ? p.warningText : p.textPrimary)
                         .lineLimit(2)
@@ -116,7 +116,7 @@ struct WeatherCardView: View {
                     .foregroundStyle((ui.dust ?? .clear) >= .moderate ? p.warningText : p.textSecondary).frame(width: 18)
                 Text(ui.dustText).saryText(.subhead, weight: (ui.dust ?? .clear) >= .moderate ? .bold : .medium)
                     .foregroundStyle((ui.dust ?? .clear) >= .moderate ? p.warningText : p.textPrimary)
-                Text("· الرؤية \(ui.visibility)").saryNumber(.subhead).foregroundStyle(p.textSecondary).lineLimit(1)
+                Text("• الرؤية \(ui.visibility)").saryNumber(.subhead).foregroundStyle(p.textSecondary).lineLimit(1)
             }
             HStack(spacing: theme.space(.s)) {
                 Image(systemName: "cloud.rain.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.textSecondary).frame(width: 18)
@@ -125,7 +125,7 @@ struct WeatherCardView: View {
         }
     }
 
-    /// When and where (Build 36 item 12): «تعذّر التحديث · آخر تحديث ٤:١٢ م (قبل ٣ د) · بيانات الطقس: Open-Meteo»,
+    /// When and where (Build 36 item 12): «تعذّر التحديث • آخر تحديث ٤:١٢ م (قبل ٣ د) • بيانات الطقس: Open-Meteo»,
     /// then «نقطة التوقع على بعد ٢ كم منك».
     private var footer: some View {
         let p = theme.palette
@@ -151,7 +151,7 @@ struct WeatherCardView: View {
         if ui.offline { parts.append("تعذّر التحديث") }
         if !ui.updated.isEmpty { parts.append(ui.updated) }
         parts.append(OpenMeteo.attribution)
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 }
 
@@ -247,7 +247,7 @@ struct WeatherSheet: View {
                     Text("نرسل لـOpen-Meteo إحداثيات تقريبية لمنطقة الطلعة (مقرّبة لنحو ١١ كم)\(weather.destinationPoint != nil ? "، وإحداثيات الوجهة كما حُددت" : ""). لا نرسل مواقع الأعضاء ولا اسمك أو حسابك.")
                         .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
                     Link(destination: OpenMeteo.siteURL) {
-                        Text("\(OpenMeteo.attribution) (CC BY 4.0) · نماذج توقعات، لا قراءات محطات")
+                        Text("\(OpenMeteo.attribution) (CC BY 4.0) • نماذج توقعات، لا قراءات محطات")
                             .saryText(.footnote, weight: .bold).foregroundStyle(p.accentText)
                     }
                 }
@@ -308,7 +308,7 @@ struct WeatherSheet: View {
                     Text("نرسل لـOpen-Meteo إحداثيات تقريبية لمنطقة الطلعة (مقرّبة لنحو ١١ كم)\(weather.destinationPoint != nil ? "، وإحداثيات الوجهة كما حُددت" : ""). لا نرسل مواقع الأعضاء ولا اسمك أو حسابك.")
                         .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
                     Link(destination: OpenMeteo.siteURL) {
-                        Text("\(OpenMeteo.attribution) (CC BY 4.0) · نماذج توقعات، لا قراءات محطات")
+                        Text("\(OpenMeteo.attribution) (CC BY 4.0) • نماذج توقعات، لا قراءات محطات")
                             .saryText(.footnote, weight: .bold).foregroundStyle(p.accentText)
                     }
                 }
@@ -366,7 +366,7 @@ struct WeatherSheet: View {
                         .labelsHidden()
                     Button("الآن") { weather.departure = nil; pickDeparture = false }.saryText(.subhead, weight: .bold)
                 } else {
-                    Button(weather.departure.map { WeatherFormat.clock($0) } ?? "الآن · غيّر") { pickDeparture = true }
+                    Button(weather.departure.map { WeatherFormat.clock($0) } ?? "الآن • غيّر") { pickDeparture = true }
                         .saryText(.subhead, weight: .bold)
                         .accessibilityIdentifier("weather.departure")
                 }

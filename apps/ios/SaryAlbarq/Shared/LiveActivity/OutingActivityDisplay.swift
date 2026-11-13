@@ -90,7 +90,7 @@ struct OutingActivityDisplay: Equatable {
     var speedText: String = "—"
     /// «الرحلة»: 0...1 for the bar, nil hides the trip row.
     var tripFraction: Double?
-    /// "قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م", or "وصلنا 🎉".
+    /// "قطعنا ٦٢٪ • باقي ١٢ كم • نوصل ٤:٣٠ م", or "وصلنا 🎉".
     var tripLine: String?
     /// Compact island: "١٢ كم" left to the destination.
     var tripShort: String?
@@ -135,7 +135,7 @@ struct OutingActivityDisplay: Equatable {
             short = d
         }
         if let e = s.tripETA, !stale { parts.append("نوصل \(ActivityFormat.clock(e))") }
-        return (Double(min(100, max(0, p))) / 100, parts.joined(separator: " · "), short)
+        return (Double(min(100, max(0, p))) / 100, parts.joined(separator: " • "), short)
     }
 
     static func banner(_ s: OutingActivityState) -> Banner? {

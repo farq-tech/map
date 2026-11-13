@@ -57,8 +57,8 @@ final class SaryFormatTests: XCTestCase {
                           distanceMeters: d, bearingDegrees: nil, batteryPercent: nil, note: nil, hasPhone: false)
         }
         let list = [p("me", me: true, .live, nil), p("a", .live, 900), p("b", .stale(since: now), 6_100)]
-        XCTAssertEqual(SaryFormat.peekSummary(list), "٣ مشارك · ٢ مباشر · الأقرب ٩٠٠ م")
-        XCTAssertEqual(SaryFormat.peekSummary([p("me", me: true, .live, nil)]), "١ مشارك · ١ مباشر")
+        XCTAssertEqual(SaryFormat.peekSummary(list), "٣ مشارك • ٢ مباشر • الأقرب ٩٠٠ م")
+        XCTAssertEqual(SaryFormat.peekSummary([p("me", me: true, .live, nil)]), "١ مشارك • ١ مباشر")
     }
 
     func testRelativeDirection() {

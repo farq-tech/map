@@ -90,7 +90,7 @@ struct PlaceBriefSection: View {
         let columns = [GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s))]
         return LazyVGrid(columns: columns, alignment: .leading, spacing: theme.space(.s)) {
             if let w = ui.wind {
-                metric(icon: "wind", value: [w.name, w.speed, w.gust].compactMap { $0 }.joined(separator: " · "),
+                metric(icon: "wind", value: [w.name, w.speed, w.gust].compactMap { $0 }.joined(separator: " • "),
                        hot: w.level > 0, id: "brief.wind", arrow: w.arrowDeg)
             }
             metric(icon: "sun.dust.fill", value: ui.dust, hot: (ui.dustLevel ?? .clear) >= .moderate, id: "brief.dust")
@@ -171,7 +171,7 @@ struct PlaceBriefSection: View {
         let parts = [PlaceBriefRules.elevationText(terrain), PlaceBriefRules.slopeText(terrain)].compactMap { $0 }
         return HStack(spacing: theme.space(.s)) {
             Image(systemName: "mountain.2.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.textSecondary).frame(width: 18)
-            Text(parts.joined(separator: " · ")).saryNumber(.subhead, weight: .medium)
+            Text(parts.joined(separator: " • ")).saryNumber(.subhead, weight: .medium)
                 .foregroundStyle(terrain.elevationM == nil ? p.textTertiary : p.textPrimary).lineLimit(2)
         }
         .accessibilityElement(children: .combine)

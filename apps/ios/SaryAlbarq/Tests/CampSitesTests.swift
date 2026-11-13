@@ -252,7 +252,7 @@ final class CampSitesTests: XCTestCase {
         let n = CampNaming.resolve(site(25.327, 46.7), places: [r])
         guard case .near(let m) = n.relation else { return XCTFail("\(n.relation)") }
         XCTAssertEqual(m, 3000, accuracy: 100)
-        XCTAssertEqual(n.title, "قرب روضة نورة \u{200F}·\u{200F} ٣ كم")
+        XCTAssertEqual(n.title, "قرب روضة نورة \u{200F}•\u{200F} ٣ كم")
         XCTAssertEqual(n.routeTitle, "قرب روضة نورة")
         XCTAssertNil(n.subtitle, "the name already says روضة")
     }

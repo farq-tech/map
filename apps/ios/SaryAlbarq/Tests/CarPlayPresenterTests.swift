@@ -41,7 +41,7 @@ final class CarPlayPresenterTests: XCTestCase {
         XCTAssertFalse(rows.contains { $0.id == "me" })
         let a = rows[0]
         XCTAssertTrue(a.isLive)
-        XCTAssertEqual(a.detail, "١٫١ كم · شمال")
+        XCTAssertEqual(a.detail, "١٫١ كم • شمال")
         XCTAssertEqual(a.phone, "+966500000001")
         let b = rows[1]
         XCTAssertFalse(b.isLive, "a 5-minute-old fix is never live")

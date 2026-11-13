@@ -19,7 +19,7 @@ struct SaryFoundationsPreview: View {
                     Text("عنوان فرعي").saryType(.headline)
                     Text("نص عادي يوصف الشي بسطر واضح").saryType(.body)
                     Text("ملاحظة صغيرة").saryType(.caption)
-                    Text(SaryFormat.digits("١٢٫٥ كم · 24.5")).saryType(.numeric)
+                    Text(SaryFormat.digits("١٢٫٥ كم • 24.5")).saryType(.numeric)
                     Text("روضة الثمامة الشمالية الكبيرة عند نفود الثويرات الغربية").saryLongName().saryType(.headline)
                         .accessibilityIdentifier("foundations-longname")
                 }
@@ -27,7 +27,7 @@ struct SaryFoundationsPreview: View {
                 .padding(.horizontal, SarySpace.l.rawValue)
                 SaryGlassSurface {
                     VStack(spacing: SarySpace.m.rawValue) {
-                        Text("٢٤° صافي · المغرب ٥:١٢").saryType(.body).foregroundStyle(p.textPrimary)
+                        Text("٢٤° صافي • المغرب ٥:١٢").saryType(.body).foregroundStyle(p.textPrimary)
                         SaryPrimaryButton("＋ ابدأ طلعة", id: "foundations-primary") { taps += 1 }
                         SarySecondaryButton("اختر من جهات الاتصال", id: "foundations-secondary") { taps += 1 }
                     }
@@ -86,7 +86,7 @@ struct SaryThemesGallery: View {
                                startPoint: .topLeading, endPoint: .bottomTrailing)
                 SaryGlassSurface {
                     VStack(spacing: SarySpace.s.rawValue) {
-                        Text("٢٤° صافي · المغرب ٥:١٢").saryType(.body).foregroundStyle(p.textPrimary)
+                        Text("٢٤° صافي • المغرب ٥:١٢").saryType(.body).foregroundStyle(p.textPrimary)
                         Text("ملاحظة ثانوية").saryType(.caption).foregroundStyle(p.textSecondary)
                         SaryPrimaryButton("＋ ابدأ طلعة", id: "themes-primary-\(choice.rawValue)") {}
                         SarySecondaryButton("اختر من جهات الاتصال", id: "themes-secondary-\(choice.rawValue)") {}

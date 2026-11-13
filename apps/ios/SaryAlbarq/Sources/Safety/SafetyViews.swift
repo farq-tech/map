@@ -128,7 +128,7 @@ struct SafetyAlertCard: View {
                 if !theme.drive { Text(detail).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2) }
             case let .myTimerOverdue(contact, due):
                 Text("تأخرت عن وقت الرجوع").saryText(theme.drive ? .headline : .callout, weight: .heavy)
-                Text(contact.isEmpty ? "كان \(SafetyFormat.clock(due)) · ما وصل تنبيه لأحد" : "كان \(SafetyFormat.clock(due)) · وصل تنبيه لـ\(contact)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
+                Text(contact.isEmpty ? "كان \(SafetyFormat.clock(due)) • ما وصل تنبيه لأحد" : "كان \(SafetyFormat.clock(due)) • وصل تنبيه لـ\(contact)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
             case let .friendTimerOverdue(name, _):
                 Text("\(name) تأخر عن وقت رجوعه").saryText(.callout, weight: .heavy).lineLimit(2)
                 Text("تطمّن عليه").saryText(.footnote).foregroundStyle(p.textSecondary)
@@ -185,7 +185,7 @@ struct MyStuckStrip: View {
             Image(systemName: SafetyIcon.stuck).font(.system(size: theme.drive ? 20 : 16, weight: .heavy))
             VStack(alignment: .leading, spacing: 0) {
                 Text("غرّزت").saryText(.headline)
-                Text("\(StuckLogic.summary(report))\(sharing ? "" : " · موقعك غير مُشارَك") · \(SaryFormat.elapsed(since: report.at, now: now))")
+                Text("\(StuckLogic.summary(report))\(sharing ? "" : " • موقعك غير مُشارَك") • \(SaryFormat.elapsed(since: report.at, now: now))")
                     .saryNumber(.footnote, weight: .medium).opacity(0.92).lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -258,13 +258,13 @@ struct SafetySection: View {
     @ViewBuilder private var stuckRow: some View {
         let p = theme.palette
         if safety.stuckAvailability == .notDeployed {
-            SaryBanner(text: "«غرّزت» غير متاح بعد · الخادم ما يدعمه للحين", tone: .info, systemImage: SafetyIcon.stuck)
+            SaryBanner(text: "«غرّزت» غير متاح بعد • الخادم ما يدعمه للحين", tone: .info, systemImage: SafetyIcon.stuck)
         } else if let mine = safety.myStuck {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 HStack(spacing: theme.space(.m)) {
                     SaryRowIcon(systemImage: SafetyIcon.stuck, color: p.warning)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("غرّزت · \(SaryFormat.elapsed(since: mine.at, now: now))").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                        Text("غرّزت • \(SaryFormat.elapsed(since: mine.at, now: now))").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
                         Text(StuckLogic.summary(mine)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -329,7 +329,7 @@ struct ReturnTimerCard: View {
                     }
                 }
             case .unavailable:
-                SaryBanner(text: "مؤقت الرجوع غير متاح بعد · الخادم ما يدعمه للحين", tone: .info, systemImage: SafetyIcon.timer)
+                SaryBanner(text: "مؤقت الرجوع غير متاح بعد • الخادم ما يدعمه للحين", tone: .info, systemImage: SafetyIcon.timer)
                     .accessibilityIdentifier("timer-unavailable")
             case .none:
                 HStack(spacing: theme.space(.m)) {
@@ -339,13 +339,13 @@ struct ReturnTimerCard: View {
                         .accessibilityIdentifier("timer-set")
                 }
             case let .armed(due, contact):
-                header("ترجع \(SafetyFormat.dueLabel(due, now: now))", contact.isEmpty ? "\(SafetyFormat.remaining(until: due, now: now)) · على جوالك فقط" : "\(SafetyFormat.remaining(until: due, now: now)) · يتابعك \(contact)", numbers: true)
+                header("ترجع \(SafetyFormat.dueLabel(due, now: now))", contact.isEmpty ? "\(SafetyFormat.remaining(until: due, now: now)) • على جوالك فقط" : "\(SafetyFormat.remaining(until: due, now: now)) • يتابعك \(contact)", numbers: true)
                 if !safety.remindersAllowed {
                     SaryInlineMessage(text: "فعّل الإشعارات ليذكّرك التطبيق قبل الموعد بـ٣٠ و١٠ دقائق.", tone: .info)
                 }
                 buttons(arrivedKind: .secondary)
             case let .overdue(due, contact):
-                header("تأخرت عن وقت الرجوع", contact.isEmpty ? "\(SafetyFormat.late(since: due, now: now)) · ما وصل تنبيه لأحد" : "\(SafetyFormat.late(since: due, now: now)) · وصل تنبيه لـ\(contact)", tone: p.warningText, numbers: true)
+                header("تأخرت عن وقت الرجوع", contact.isEmpty ? "\(SafetyFormat.late(since: due, now: now)) • ما وصل تنبيه لأحد" : "\(SafetyFormat.late(since: due, now: now)) • وصل تنبيه لـ\(contact)", tone: p.warningText, numbers: true)
                 buttons(arrivedKind: .primary)
             case let .arrived(contact):
                 HStack(spacing: theme.space(.m)) {
@@ -453,7 +453,7 @@ Group {
                             .saryType(.headline)
                             .tint(p.accent)
                             .accessibilityIdentifier("timer-due")
-                        Text("\(SafetyFormat.dueLabel(due, now: n)) · \(SafetyFormat.remaining(until: due, now: n))")
+                        Text("\(SafetyFormat.dueLabel(due, now: n)) • \(SafetyFormat.remaining(until: due, now: n))")
                             .saryType(.numeric).foregroundStyle(p.accentText)
                     }
                 }
@@ -531,7 +531,7 @@ Group {
                         .saryText(.body, weight: .medium)
                         .tint(p.accent)
                         .accessibilityIdentifier("timer-due")
-                    Text("\(SafetyFormat.dueLabel(due, now: n)) · \(SafetyFormat.remaining(until: due, now: n))")
+                    Text("\(SafetyFormat.dueLabel(due, now: n)) • \(SafetyFormat.remaining(until: due, now: n))")
                         .saryNumber(.subhead, weight: .bold).foregroundStyle(p.accentText)
                 }
                 .padding(theme.space(.m))

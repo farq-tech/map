@@ -1,6 +1,6 @@
 import XCTest
 
-/// Build 47 · screens group B (profile/settings, weather, Qibla, camp suggestions, desert routes) behind `-SaryNewUI`.
+/// Build 47 • screens group B (profile/settings, weather, Qibla, camp suggestions, desert routes) behind `-SaryNewUI`.
 /// With the flag off the legacy screens are untouched (their own UI tests prove that). Shots: `SARY_SHOTS` dir.
 final class NewScreensBUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }

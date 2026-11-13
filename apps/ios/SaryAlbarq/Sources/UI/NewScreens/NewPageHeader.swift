@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Build 47 · screens group B (information screens). The unified window header of the new interface:
+// Build 47 • screens group B (information screens). The unified window header of the new interface:
 // a big title on the right (RTL leading), an optional subtitle under it, the page's own trailing buttons,
 // and ONE round ✕ (44 pt) on the left. Back pages keep the back chevron on the right and no ✕.
 // Same accessibility ids as the legacy header (`page-close`, `page-back`) so every existing test keeps working.

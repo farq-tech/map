@@ -177,14 +177,14 @@ final class TrailKalmanTests: XCTestCase {
         i.locationAuthorized = true
         i.preciseOff = true
         XCTAssertTrue(LiveOutingPresenter.warnings(i).contains(.preciseOff))
-        XCTAssertEqual(LiveWarningUI.preciseOff.label, "فعّل الموقع الدقيق · مسارك تقريبي الآن")
+        XCTAssertEqual(LiveWarningUI.preciseOff.label, "فعّل الموقع الدقيق • مسارك تقريبي الآن")
     }
 
     func testHealthLine() {
         let now = 1_800_000_060_000.0
         let raw = (0..<12).map { RawFix(t: now - Double($0) * 5000, lat: 24.7, lng: 46.6, acc: 8) }.reversed()
         let h = TrailHealth.compute(raw: Array(raw), nowMs: now, preciseOff: false, whenInUseOnly: true, lowPower: true)
-        XCTAssertEqual(h.line, "الدقة ±\(SaryFormat.number(8)) م · \(SaryFormat.number(12)) نقطة/دقيقة")
+        XCTAssertEqual(h.line, "الدقة ±\(SaryFormat.number(8)) م • \(SaryFormat.number(12)) نقطة/دقيقة")
         XCTAssertEqual(h.warnings.count, 2)
     }
 

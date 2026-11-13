@@ -295,12 +295,12 @@ final class TripProgressTests: XCTestCase {
         let members = [(id: me, name: "راشد"), (id: "f", name: "فهد"), (id: "s", name: "سلطان"), (id: "n", name: "نورة")]
         XCTAssertNil(ArrivalOrder.line(arrivals: [:], members: members, myId: me))
         let arr = ["s": t0 + 500, "f": t0, me: t0 + 900]
-        XCTAssertEqual(ArrivalOrder.line(arrivals: arr, members: members, myId: me), "وصل أول: فهد، ثم سلطان، أنت · باقي: نورة")
+        XCTAssertEqual(ArrivalOrder.line(arrivals: arr, members: members, myId: me), "وصل أول: فهد، ثم سلطان، أنت • باقي: نورة")
         XCTAssertFalse(ArrivalOrder.everyoneArrived(arrivals: arr, memberIds: members.map(\.id)))
         var all = arr
         all["n"] = t0 + 2000
         XCTAssertTrue(ArrivalOrder.everyoneArrived(arrivals: all, memberIds: members.map(\.id)))
-        XCTAssertEqual(ArrivalOrder.line(arrivals: all, members: members, myId: me), "وصل أول: فهد، ثم سلطان، أنت، نورة · وصل الجميع")
+        XCTAssertEqual(ArrivalOrder.line(arrivals: all, members: members, myId: me), "وصل أول: فهد، ثم سلطان، أنت، نورة • وصل الجميع")
         /* Someone who left the outing is not listed. */
         XCTAssertEqual(ArrivalOrder.split(arrivals: ["gone": t0], members: members).arrived, [])
     }
@@ -361,7 +361,7 @@ final class TripProgressTests: XCTestCase {
         XCTAssertEqual(ui.phase, .arrived(at: Date(timeIntervalSince1970: (t0 + 1_800_000) / 1000), manual: true))
         XCTAssertEqual(ui.percent, 100)
         XCTAssertEqual(ui.elapsedSeconds, 1800, "the clock stops at arrival")
-        XCTAssertEqual(ui.arrivalLine, "وصل أول: أنت · باقي: فهد")
+        XCTAssertEqual(ui.arrivalLine, "وصل أول: أنت • باقي: فهد")
         XCTAssertFalse(ui.everyoneArrived)
         XCTAssertFalse(ui.canEnd, "only the leader ends it")
         i.iLead = true
@@ -389,7 +389,7 @@ final class TripProgressTests: XCTestCase {
         s.tripRemainingM = 12_400
         s.tripApprox = true
         var d = OutingActivityDisplay.make(s, now: s.updatedAt)
-        XCTAssertEqual(d.tripLine, "قطعنا ٦٢٪ · باقي ١٢٫٤ كم تقريبًا")
+        XCTAssertEqual(d.tripLine, "قطعنا ٦٢٪ • باقي ١٢٫٤ كم تقريبًا")
         XCTAssertEqual(d.tripShort, "١٢٫٤ كم")
         XCTAssertEqual(d.tripFraction ?? 0, 0.62, accuracy: 1e-9)
         /* An old picture keeps the percent, not the distance. */
@@ -417,11 +417,11 @@ final class TripProgressTests: XCTestCase {
         i.destination = CarPlayDestination(position: dest, label: "روضة خريم")
         XCTAssertNil(CarPlayPresenter.tripLine(i))
         i.trip = CarPlayTripProgress(percent: 62, remainingM: 12_400, approximate: false, eta: nil, arrived: false)
-        XCTAssertEqual(CarPlayPresenter.tripLine(i), "قطعنا ٦٢٪ · باقي \(ArabicFormat.distance(12_400))")
-        XCTAssertEqual(CarPlayPresenter.destination(i)?.label, "روضة خريم · ٦٢٪")
+        XCTAssertEqual(CarPlayPresenter.tripLine(i), "قطعنا ٦٢٪ • باقي \(ArabicFormat.distance(12_400))")
+        XCTAssertEqual(CarPlayPresenter.destination(i)?.label, "روضة خريم • ٦٢٪")
         i.trip = CarPlayTripProgress(percent: 100, remainingM: 0, approximate: false, eta: nil, arrived: true)
         XCTAssertEqual(CarPlayPresenter.tripLine(i), "وصلنا الوجهة")
-        XCTAssertEqual(CarPlayPresenter.destination(i)?.label, "روضة خريم · وصلنا")
+        XCTAssertEqual(CarPlayPresenter.destination(i)?.label, "روضة خريم • وصلنا")
     }
 
     /// The driven distance is walked once per trail and start, and a precomputed value is what the

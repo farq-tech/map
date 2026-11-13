@@ -73,7 +73,7 @@ enum StuckLogic {
             .sorted { a, b in a.kind.rank != b.kind.rank ? a.kind.rank < b.kind.rank : a.name < b.name }
     }
 
-    /// «٢ جايين · ١ معه حبل · ١ ما يقدر», or «ما رد أحد بعد».
+    /// «٢ جايين • ١ معه حبل • ١ ما يقدر», or «ما رد أحد بعد».
     static func summary(_ r: StuckReport) -> String {
         var c: [StuckReplyKind: Int] = [:]
         for k in r.replies.values { c[k, default: 0] += 1 }
@@ -81,7 +81,7 @@ enum StuckLogic {
         if let n = c[.coming] { parts.append(n == 1 ? "١ جاي" : "\(SaryFormat.number(n)) جايين") }
         if let n = c[.have_rope] { parts.append(n == 1 ? "١ معه حبل" : "\(SaryFormat.number(n)) معهم حبل") }
         if let n = c[.cant] { parts.append(n == 1 ? "١ ما يقدر" : "\(SaryFormat.number(n)) ما يقدرون") }
-        return parts.isEmpty ? "ما رد أحد بعد" : parts.joined(separator: " · ")
+        return parts.isEmpty ? "ما رد أحد بعد" : parts.joined(separator: " • ")
     }
 
     /// Someone is on their way (or has a rope): the stuck person can relax a little.

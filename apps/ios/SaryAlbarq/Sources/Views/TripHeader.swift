@@ -16,7 +16,7 @@ enum TripHeaderPresenter {
         outingName
     }
 
-    /// Second line (Lovable): «إلى مخيم النفود · باقي ١٢ كم · نوصل ٧:١١», the trip's phase, or
+    /// Second line (Lovable): «إلى مخيم النفود • باقي ١٢ كم • نوصل ٧:١١», the trip's phase, or
     /// (following the plan) its status.
     static func line(status: OutingStatusUI, trip: TripPanelUI?, follow: String?, connection: ConnectionStateUI, nearbyCars: Int) -> String? {
         if let follow { return follow }
@@ -33,7 +33,7 @@ enum TripHeaderPresenter {
                 if let s = t.myFixStaleSince { return SaryFormat.lastUpdate(since: s, now: Date()) }
                 let to = t.destinationName.isEmpty ? nil : "إلى \(t.destinationName)"
                 let parts = [to, t.remainingLine, t.etaLine].compactMap { $0 }
-                if !parts.isEmpty { return parts.joined(separator: " · ") }
+                if !parts.isEmpty { return parts.joined(separator: " • ") }
             }
         }
         if let n = LiveOutingPresenter.nearbyLabel(nearbyCars) { return n }
@@ -44,9 +44,9 @@ enum TripHeaderPresenter {
     /// «اتبع الخطة» status as the header's second line.
     static func follow(_ s: FollowPlanStatus) -> String {
         switch s.kind {
-        case .waitingForFix: return "اتبع الخطة · ننتظر موقعك"
-        case .onRoute: return "على المسار · باقي \(SaryFormat.distance(meters: s.remainingM))"
-        case .offRoute: return "خارج المسار بـ \(SaryFormat.distance(meters: s.offM)) · ارجع \(Geo.directionLabel(s.backBearing))"
+        case .waitingForFix: return "اتبع الخطة • ننتظر موقعك"
+        case .onRoute: return "على المسار • باقي \(SaryFormat.distance(meters: s.remainingM))"
+        case .offRoute: return "خارج المسار بـ \(SaryFormat.distance(meters: s.offM)) • ارجع \(Geo.directionLabel(s.backBearing))"
         case .arrived: return "وصلت نهاية الخطة"
         }
     }
@@ -71,7 +71,7 @@ struct RadioHeaderUI: Equatable {
 }
 
 /// The single top bar of the live screen (docs/IA-REDESIGN.md §2.2):
-/// back · [dot] destination / «باقي … · نوصل …» · weather · bell.
+/// back • [dot] destination / «باقي … • نوصل …» • weather • bell.
 struct TripHeader: View {
     var ui: TripHeaderUI
     var weather: WeatherChipUI?
@@ -100,7 +100,7 @@ struct TripHeader: View {
     /// UX ٢١: every header button is at least 44 pt wide, 56 pt while driving.
     private var hit: CGFloat { theme.drive ? 56 : 44 }
 
-    /// Lovable: ONE dark card, 22 pt corners — title and «إلى … · ١٢٫٤ كم» on the right; the weather
+    /// Lovable: ONE dark card, 22 pt corners — title and «إلى … • ١٢٫٤ كم» on the right; the weather
     /// pill, the alerts' history and the gear on the left. «رجوع» is a small chevron before the title.
     var body: some View {
         let p = theme.palette
@@ -167,7 +167,7 @@ struct TripHeader: View {
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("إذاعة الطلعة"))
-                .accessibilityValue(Text(r.muted ? "ساكت عندك · \(r.title)" : (r.playing ? "يشغّل الآن · \(r.title)" : "موقّفة · \(r.title)")))
+                .accessibilityValue(Text(r.muted ? "ساكت عندك • \(r.title)" : (r.playing ? "يشغّل الآن • \(r.title)" : "موقّفة • \(r.title)")))
                 .accessibilityHint(Text(r.open ? "يخفي التحكم" : "يفتح التحكم: إيقاف وكتم"))
                 .accessibilityIdentifier("radio.header")
                 .transition(.scale.combined(with: .opacity))

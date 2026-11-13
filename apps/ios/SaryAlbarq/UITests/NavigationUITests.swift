@@ -165,7 +165,7 @@ final class NavigationUITests: XCTestCase {
             XCTAssertFalse(el(app, "nav.banner.eta").frame.intersects(el(app, "nav.banner").frame), "the ETA left the banner")
             let remaining = el(app, "nav.remainingTime")
             XCTAssertTrue(remaining.waitForExistence(timeout: 5), "the time left")
-            XCTAssertTrue(el(app, "nav.eta").label.contains("كم"), "«١٩ كم · ١٢:٥٦ ص»: \(el(app, "nav.eta").label)")
+            XCTAssertTrue(el(app, "nav.eta").label.contains("كم"), "«١٩ كم • ١٢:٥٦ ص»: \(el(app, "nav.eta").label)")
             let end = app.buttons["nav.end"]
             XCTAssertTrue(end.exists && end.isHittable, "a clear «إنهاء الرحلة»")
             XCTAssertTrue(end.label.contains("إنهاء الرحلة"), end.label)
@@ -260,7 +260,7 @@ final class NavigationUITests: XCTestCase {
         /* (The sheet's own identifier covers its texts: match by label.) */
         let texts = app.staticTexts
         XCTAssertTrue(texts.matching(NSPredicate(format: "label == 'آخر موقع نورة'")).firstMatch.waitForExistence(timeout: 5), "the target's name")
-        XCTAssertTrue(texts.matching(NSPredicate(format: "label BEGINSWITH 'آخر موقع معروف · قبل'")).firstMatch.exists, "labelled «آخر موقع معروف», never live")
+        XCTAssertTrue(texts.matching(NSPredicate(format: "label BEGINSWITH 'آخر موقع معروف • قبل'")).firstMatch.exists, "labelled «آخر موقع معروف», never live")
         sleep(1)
         shot(app, "nav-silent-lastknown-options")
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The first screen: a map, the category chips floating over it, and ONE bottom sheet —
-/// «وين رايحين؟» (mic + profile), the shortcuts (البيت · الشغل · المفضلة) and what is
+/// «وين رايحين؟» (mic + profile), the shortcuts (البيت • الشغل • المفضلة) and what is
 /// happening now. Pulled up: every category, recent places and «طلعاتي».
 /// The flow: search → pick → continue the active outing or create a new one when no outing is active.
 struct MapHomeScreen: View {
@@ -29,7 +29,7 @@ struct MapHomeScreen: View {
     @FocusState private var searchFocused: Bool
     @State private var category: HomeCategory?
     @State private var results: [PlaceSearch.Place] = []
-    /// «الأنسب · الأقرب · حسب النوع» above the results.
+    /// «الأنسب • الأقرب • حسب النوع» above the results.
     @State private var resultOrder: PlaceSearch.ListOrder = .relevance
     @State private var searching = false
     @State private var searchError: String?
@@ -171,7 +171,13 @@ struct MapHomeScreen: View {
         .sheet(isPresented: $creating) { CreateOutingWizard().saryPresented(appearance) }
         .sheet(isPresented: $joining) { JoinByLinkSheet().saryPresented(appearance) }
         .sheet(item: $tool) { t in
-            HomeToolSheet(tool: t, me: myPoint, host: desertHost, open: openTool, close: { tool = nil })
+            HomeToolSheet(tool: t, me: myPoint, host: desertHost, open: openTool, close: { tool = nil }, search: {
+                tool = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    setExpanded(true)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
+                }
+            })
                 .saryPresented(appearance)
         }
         .onChange(of: tool?.id) { old, new in
@@ -552,7 +558,7 @@ struct MapHomeScreen: View {
                     .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
-                    let line = [paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · ")
+                    let line = [paused ? "طلعتك القادمة • متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " • ")
                     Text(line)
                         .font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1)
                         .contentTransition(theme.reduceMotion ? .opacity : .numericText())
@@ -744,7 +750,7 @@ struct MapHomeScreen: View {
                     .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.live.opacity(0.16)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
-                    Text("طلعتك جارية · \(o.participantsLabel)").font(.sary(12, .regular)).foregroundStyle(p.textSecondary)
+                    Text("طلعتك جارية • \(o.participantsLabel)").font(.sary(12, .regular)).foregroundStyle(p.textSecondary)
                         /* Someone joins: the count rolls, the card stays. */
                         .contentTransition(theme.reduceMotion ? .opacity : .numericText())
                         .saryAnimation(.smooth, value: o.participantsLabel)
@@ -1166,7 +1172,7 @@ struct MapHomeScreen: View {
     private func pickDesert(_ it: DesertCategoryItem) {
         desertPicked = it
         let to = it.approach ?? it.point
-        let sub = [it.detail, to != it.point ? "أقرب طرف منك" : nil].compactMap { $0 }.joined(separator: " · ")
+        let sub = [it.detail, to != it.point ? "أقرب طرف منك" : nil].compactMap { $0 }.joined(separator: " • ")
         pick(.init(destination: OutingDestination(name: String(it.title.prefix(TripPlan.destinationNameMax)), lat: to.lat, lng: to.lng),
                    subtitle: sub.isEmpty ? nil : sub, icon: it.systemImage, desert: true))
     }

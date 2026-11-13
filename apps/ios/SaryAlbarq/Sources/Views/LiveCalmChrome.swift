@@ -3,7 +3,7 @@ import SwiftUI
 /// «تخفيف الزحمة» (phase A, styled after the owner's Lovable prototype): the small pieces of
 /// the calm live screen. The rules live in `LiveCalmRules` (unit-tested in `LiveCalmTests`).
 enum LiveCalmRules {
-    /// The convoy at a glance while driving: «٤ مباشر · الأبعد ١٫٢ كم» (friends only, never me).
+    /// The convoy at a glance while driving: «٤ مباشر • الأبعد ١٫٢ كم» (friends only, never me).
     static func convoyLine(_ participants: [ParticipantUI]) -> String? {
         let others = participants.filter { !$0.isMe }
         guard !others.isEmpty else { return nil }
@@ -14,7 +14,7 @@ enum LiveCalmRules {
         if let far = live.compactMap(\.distanceMeters).max() {
             parts.append("الأبعد \(SaryFormat.distance(meters: far))")
         }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 
     /// The layers button leads the side column in EVERY mode (stopped, driving, exploring, guiding, after the end);
@@ -190,7 +190,7 @@ struct LiveSideButtons: View {
     static func wrap(_ d: Double) -> Double { var x = d.truncatingRemainder(dividingBy: 360); if x > 180 { x -= 360 }; if x < -180 { x += 360 }; return x }
 }
 
-/// SOS (Lovable): a red disc with «SOS · طوارئ» under the header on the left, «اضغط مطوّل» under it.
+/// SOS (Lovable): a red disc with «SOS • طوارئ» under the header on the left, «اضغط مطوّل» under it.
 /// A 1 s hold, then a 3 s «تراجع» countdown (`SOSCountdown`). Never hidden while the trip runs.
 struct LovableSOS: View {
     var state: MySOSUI
@@ -249,7 +249,7 @@ struct LovableSpeedBubble: View {
     }
 }
 
-/// «٤ مباشر · الأبعد ١٫٢ كم» over the dock while the guidance bar holds the sheet's peek.
+/// «٤ مباشر • الأبعد ١٫٢ كم» over the dock while the guidance bar holds the sheet's peek.
 struct ConvoyLinePill: View {
     var text: String
     var open: () -> Void

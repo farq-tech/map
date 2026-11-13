@@ -68,7 +68,7 @@ struct DesertRouteSheet: View {
     enum Phase: Equatable { case working, ready, outside, noFix, none }
 
     static let note = "مسار مقترح من صور الأقمار، تأكد بعينك. ما يغني عن خبرة الدليل"
-    static let attribution = "الدروب من بيانات مفتوحة · © OpenStreetMap contributors"
+    static let attribution = "الدروب من بيانات مفتوحة • © OpenStreetMap contributors"
 
     init(host: DesertToolsHost, target: LngLat, name: String, rain: Bool, weatherAvailable: Bool) {
         self.host = host
@@ -190,13 +190,13 @@ struct DesertRouteSheet: View {
                     .buttonStyle(.sary(on ? .primary : .secondary, width: .hug, compact: true))
                     .accessibilityIdentifier("routes.go.\(o.mode.rawValue)")
             }
-            Text("\(SaryFormat.distance(meters: o.distanceM)) · نحو \(SaryFormat.duration(seconds: Int(o.minutes * 60))) · \(SaryFormat.percent(Int(o.trackPercent.rounded()))) على درب معروف")
+            Text("\(SaryFormat.distance(meters: o.distanceM)) • نحو \(SaryFormat.duration(seconds: Int(o.minutes * 60))) • \(SaryFormat.percent(Int(o.trackPercent.rounded()))) على درب معروف")
                 .saryNumber(.subhead).foregroundStyle(p.textPrimary)
                 .accessibilityIdentifier("routes.stats.\(o.mode.rawValue)")
             if o.hard.isEmpty {
                 Text("ما فيه مقاطع صعبة تُذكر").saryText(.footnote).foregroundStyle(p.liveText)
             } else {
-                Text("مقاطع صعبة: " + o.hardTotals.prefix(3).map { "\($0.0.text) \(SaryFormat.distance(meters: $0.1))" }.joined(separator: " · "))
+                Text("مقاطع صعبة: " + o.hardTotals.prefix(3).map { "\($0.0.text) \(SaryFormat.distance(meters: $0.1))" }.joined(separator: " • "))
                     .saryText(.footnote, weight: .bold).foregroundStyle(p.emergencyText)
                     .accessibilityIdentifier("routes.hard.\(o.mode.rawValue)")
                 if let tip = o.tip {

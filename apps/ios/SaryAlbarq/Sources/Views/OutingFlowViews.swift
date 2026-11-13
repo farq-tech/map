@@ -223,7 +223,7 @@ enum LegText {
         let secs = l.duration_s ?? (l.isActive ? l.startedDate.map { Int(now.timeIntervalSince($0)) } : nil)
         if let s = secs, s >= 60 { parts.append(SaryFormat.duration(seconds: s)) }
         if l.scope == .personal { parts.append("مشواري") }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " • ")
     }
 }
 

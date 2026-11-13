@@ -202,7 +202,7 @@ final class TestRoutesHarnessTests: XCTestCase {
             let spoken = res.said.filter { $0.spokenM != nil }
             let over = spoken.filter { $0.spokenM! > $0.endTrueM + 0.5 }
             let maxErr = spoken.map { abs($0.endTrueM - $0.spokenM!) }.max() ?? 0
-            print("[routes] \(f.name): \(res.said.count) lines (\(spoken.count) with a distance) · overstated \(over.count) · max |error| \(Int(maxErr)) m · arrival miss \(res.arrivalMissM.map { "\(Int($0)) m" } ?? "never")")
+            print("[routes] \(f.name): \(res.said.count) lines (\(spoken.count) with a distance) • overstated \(over.count) • max |error| \(Int(maxErr)) m • arrival miss \(res.arrivalMissM.map { "\(Int($0)) m" } ?? "never")")
             if e.prompts.neverOverstate {
                 XCTAssertTrue(over.isEmpty, "\(f.name): said more than the real distance: \(over.map { "step \($0.step) said \(Int($0.spokenM!)) at \(Int($0.endTrueM))" })")
             }

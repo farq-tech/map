@@ -24,7 +24,7 @@ enum PTTLinkText {
             s = "الاتصال: مغلق"
         }
         if let code = d.lastCloseCode, d.state != .live || d.reconnects > 0 {
-            s += " · آخر انقطاع: \(code)"
+            s += " • آخر انقطاع: \(code)"
             if let why = reason(d.lastCloseReason, code: code) { s += " (\(why))" }
         }
         return s

@@ -228,7 +228,7 @@ struct InvitePreview: Codable, Equatable {
     /// "personal": one link for one person — whoever joins becomes `invitee_name` in the trip.
     var kind: String? = nil
     var invitee_name: String? = nil
-    /// open · yours (used by me: rejoin) · taken (someone else used it) · claimed (used; asked anonymously).
+    /// open • yours (used by me: rejoin) • taken (someone else used it) • claimed (used; asked anonymously).
     var claim: String? = nil
     /// The same person back with a new account (phone matches the leader's contact): joining moves the seat here.
     var reclaim: Bool? = nil

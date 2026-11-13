@@ -1,7 +1,7 @@
 import Foundation
 
 // «إذاعة الطلعة» — pure rules (no AVFoundation, no network), all unit-tested.
-// Server side: apps/api/lib/outings/group-audio.js · docs/GROUP-AUDIO.md.
+// Server side: apps/api/lib/outings/group-audio.js • docs/GROUP-AUDIO.md.
 
 enum GroupAudioSource: String, Codable, CaseIterable, Hashable {
     case radio
@@ -20,7 +20,7 @@ enum GroupAudioSource: String, Codable, CaseIterable, Hashable {
 /// One thing the trip can listen to.
 struct GroupAudioItem: Codable, Equatable, Hashable, Identifiable {
     var source: GroupAudioSource
-    /// Station id · mp3quran URL · Audius track id.
+    /// Station id • mp3quran URL • Audius track id.
     var id: String
     var title: String
     var subtitle: String

@@ -121,11 +121,11 @@ final class SafetyController: ObservableObject {
     func name(_ uid: String) -> String? { view()?.members[uid]?.display_name }
     func color(_ uid: String) -> UInt32 { view()?.colors[uid] ?? 0xFFFFFF }
 
-    /// «المغرب ٥:١٣ م · طريق العودة ٤٥ دقيقة تقريبًا».
+    /// «المغرب ٥:١٣ م • طريق العودة ٤٥ دقيقة تقريبًا».
     var sunsetLine: String? {
         guard let s = sunset, s > now().addingTimeInterval(-SunsetWarning.afterSunsetS) else { return nil }
         var t = s > now() ? "المغرب \(SafetyFormat.clock(s))" : "غابت الشمس \(SafetyFormat.clock(s))"
-        if let w = wayBackS { t += " · طريق الرجعة \(SafetyFormat.span(minutes: SunsetWarning.roundUp5(w / 60))) تقريبًا" }
+        if let w = wayBackS { t += " • طريق الرجعة \(SafetyFormat.span(minutes: SunsetWarning.roundUp5(w / 60))) تقريبًا" }
         return t
     }
 
@@ -196,7 +196,7 @@ final class SafetyController: ObservableObject {
             }
             guard await save(due: due, contact: "") else { return }
             editorOpen = false
-            toast("ضبطنا منبّه الرجوع على جوالك · ما يوصل لأحد")
+            toast("ضبطنا منبّه الرجوع على جوالك • ما يوصل لأحد")
             return
         }
         guard let contact = ReturnTimerLogic.cleanContact(raw) else { errorText = "اكتب اسم اللي يتابعك."; return }
@@ -216,7 +216,7 @@ final class SafetyController: ObservableObject {
         if await save(due: next, contact: t.contact_name) {
             toast(t.contact_name.isEmpty
                   ? "مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now()))"
-                  : "مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now())) · الرابط اللي عند \(t.contact_name) يبقى شغال")
+                  : "مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now())) • الرابط اللي عند \(t.contact_name) يبقى شغال")
         }
     }
 
@@ -320,9 +320,9 @@ final class SafetyController: ObservableObject {
             stuckAvailability = .available
             stuck[myId] = StuckReport(userId: myId, at: now(), note: clean)
             if localOnly {
-                toast("علّمنا مكان التغريز على مسارك · ما فيه أحد معك يوصله التنبيه")
+                toast("علّمنا مكان التغريز على مسارك • ما فيه أحد معك يوصله التنبيه")
             } else {
-                toast(isSharingNow() ? "وصل للأصدقاء إنك غرّزت، ويشوفون مكانك" : "وصل للأصدقاء إنك غرّزت · موقعك غير مُشارَك")
+                toast(isSharingNow() ? "وصل للأصدقاء إنك غرّزت، ويشوفون مكانك" : "وصل للأصدقاء إنك غرّزت • موقعك غير مُشارَك")
             }
         } catch let e as OutingAPIError where e.isNotDeployed {
             stuckAvailability = .notDeployed

@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 // MARK: - Map chrome
 
-/// Exploration's top bar: back (to the trip map) · «استكشاف» + the layer · bell.
+/// Exploration's top bar: back (to the trip map) • «استكشاف» + the layer • bell.
 struct ExploreHeader: View {
     var layer: MapLayer
     var bell: Int
@@ -134,7 +134,7 @@ struct ExploreReadout: View {
                             .saryNumber(.footnote, weight: .bold)
                             .foregroundStyle(r?.elevationM == nil ? p.textTertiary : p.textSecondary)
                             .accessibilityIdentifier("explore.elevation")
-                        Text(format == .decimal ? "· عشري" : "· درجات").saryText(.caption, weight: .bold).foregroundStyle(p.accentText)
+                        Text(format == .decimal ? "• عشري" : "• درجات").saryText(.caption, weight: .bold).foregroundStyle(p.accentText)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -298,7 +298,7 @@ struct ExploreLayerSections: View {
             SarySection(title: "بلا إنترنت") {
                 SaryNavRow(title: "الخرائط بلا إنترنت",
                            detail: offline.completeAreas > 0
-                               ? "\(SaryFormat.number(offline.completeAreas)) منطقة محفوظة · \(SaryFormat.number(offline.topoAreas)) منها مع الطبوغرافي"
+                               ? "\(SaryFormat.number(offline.completeAreas)) منطقة محفوظة • \(SaryFormat.number(offline.topoAreas)) منها مع الطبوغرافي"
                                : "ما حفظت مناطق بعد",
                            systemImage: "arrow.down.circle.fill", id: "explore-offline") {
                     controller.modal = nil
@@ -536,7 +536,7 @@ struct TracksSheet: View {
                     SaryRowIcon(systemImage: t.origin == .imported ? "square.and.arrow.down" : "square.and.arrow.up")
                     VStack(alignment: .leading, spacing: 2) {
                         Text(t.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
-                        Text("\(t.origin == .imported ? "مستورد" : "مصدَّر") · \(SaryFormat.distance(meters: t.lengthM)) · \(SaryFormat.number(t.points.count)) نقطة")
+                        Text("\(t.origin == .imported ? "مستورد" : "مصدَّر") • \(SaryFormat.distance(meters: t.lengthM)) • \(SaryFormat.number(t.points.count)) نقطة")
                             .saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
                     }
                     Spacer(minLength: 0)

@@ -24,7 +24,7 @@ struct TripProgressBar: View {
     }
 }
 
-/// The peek row: «قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م» over the bar. Tapping expands the sheet.
+/// The peek row: «قطعنا ٦٢٪ • باقي ١٢ كم • نوصل ٤:٣٠ م» over the bar. Tapping expands the sheet.
 struct TripPeekStrip: View {
     var ui: TripPanelUI
     var expand: () -> Void
@@ -41,7 +41,7 @@ struct TripPeekStrip: View {
                     if theme.drive && !minimal, ui.phase == .underway {
                         /* Drive mode: the two numbers that matter, big. */
                         Text(ui.remainingLine ?? stale ?? "…").saryNumber(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
-                        if let e = ui.etaLine { Text("·").foregroundStyle(p.textTertiary); Text(e).saryNumber(.title2, weight: .heavy).foregroundStyle(p.liveText) }
+                        if let e = ui.etaLine { Text("•").foregroundStyle(p.textTertiary); Text(e).saryNumber(.title2, weight: .heavy).foregroundStyle(p.liveText) }
                     } else {
                         Text(line).saryNumber(.callout, weight: .bold).foregroundStyle(p.textPrimary)
                     }
@@ -91,14 +91,14 @@ struct TripPeekStrip: View {
     private var line: String {
         switch ui.phase {
         case let .needsDestination(canSet): return canSet ? "حدّد الوجهة قبل ما تبدأ" : "بانتظار الوجهة"
-        case .notStarted: return "إلى \(ui.destinationName) · ما بدأت"
-        case .waitingFix: return "بدأت الطلعة · ننتظر موقعك"
+        case .notStarted: return "إلى \(ui.destinationName) • ما بدأت"
+        case .waitingFix: return "بدأت الطلعة • ننتظر موقعك"
         case .arrived: return "وصلت \(ui.destinationName) 🎉"
         case .ended: return "انتهت الطلعة"
         case .underway:
             if minimal { return ui.progressLine ?? "إلى \(ui.destinationName)" }
-            if let s = stale { return [ui.progressLine, s].compactMap { $0 }.joined(separator: " · ") }
-            return [ui.progressLine, ui.remainingLine, ui.etaLine].compactMap { $0 }.joined(separator: " · ")
+            if let s = stale { return [ui.progressLine, s].compactMap { $0 }.joined(separator: " • ") }
+            return [ui.progressLine, ui.remainingLine, ui.etaLine].compactMap { $0 }.joined(separator: " • ")
         }
     }
 
@@ -193,9 +193,9 @@ struct TripCard: View {
     private var subtitle: String? {
         switch ui.phase {
         case .underway:
-            if let s = ui.myFixStaleSince { return SaryFormat.lastUpdate(since: s, now: Date()) + " · ما نحسب الباقي من موقع قديم" }
+            if let s = ui.myFixStaleSince { return SaryFormat.lastUpdate(since: s, now: Date()) + " • ما نحسب الباقي من موقع قديم" }
             return ui.progressLine
-        case let .arrived(at, manual): return "\(ui.destinationName) · \(NavText.clock(at))" + (manual ? " · «وصلنا»" : "")
+        case let .arrived(at, manual): return "\(ui.destinationName) • \(NavText.clock(at))" + (manual ? " • «وصلنا»" : "")
         case .ended: return ui.destinationName
         default: return nil
         }

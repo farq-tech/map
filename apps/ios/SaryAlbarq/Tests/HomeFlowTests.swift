@@ -180,7 +180,7 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertFalse(StandaloneNavRules.waitSlow(waitingSince: nil, now: now))
         XCTAssertFalse(StandaloneNavRules.waitSlow(waitingSince: now.addingTimeInterval(-44), now: now))
         XCTAssertTrue(StandaloneNavRules.waitSlow(waitingSince: now.addingTimeInterval(-45), now: now))
-        XCTAssertEqual(StandaloneNavRules.waitText(accuracyM: 35, waitingSince: now.addingTimeInterval(-3), now: now), "ننتظر موقعك… · الدقة ±٣٥ م")
+        XCTAssertEqual(StandaloneNavRules.waitText(accuracyM: 35, waitingSince: now.addingTimeInterval(-3), now: now), "ننتظر موقعك… • الدقة ±٣٥ م")
         XCTAssertEqual(StandaloneNavRules.waitText(accuracyM: nil, waitingSince: now.addingTimeInterval(-60), now: now), "ما قدرنا نحدد موقعك، اطلع لمكان مكشوف")
         /* The gate itself is unchanged: a 5-minute-old fix is still not where I am. */
         let old = DeviceFix(lat: 24.7, lng: 46.6, accuracy: 10, heading: nil, speed: 0, atMs: now.timeIntervalSince1970 * 1000 - 300_000)
@@ -260,10 +260,10 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .ready, phase: .guiding, loading: false))
         XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .waitingForFix, phase: .idle, loading: false))
         XCTAssertEqual(StandaloneNavRules.idleText(gate: .ready, accuracyM: 8, waitingSince: nil, now: now, targetName: "الثمامة"), "نبدأ التوجيه إلى الثمامة…")
-        XCTAssertEqual(StandaloneNavRules.idleText(gate: .waitingForFix, accuracyM: 8, waitingSince: now, now: now, targetName: "الثمامة"), "ننتظر موقعك… · الدقة ±٨ م")
+        XCTAssertEqual(StandaloneNavRules.idleText(gate: .waitingForFix, accuracyM: 8, waitingSince: now, now: now, targetName: "الثمامة"), "ننتظر موقعك… • الدقة ±٨ م")
         XCTAssertEqual(StandaloneNavRules.diagnostics(accepted: 30, rejected: [.stale: 12, .teleport: 1], lastFixAgeS: 4.2),
-                       "مقبولة ٣٠ · مرفوضة: قديمة ١٢، قفزة ١ · آخر قراءة قبل ٤ ث")
-        XCTAssertEqual(StandaloneNavRules.diagnostics(accepted: 0, rejected: [:], lastFixAgeS: nil), "مقبولة ٠ · مرفوضة ٠")
+                       "مقبولة ٣٠ • مرفوضة: قديمة ١٢، قفزة ١ • آخر قراءة قبل ٤ ث")
+        XCTAssertEqual(StandaloneNavRules.diagnostics(accepted: 0, rejected: [:], lastFixAgeS: nil), "مقبولة ٠ • مرفوضة ٠")
     }
 
     /// The gate on a phone lying still (owner's hypothesis, Build 39): iOS's fresh 1 Hz fixes after a

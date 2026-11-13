@@ -90,7 +90,7 @@ enum LiveScreenRules {
     /// are in the pulled-up guidance sheet (`NavTripOptions`).
     static let navSideIDs: [String] = ["locate", "nav.search"]
 
-    /// «٤ مباشر · الأبعد ١٫٢ كم» over the dock only when the convoy has something to say
+    /// «٤ مباشر • الأبعد ١٫٢ كم» over the dock only when the convoy has something to say
     /// (someone drifted off or out of the column).
     static func showsConvoyLine(_ alerts: [LiveAlertUI]) -> Bool {
         alerts.contains { a in

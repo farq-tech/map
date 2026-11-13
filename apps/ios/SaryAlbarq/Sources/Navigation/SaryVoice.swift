@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 // «صوت سرى»: the owner's Najdi phrases (his own voice, ElevenLabs v4 set) speak the guidance.
-// Each spoken line is a short sequence of his clips («بعد ثلاث مية متر.» · «لف يمين.»), built
+// Each spoken line is a short sequence of his clips («بعد ثلاث مية متر.» • «لف يمين.»), built
 // from the maneuver itself (kind, direction, exit, distance), never by parsing text.
 // Street and place names are never said in his voice: they stay on the banner.
 // «صوت الجهاز» (AVSpeechSynthesizer, ar-SA) stays a full option for those who want
@@ -204,7 +204,7 @@ enum SaryVoiceScript {
             }
             if distanceM < nowM { return [side ?? (auto ? "arr_01" : "arr_02")] }
             if far { return ["mv_02"] }
-            /* «بعد ثلاث مية متر · وجهتك قدامك». */
+            /* «بعد ثلاث مية متر • وجهتك قدامك». */
             return d + [side ?? "start_06"]
         }
         if far { return ["mv_02"] }

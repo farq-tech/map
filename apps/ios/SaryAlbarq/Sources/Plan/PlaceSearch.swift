@@ -35,17 +35,17 @@ enum PlaceSearch {
         var areaDistanceM: Double? = nil
         var areaApproach: LngLat? = nil
 
-        /// «Starbucks · مقهى · العليا، الرياض».
+        /// «Starbucks • مقهى • العليا، الرياض».
         var subtitle: String? {
             let parts = [altName, category, detail].compactMap { $0?.isEmpty == false ? $0 : nil }
-            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+            return parts.isEmpty ? nil : parts.joined(separator: " • ")
         }
 
         /// The result row's detail line WITHOUT the other-language name (that one has its own small
-        /// line, Build 36 item 11: Arabic and English mixed in one line): «مقهى · العليا، الرياض».
+        /// line, Build 36 item 11: Arabic and English mixed in one line): «مقهى • العليا، الرياض».
         var rowDetail: String? {
             let parts = [category, detail].compactMap { $0?.isEmpty == false ? $0 : nil }
-            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+            return parts.isEmpty ? nil : parts.joined(separator: " • ")
         }
 
         /// The name in the other language, shown small under the Arabic one; nil when the same.
@@ -594,7 +594,7 @@ enum PlaceSearch {
     }
 
     /// Arabic name first, the English one beside it; a chain named only in English gets its Arabic name
-    /// («Starbucks» → «ستاربكس» · Starbucks).
+    /// («Starbucks» → «ستاربكس» • Starbucks).
     static func localized(_ place: Place) -> Place {
         var p = place
         if p.altName == nil, let other = SearchLexicon.brandCounterpart(p.name) { p.altName = other }

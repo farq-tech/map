@@ -381,8 +381,8 @@ struct SaryPTTButton: View {
     private var stateLabel: String { Self.label(for: state, notes: notesMode) }
 
     /// The button's words (UX ٢١: the label says what the button does). Unit-tested.
-    /// · رسالة صوتية: «سجّل رسالة» → «يسجّل ٠:٠٥» → a friend's note: «رسالة من فلان».
-    /// · بث مباشر: «اضغط وتكلم» → «على الهواء ٠:٠٥» → «فلان يتكلم».
+    /// • رسالة صوتية: «سجّل رسالة» → «يسجّل ٠:٠٥» → a friend's note: «رسالة من فلان».
+    /// • بث مباشر: «اضغط وتكلم» → «على الهواء ٠:٠٥» → «فلان يتكلم».
     static func label(for state: PTTStateUI, notes: Bool) -> String {
         switch state {
         case .idle: return notes ? "سجّل رسالة" : "اضغط وتكلم"
@@ -390,7 +390,7 @@ struct SaryPTTButton: View {
         case let .talking(s, _): return notes ? "يسجّل \(SaryFormat.clock(seconds: s))" : "على الهواء \(SaryFormat.clock(seconds: s))"
         case let .listening(name, _): return notes ? "رسالة من \(name)" : "\(name) يتكلم"
         case .muted: return "اللاسلكي مكتوم"
-        case .unavailable: return "اللاسلكي واقف · ما فيه شبكة"
+        case .unavailable: return "اللاسلكي واقف • ما فيه شبكة"
         }
     }
 

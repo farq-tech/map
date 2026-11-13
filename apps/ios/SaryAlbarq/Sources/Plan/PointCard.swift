@@ -114,7 +114,7 @@ struct PointCard: View {
                     }
                     if case let .me(f) = subject {
                         let parts = [CoordinateShare.accuracyLabel(f.accuracyM), CoordinateShare.clock(f.at)].compactMap { $0 }
-                        Text(parts.joined(separator: " · ")).saryText(.footnote).foregroundStyle(p.textSecondary)
+                        Text(parts.joined(separator: " • ")).saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                 }
                 Spacer(minLength: 0)

@@ -161,7 +161,7 @@ enum LocationTuning {
         case .fitness: t = "fitness"
         default: t = "other"
         }
-        return "\(a) · \(f) · \(t)"
+        return "\(a) • \(f) • \(t)"
     }
 
     static func gpsState(auth: CLAuthorizationStatus, lastAccuracy: Double?, lastFixAgeMs: Double?) -> GpsState {

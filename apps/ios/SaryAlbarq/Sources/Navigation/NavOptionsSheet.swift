@@ -133,7 +133,7 @@ struct NavOptionsSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(NavText.remaining(seconds: r.durationS)).saryNumber(.headline, weight: .heavy).foregroundStyle(p.textPrimary)
-                        Text("·").saryText(.callout).foregroundStyle(p.textTertiary)
+                        Text("•").saryText(.callout).foregroundStyle(p.textTertiary)
                         Text(SaryFormat.distance(meters: r.distanceM)).saryNumber(.callout, weight: .bold).foregroundStyle(p.textSecondary)
                         if index > 0 {
                             Text(NavRouteChoice.delta(r, best: best)).saryNumber(.caption, weight: .bold).foregroundStyle(p.textSecondary)
@@ -145,7 +145,7 @@ struct NavOptionsSheet: View {
                         if let t = NavSurfaceLegend.badge(for: r) { tag(t, p.warningText) }
                         if r.hasTolls { tag("رسوم", p.warningText) }
                     }
-                    /* «أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم», swatches in the map's colours. */
+                    /* «أسفلت ٢٣٫٤ كم • ترابي ٨٫١ كم • خارج الطريق ٣٫٠ كم», swatches in the map's colours. */
                     if let km = NavSurfaceKmStrip.km(for: r) { NavSurfaceKmStrip(km: km) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -261,7 +261,7 @@ struct NavTargetPicker: View {
 
 
 /// The route's surfaces in words and in the same "materials" the map draws (`NavMapDrawer.SurfaceStyle`):
-/// «زفلت ٣٢ كم · ترابي ٦ كم · بر مفتوح ٤ كم · وعر ١٫٢ كم». Shown only when the route is not all asphalt.
+/// «زفلت ٣٢ كم • ترابي ٦ كم • بر مفتوح ٤ كم • وعر ١٫٢ كم». Shown only when the route is not all asphalt.
 struct NavSurfaceLegend: View {
     @Environment(\.sary) private var theme
     var runs: [NavSurfaceRun]
@@ -398,7 +398,7 @@ struct NavSurfaceSwatch: View {
     }
 }
 
-/// The km split in one line: «أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم», each number beside a swatch
+/// The km split in one line: «أسفلت ٢٣٫٤ كم • ترابي ٨٫١ كم • خارج الطريق ٣٫٠ كم», each number beside a swatch
 /// in the map's colour. Used by the route card (whole route) and the guidance bar (what is left).
 /// One row when it fits the width, else one row per surface, so it never overlaps on a small phone.
 struct NavSurfaceKmStrip: View {
@@ -444,9 +444,9 @@ struct NavSurfaceKmStrip: View {
         }
     }
 
-    /// «أسفلت ٢٣٫٤ كم · ترابي ٨٫١ كم · خارج الطريق ٣٫٠ كم»
+    /// «أسفلت ٢٣٫٤ كم • ترابي ٨٫١ كم • خارج الطريق ٣٫٠ كم»
     static func line(_ km: NavSurfaceKm) -> String {
-        items(km).map { "\(label($0.family)) \(kmText($0.meters))" }.joined(separator: " · ")
+        items(km).map { "\(label($0.family)) \(kmText($0.meters))" }.joined(separator: " • ")
     }
 
     /// The split worth showing for a whole route: nil when the route has no dirt / off-road in it

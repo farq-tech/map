@@ -63,7 +63,7 @@ final class PTTDiagnosticsLog: @unchecked Sendable {
         let v = info?["CFBundleShortVersionString"] as? String ?? "?"
         let b = info?["CFBundleVersion"] as? String ?? "?"
         let sys = ProcessInfo.processInfo.operatingSystemVersionString
-        return (["سجل قناة الطلعة — سرى البارق \(v) (\(b)) · iOS \(sys)"] + snapshot).joined(separator: "\n") + "\n"
+        return (["سجل قناة الطلعة — سرى البارق \(v) (\(b)) • iOS \(sys)"] + snapshot).joined(separator: "\n") + "\n"
     }
 
     /// The file handed to the share sheet (written now, so it is complete).

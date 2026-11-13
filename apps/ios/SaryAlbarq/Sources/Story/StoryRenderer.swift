@@ -265,7 +265,7 @@ enum StoryRenderer {
         if L.format == .square { titleRect.size.width -= L.markSize + 20; titleRect.origin.x += L.markSize + 20 }
         drawText(s.facts.outingName, font: font(.heavy, L.titleSize), color: ink, in: titleRect, align: .right, vCenter: true, fit: true)
         var sub = companionsLine(s.facts, show: s.options.showNames)
-        if L.format == .square, let d = dateLine(s.facts) { sub += "  ·  " + d }
+        if L.format == .square, let d = dateLine(s.facts) { sub += "  •  " + d }
         var subRect = L.subtitle
         if L.format == .square { subRect.size.width -= L.markSize + 20; subRect.origin.x += L.markSize + 20 }
         drawText(sub, font: font(.medium, L.subtitleSize), color: glow, in: subRect, align: .right, vCenter: true, fit: true)

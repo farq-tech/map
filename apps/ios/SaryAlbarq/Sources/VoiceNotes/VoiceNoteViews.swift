@@ -293,7 +293,7 @@ struct VoiceNoteSection: View {
             .accessibilityIdentifier("voice-note-play")
             VStack(alignment: .leading, spacing: 2) {
                 Text(name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary)
-                Text("\(SaryFormat.clock(seconds: n.seconds)) · \(Self.when(n.recorded_at))")
+                Text("\(SaryFormat.clock(seconds: n.seconds)) • \(Self.when(n.recorded_at))")
                     .font(.sary(12, .regular)).monospacedDigit().foregroundStyle(p.textSecondary)
             }
             Spacer()

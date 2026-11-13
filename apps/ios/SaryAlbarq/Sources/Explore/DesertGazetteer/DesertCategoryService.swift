@@ -88,7 +88,7 @@ struct GazetteerCategoryService: DesertCategoryService {
 
     static func item(_ h: DesertHit, from me: LngLat?) -> DesertCategoryItem {
         let p = h.place
-        let detail = [p.secondary, h.inside ? "أنت داخلها" : nil].compactMap { $0 }.joined(separator: " · ")
+        let detail = [p.secondary, h.inside ? "أنت داخلها" : nil].compactMap { $0 }.joined(separator: " • ")
         return DesertCategoryItem(id: p.id, title: p.title, detail: detail.isEmpty ? p.kind.arabic : detail, point: p.point,
                                   meters: h.meters.isFinite ? h.meters : nil, systemImage: p.kind.systemImage, polygon: p.polygon,
                                   approach: me.map { p.approach(from: $0) })

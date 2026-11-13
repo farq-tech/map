@@ -72,6 +72,9 @@ struct HomeDesertToolsMenu: View {
     var me: LngLat?
     var open: (HomeTool) -> Void
     var close: () -> Void
+    /// Build 48.4: «دروب البر» was a row that looked tappable and did nothing. With a host search it opens the search
+    /// (the routes come with the chosen destination's card); without one it stays an explanation.
+    var search: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -86,6 +89,10 @@ struct HomeDesertToolsMenu: View {
                 SaryDivider().padding(.leading, 56)
                 row("tent.fill", "اقترح لي مكان كشتة", "أحلى ٥ جلسات حولك الليلة، مع ريح الليلة", id: "home.tools.camp") { open(.camp) }
                 SaryDivider().padding(.leading, 56)
+                if let search {
+                    row("point.topleft.down.to.point.bottomright.curvepath", "دروب البر", "اختر وجهتك، وتلقى «دروب البر» في بطاقتها",
+                        id: "home.tools.routes") { search() }
+                } else {
                 HStack(alignment: .top, spacing: theme.space(.m)) {
                     SaryRowIcon(systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                     VStack(alignment: .leading, spacing: 2) {
@@ -98,6 +105,7 @@ struct HomeDesertToolsMenu: View {
                 .padding(.vertical, theme.space(.s))
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("home.tools.routes")
+                }
             }
             .padding(.horizontal, theme.space(.m))
             .sarySurface(radius: SaryRadius.m)
@@ -137,11 +145,13 @@ struct HomeToolSheet: View {
     var host: DesertToolsHost
     var open: (HomeTool) -> Void
     var close: () -> Void
+    /// «دروب البر» in the menu: open the home's search (nil keeps the row as an explanation).
+    var search: (() -> Void)? = nil
 
     var body: some View {
         switch tool {
         case .menu:
-            HomeDesertToolsMenu(me: me, open: open, close: close)
+            HomeDesertToolsMenu(me: me, open: open, close: close, search: search)
         case let .weather(point):
             WeatherPointSheet(point: point, close: close)
         case .qibla:

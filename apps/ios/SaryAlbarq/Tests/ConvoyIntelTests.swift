@@ -184,7 +184,7 @@ final class ConvoyIntelTests: XCTestCase {
         p.stoppedSince = now.addingTimeInterval(-30)
         XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم", "a red light is not «واقف»")
         p.stoppedSince = now.addingTimeInterval(-260)
-        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم · واقف منذ ٤ د")
+        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم • واقف منذ ٤ د")
         p.presence = .stale(since: now.addingTimeInterval(-600))
         XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم", "never a stale «واقف»")
     }

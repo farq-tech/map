@@ -8,7 +8,7 @@ import SwiftUI
 // MARK: - Sheet
 
 enum SheetDetentUI: Equatable, CaseIterable {
-    /// Only the summary line «٣ مشارك · ٢ مباشر · الأقرب ٩٠٠ م».
+    /// Only the summary line «٣ مشارك • ٢ مباشر • الأقرب ٩٠٠ م».
     case peek
     /// About 40 % of the screen.
     case half
@@ -17,7 +17,7 @@ enum SheetDetentUI: Equatable, CaseIterable {
 }
 
 enum LiveTabUI: Equatable, CaseIterable, Hashable {
-    /// Lovable: «الخريطة» · «الأصدقاء» · «الطلعة» in the sheet; «المزيد» (the settings) behind the
+    /// Lovable: «الخريطة» • «الأصدقاء» • «الطلعة» in the sheet; «المزيد» (the settings) behind the
     /// header's gear.
     case trip, group, more, map
 
@@ -51,10 +51,10 @@ enum LiveWarningUI: Equatable, Hashable {
     var label: String {
         switch self {
         case .weakGPS: return "إشارة الموقع ضعيفة"
-        case .noInternet: return "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال"
-        case .keepScreenOn: return "تتوقف المشاركة إذا قفلت الشاشة · اختر «دائمًا»"
-        case .locationOff: return "موقعك مو ظاهر للأصدقاء · افتح الإعدادات"
-        case .preciseOff: return "فعّل الموقع الدقيق · مسارك تقريبي الآن"
+        case .noInternet: return "بلا إنترنت • نرسل موقعك أول ما يرجع الاتصال"
+        case .keepScreenOn: return "تتوقف المشاركة إذا قفلت الشاشة • اختر «دائمًا»"
+        case .locationOff: return "موقعك مو ظاهر للأصدقاء • افتح الإعدادات"
+        case .preciseOff: return "فعّل الموقع الدقيق • مسارك تقريبي الآن"
         }
     }
 }
@@ -209,7 +209,7 @@ struct ParticipantsTabUIState: Equatable {
     var rally: RallyPointUI?
     /// Everyone including me. Order is kept as given (wiring decides: me first, then by distance).
     var participants: [ParticipantUI]
-    /// I have not added my number: show «لم تضف رقمك · أضف رقمك ليتصل بك أصحابك».
+    /// I have not added my number: show «لم تضف رقمك • أضف رقمك ليتصل بك أصحابك».
     var myPhoneMissing: Bool
 }
 
@@ -251,7 +251,7 @@ struct SettingsTabUIState: Equatable {
     var batterySharingOn: Bool
     /// «اكتم القناة»: no live voice in or out for this outing on this phone.
     var pttMuted: Bool = false
-    /// The live link in one Arabic line («متصل منذ 3 د» / «يعيد الاتصال…» · last close code).
+    /// The live link in one Arabic line («متصل منذ 3 د» / «يعيد الاتصال…» • last close code).
     var pttLink: String = ""
     var offline: OfflineAreasUIState
     /// Leader-only actions: «أوقف مؤقتًا» / «استأنف» and «أنهِ الطلعة».
@@ -494,7 +494,7 @@ struct TrailCardUIState: Equatable {
     var recordingInBackground: Bool
     var showFriends: Bool
     var backTrackActive: Bool
-    /// While recording: «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
+    /// While recording: «الدقة ±٨ م • ١٢ نقطة/دقيقة» and what to fix.
     var health: TrailHealth? = nil
     /// «طابق مساري مع الطرق».
     var matchOn = true

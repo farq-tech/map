@@ -213,14 +213,14 @@ struct CreateFlowState: Equatable {
         failure = Failure(message: message)
     }
 
-    /// «ننشئ الطلعة على الخادم… ٥ ث»; past `slowAfterS` a second line «الشبكة بطيئة، ما زلنا نحاول · ١٢ ث».
+    /// «ننشئ الطلعة على الخادم… ٥ ث»; past `slowAfterS` a second line «الشبكة بطيئة، ما زلنا نحاول • ١٢ ث».
     /// Nil when nothing runs.
     func waitingText(now: Date) -> String? {
         guard creating, let stage else { return nil }
         let s = max(0, Int(now.timeIntervalSince(startedAt ?? now)))
         let seconds = "\(SaryFormat.number(s)) ث"
         if Double(s) >= Self.slowAfterS {
-            return "\(stage.text)\nالشبكة بطيئة، ما زلنا نحاول · \(seconds)"
+            return "\(stage.text)\nالشبكة بطيئة، ما زلنا نحاول • \(seconds)"
         }
         return "\(stage.text) \(seconds)"
     }

@@ -333,7 +333,7 @@ final class CarPlayCoordinator: NSObject {
                 case .created: state = "ما بدأت"
                 case .ended: state = "انتهت"
                 }
-                let item = CPListItem(text: o.name, detailText: "\(state) · \(ArabicFormat.number(Double(o.member_count))) أعضاء",
+                let item = CPListItem(text: o.name, detailText: "\(state) • \(ArabicFormat.number(Double(o.member_count))) أعضاء",
                                       image: UIImage(systemName: "car.2.fill"))
                 item.handler = { [weak self] _, done in
                     MainActor.assumeIsolated { self?.model?.open(o.id) }
@@ -528,7 +528,7 @@ final class CarPlayCoordinator: NSObject {
             self.searchResults = found
             var items = found.prefix(12).map { p -> CPListItem in
                 let d = CarPlayPresenter.distanceAndDirection(from: near, to: p.point)?.text
-                let item = CPListItem(text: p.name, detailText: [d, p.detail].compactMap { $0 }.joined(separator: " · "),
+                let item = CPListItem(text: p.name, detailText: [d, p.detail].compactMap { $0 }.joined(separator: " • "),
                                       image: UIImage(systemName: "mappin.circle.fill"))
                 item.userInfo = p.id
                 return item
@@ -612,7 +612,7 @@ final class CarPlayCoordinator: NSObject {
             let origin = me.map { MKMapItem(placemark: MKPlacemark(coordinate: $0.coordinate)) } ?? MKMapItem.forCurrentLocation()
             let dest = MKMapItem(placemark: MKPlacemark(coordinate: target.position.coordinate))
             dest.name = target.label
-            let info: String = road ? "طريق بالسيارة" : (kind == .wayBack ? "على مسارك المسجّل" : "اتجاه تقريبي · بدون طرق")
+            let info: String = road ? "طريق بالسيارة" : (kind == .wayBack ? "على مسارك المسجّل" : "اتجاه تقريبي • بدون طرق")
             let c = CPRouteChoice(summaryVariants: [tripTitle(kind)], additionalInformationVariants: [info], selectionSummaryVariants: [info])
             t = CPTrip(origin: origin, destination: dest, routeChoices: [c])
         }
@@ -728,7 +728,7 @@ final class CarPlayCoordinator: NSObject {
         if g.phase == .road, let p = progress {
             cards = Array(p.maneuvers.prefix(2))
         } else {
-            cards = [CarPlayRoadManeuver(instruction: "\(g.instruction) · \(g.detail)", shortInstruction: g.instruction,
+            cards = [CarPlayRoadManeuver(instruction: "\(g.instruction) • \(g.detail)", shortInstruction: g.instruction,
                                          distanceM: g.remainingM ?? 0, symbol: g.symbol)]
         }
         let key = cards.map { $0.instruction + $0.symbol + ($0.cpManeuverType ?? "") + "\($0.lanes.count)" }.joined(separator: "|")
@@ -888,7 +888,7 @@ final class CarPlayCoordinator: NSObject {
                     self?.refresh()
                 }
             }
-            present(CPNavigationAlert(titleVariants: ["تكلّم… نسجّل"], subtitleVariants: ["للطلعة كلها · دقيقة بالأكثر"],
+            present(CPNavigationAlert(titleVariants: ["تكلّم… نسجّل"], subtitleVariants: ["للطلعة كلها • دقيقة بالأكثر"],
                                       image: UIImage(systemName: "mic.circle.fill")?.withTintColor(.systemRed, renderingMode: .alwaysOriginal),
                                       primaryAction: send, secondaryAction: drop, duration: 0), id: "arrived:recording")
         } else if shownAlert?.id == "arrived:recording" {

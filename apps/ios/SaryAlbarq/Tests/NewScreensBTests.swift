@@ -1,7 +1,7 @@
 import XCTest
 @testable import SaryAlbarq
 
-/// Build 47 · screens group B rules that do not need the UI.
+/// Build 47 • screens group B rules that do not need the UI.
 final class NewScreensBTests: XCTestCase {
     func testOnlyTheFirstCampSuggestionHasThePrimaryGoInTheNewUI() {
         XCTAssertTrue(NewScreens.campGoIsPrimary(rank: 1, newUI: true))

@@ -53,7 +53,7 @@ struct DesertPlace: Identifiable, Equatable, Decodable {
     var title: String { nameAr ?? nameEn ?? "" }
     /// The other language under the title.
     var secondary: String? {
-        if kind == .camp { return region.flatMap { Self.campRegions[$0] }.map { "مقترحة · \($0)" } }
+        if kind == .camp { return region.flatMap { Self.campRegions[$0] }.map { "مقترحة • \($0)" } }
         return nameAr != nil ? nameEn : nil
     }
 

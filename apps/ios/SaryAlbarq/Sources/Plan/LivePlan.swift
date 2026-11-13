@@ -211,7 +211,7 @@ struct PlaceResultRow: View {
     }
 }
 
-/// «الأنسب · الأقرب · حسب النوع» above a result list (shown when there is something to reorder).
+/// «الأنسب • الأقرب • حسب النوع» above a result list (shown when there is something to reorder).
 struct PlaceOrderPicker: View {
     @Binding var order: PlaceSearch.ListOrder
     /// Without a position «الأقرب» means nothing: only relevance and kind are offered.
@@ -484,7 +484,7 @@ private struct TripPlanCardContent: View {
             let done = plan.checklist.items.filter(\.done).count
             parts.append("التجهيز \(SaryFormat.number(done))/\(SaryFormat.number(plan.checklist.items.count))")
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
     }
 
     private func destinationRow(_ d: OutingDestination) -> some View {
@@ -506,7 +506,7 @@ private struct TripPlanCardContent: View {
                     Text(d.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
                     if let fix, fresh {
                         let me = LngLat(lng: fix.lng, lat: fix.lat)
-                        Text("\(SaryFormat.distance(meters: PlanGeo.meters(me, dest))) خط مستقيم · \(Geo.directionLabel(PlanGeo.bearing(me, dest)))")
+                        Text("\(SaryFormat.distance(meters: PlanGeo.meters(me, dest))) خط مستقيم • \(Geo.directionLabel(PlanGeo.bearing(me, dest)))")
                             .saryNumber(.footnote).foregroundStyle(p.textSecondary)
                     }
                 }

@@ -261,7 +261,7 @@ final class DestinationCompassTests: XCTestCase {
         XCTAssertEqual(CompassRain.nearest([light, near], me: riyadh), near)
         XCTAssertNil(CompassRain.nearest([], me: riyadh))
         XCTAssertNil(CompassRain.nearest([CompassRainCell(position: riyadh, mm: 0.5, hoursAgo: nil)], me: riyadh))
-        XCTAssertEqual(CompassRain.line(far), "مطر ١٢ ملم · قبل ٣ ساعات")
+        XCTAssertEqual(CompassRain.line(far), "مطر ١٢ ملم • قبل ٣ ساعات")
     }
 
     func testRainCellsParseRows() {
@@ -307,7 +307,7 @@ final class DestinationCompassTests: XCTestCase {
         XCTAssertEqual(pick?.regionID, "big")
         XCTAssertNil(CompassSpring.nearest([], me: riyadh))
         XCTAssertNil(CompassSpring.nearest([speck], me: riyadh))
-        XCTAssertEqual(pick.map(CompassSpring.line), "روضة خريم · ربيع واضح · ٦ كم²")
+        XCTAssertEqual(pick.map(CompassSpring.line), "روضة خريم • ربيع واضح • ٦ كم²")
     }
 }
 

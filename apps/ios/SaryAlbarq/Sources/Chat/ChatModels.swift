@@ -2,8 +2,8 @@ import Foundation
 
 /// «المحادثات» — the trip chat (server: apps/api/lib/outings/chat.js).
 ///
-///   · one group conversation per trip («دردشة الطلعة»), for every member;
-///   · 1:1 direct conversations between two members of the same trip.
+///   • one group conversation per trip («دردشة الطلعة»), for every member;
+///   • 1:1 direct conversations between two members of the same trip.
 ///
 /// The server decides who may read and write (membership on every request
 /// and socket frame), orders everything by its own `seq`, and deletes the
@@ -219,7 +219,7 @@ enum ChatRules {
         }
     }
 
-    /// ✓ stored · ✓✓ everyone else in the conversation has read it.
+    /// ✓ stored • ✓✓ everyone else in the conversation has read it.
     enum Receipt: Equatable { case sending, retrying, failed, sent, read }
 
     static func receipt(_ m: ChatMessage, me: String, reads: [String: Int], others: Int) -> Receipt? {

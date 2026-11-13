@@ -10,7 +10,7 @@ import UIKit
 /// graphite trim). Any other colour is painted from two layers: `CarIconBase.png` (everything
 /// that is not paint, outline and shadow; premultiplied) and `CarIconBody.png` (R = diffuse
 /// factor D, G = reflection K, both sRGB-encoded; B = paint coverage), from renders with white
-/// and black paint: paint (linear) = colour · D + K, then sRGB, over the base.
+/// and black paint: paint (linear) = colour • D + K, then sRGB, over the base.
 enum CarIcon {
     static let baseName = "CarIconBase"
     static let bodyName = "CarIconBody"

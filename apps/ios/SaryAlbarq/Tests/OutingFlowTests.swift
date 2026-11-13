@@ -54,9 +54,9 @@ final class OutingFlowTests: XCTestCase {
         let w = WaitingLeader.info(members: all, myId: "me", clockOffsetMs: 0, myLinkUp: true, myLinkText: "متصل", now: t0)
         XCTAssertEqual(w.leader, "أمير الطلعة فهد متصل الآن")
         XCTAssertTrue(w.leaderOnline)
-        XCTAssertEqual(w.members, "الأصدقاء ٤ · المتصلين ٣", "me (link up), the leader and سعد")
+        XCTAssertEqual(w.members, "الأصدقاء ٤ • المتصلين ٣", "me (link up), the leader and سعد")
         XCTAssertNil(w.connection)
-        XCTAssertEqual(w.line, "أمير الطلعة فهد متصل الآن · الأصدقاء ٤ · المتصلين ٣")
+        XCTAssertEqual(w.line, "أمير الطلعة فهد متصل الآن • الأصدقاء ٤ • المتصلين ٣")
         XCTAssertTrue(w.accessibility.hasPrefix("ما بدأت الطلعة، "))
 
         let away = WaitingLeader.info(members: [member("L", "فهد", owner: true, online: true, away: true)], myId: "me", clockOffsetMs: 0,
@@ -73,8 +73,8 @@ final class OutingFlowTests: XCTestCase {
 
         /* My link is down: the line says so first (what we show is the last state that reached us). */
         let down = WaitingLeader.info(members: all, myId: "me", clockOffsetMs: 0, myLinkUp: false, myLinkText: "بلا إنترنت", now: t0)
-        XCTAssertEqual(down.connection, "اتصالك: بلا إنترنت · آخر حالة وصلتنا")
-        XCTAssertEqual(down.members, "الأصدقاء ٤ · المتصلين ٢")
+        XCTAssertEqual(down.connection, "اتصالك: بلا إنترنت • آخر حالة وصلتنا")
+        XCTAssertEqual(down.members, "الأصدقاء ٤ • المتصلين ٢")
         XCTAssertTrue(down.line.hasPrefix("اتصالك: بلا إنترنت"))
     }
 
@@ -113,7 +113,7 @@ final class OutingFlowTests: XCTestCase {
         i.eta = t0.addingTimeInterval(18 * 60)
         let on = OutingFlow.ui(i)
         XCTAssertEqual(on.state, .onLeg(leg("l1", camp)))
-        XCTAssertEqual(on.line, "في الطريق إلى مخيم النفود · ١٢ كم · ١٨ د")
+        XCTAssertEqual(on.line, "في الطريق إلى مخيم النفود • ١٢ كم • ١٨ د")
         XCTAssertEqual(on.primary?.title, "وصلنا")
 
         /* I arrived (detected or «وصلنا») while the group's leg is still open on the server. */

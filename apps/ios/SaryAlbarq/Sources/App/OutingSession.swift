@@ -144,7 +144,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private var trailUnsaved = 0
     /// Raw fixes not yet appended to the outing's raw log.
     private var rawPending: [RawFix] = []
-    /// The last few minutes of raw fixes (for «الدقة ±٨ م · ١٢ نقطة/دقيقة»).
+    /// The last few minutes of raw fixes (for «الدقة ±٨ م • ١٢ نقطة/دقيقة»).
     private(set) var recentRaw: [RawFix] = []
     /// Road matching of my trail (nil: no token / switched off).
     private(set) var matcher: TrailMatchCoordinator?
@@ -828,9 +828,9 @@ final class OutingSession: ObservableObject, Identifiable {
             let name = v.members[e.u]?.display_name ?? ""
             switch e.k {
             case .sos:
-                Notifier.post(title: "طوارئ: \(name)", body: "يحتاج مساعدة · عبر الأجهزة القريبة", outingId: id, kind: "sos")
+                Notifier.post(title: "طوارئ: \(name)", body: "يحتاج مساعدة • عبر الأجهزة القريبة", outingId: id, kind: "sos")
             case .stuck:
-                Notifier.post(title: "\(name) غرّز", body: e.text.map { "\($0) · عبر الأجهزة القريبة" } ?? "عبر الأجهزة القريبة", outingId: id, kind: "sos")
+                Notifier.post(title: "\(name) غرّز", body: e.text.map { "\($0) • عبر الأجهزة القريبة" } ?? "عبر الأجهزة القريبة", outingId: id, kind: "sos")
             default:
                 break
             }
@@ -926,7 +926,7 @@ final class OutingSession: ObservableObject, Identifiable {
         return displayTrailMemo.value(points: trail.points, cache: matcher?.cache, compose: TrailDisplay.compose)
     }
 
-    /// «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
+    /// «الدقة ±٨ م • ١٢ نقطة/دقيقة» and what to fix.
     var trailHealth: TrailHealth {
         TrailHealth.compute(raw: recentRaw, nowMs: Date().timeIntervalSince1970 * 1000,
                             preciseOff: location.preciseOff, whenInUseOnly: location.canLocate && !hasAlwaysPermission,
@@ -1706,7 +1706,7 @@ enum SoloCopy {
     }
     /// The header, in place of the sharing state: nothing leaves the phone.
     static let localOnly = "على جوالك فقط"
-    static let localOnlyLong = "على جوالك فقط · ما يوصل لأحد"
+    static let localOnlyLong = "على جوالك فقط • ما يوصل لأحد"
     /// «أنهِ الطلعة» in a solo outing.
     static let end = "أنهِ المشوار"
     static let endTitle = "تنهي المشوار؟"

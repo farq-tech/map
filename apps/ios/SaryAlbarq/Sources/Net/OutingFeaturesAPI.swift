@@ -17,7 +17,7 @@ enum FeatureAvailability {
         return e.status == 405 || (e.status == 404 && (e.code.hasPrefix("http_") || e.code == "not_found"))
     }
 
-    static let notDeployedText = "غير متاح بعد · الخادم لم يُحدَّث لهذه الميزة"
+    static let notDeployedText = "غير متاح بعد • الخادم لم يُحدَّث لهذه الميزة"
 
     /// A sentence for the person; the shared table plus this feature's own codes.
     static func arabic(_ e: Error) -> String {

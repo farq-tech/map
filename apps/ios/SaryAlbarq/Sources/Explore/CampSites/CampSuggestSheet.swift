@@ -189,6 +189,8 @@ struct CampSuggestSheet: View {
                         .foregroundStyle(on ? theme.palette.onAccent : theme.palette.textPrimary)
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .background(Capsule().fill(on ? theme.palette.accent : theme.palette.sunken))
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
@@ -201,7 +203,7 @@ struct CampSuggestSheet: View {
     private func nightCard(_ n: CampNight) -> some View {
         let p = theme.palette
         return VStack(alignment: .leading, spacing: 4) {
-            Label("الليلة: ريح \(CampReason.windAdjective(n.fromDeg)) \(SaryFormat.number(Int(n.windKmh.rounded()))) كم/س · هبّات \(SaryFormat.number(Int(n.gustKmh.rounded())))",
+            Label("الليلة: ريح \(CampReason.windAdjective(n.fromDeg)) \(SaryFormat.number(Int(n.windKmh.rounded()))) كم/س • هبّات \(SaryFormat.number(Int(n.gustKmh.rounded())))",
                   systemImage: "wind")
                 .saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
             if let s = n.sunset {
@@ -267,7 +269,7 @@ struct CampSiteCard: View {
                         Text(sub).saryText(.caption).foregroundStyle(p.textTertiary).lineLimit(1)
                             .accessibilityIdentifier("camp.kind.\(rank)")
                     }
-                    Text("\(SaryFormat.distance(meters: ranked.distanceM)) خط مستقيم · درجة \(SaryFormat.number(Int((ranked.score * 100).rounded())))")
+                    Text("\(SaryFormat.distance(meters: ranked.distanceM)) خط مستقيم • درجة \(SaryFormat.number(Int((ranked.score * 100).rounded())))")
                         .saryNumber(.footnote).foregroundStyle(p.textSecondary)
                 }
                 Spacer(minLength: 0)
@@ -279,7 +281,7 @@ struct CampSiteCard: View {
                 Text(CampReason.windLine(s, night: night)).saryText(.footnote, weight: .bold).foregroundStyle(p.accentText)
                     .accessibilityIdentifier("camp.wind.\(rank)")
             }
-            Text(CampReason.top3(s, night: night).joined(separator: " · "))
+            Text(CampReason.top3(s, night: night).joined(separator: " • "))
                 .saryText(.subhead).foregroundStyle(p.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("camp.reasons.\(rank)")

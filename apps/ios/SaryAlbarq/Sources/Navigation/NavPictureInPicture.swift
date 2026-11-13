@@ -262,7 +262,7 @@ final class NavPictureInPicture: NSObject, ObservableObject {
             drawMiniRoute(snapshot, in: ctx.cgContext)
             UIColor(white: 0.2, alpha: 1).setFill()
             ctx.fill(CGRect(x: 22, y: 270, width: size.width - 44, height: 1))
-            let footer = [snapshot.timeRemaining, snapshot.distanceRemaining].filter { !$0.isEmpty }.joined(separator: "  ·  ")
+            let footer = [snapshot.timeRemaining, snapshot.distanceRemaining].filter { !$0.isEmpty }.joined(separator: "  •  ")
             (footer as NSString).draw(in: CGRect(x: 30, y: 286, width: right - 30, height: 40),
                                       withAttributes: [.font: UIFont.systemFont(ofSize: 22, weight: .medium),
                                                        .foregroundColor: UIColor.white,

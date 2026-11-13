@@ -34,7 +34,7 @@ struct RealisticScene: Identifiable, Equatable {
     }
 
     var id = UUID().uuidString
-    /// «الوضع الواقعي · …» subtitle (the place / track name).
+    /// «الوضع الواقعي • …» subtitle (the place / track name).
     var title: String
     /// Where the camera looks first (nil: fit everything below).
     var focus: LngLat?

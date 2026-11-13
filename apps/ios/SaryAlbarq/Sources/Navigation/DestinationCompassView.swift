@@ -271,7 +271,7 @@ struct DestinationCompassHost: View {
             }
         }
         let reading = DestinationCompass.reading(me: me, course: raw.heading, speed: raw.speed, compass: deviceHeading.heading, target: point, kind: target, guide: guide)
-        let detail = [subtitle, credit].compactMap { $0 }.joined(separator: " · ")
+        let detail = [subtitle, credit].compactMap { $0 }.joined(separator: " • ")
 
         let options: [DestinationCompassView.Option] = [
             .init(target: .destination, enabled: dest != nil, note: dest == nil ? DestinationCompass.noDestination : nil),
@@ -432,7 +432,7 @@ struct DestinationCompassView: View {
                                 Text(n)
                                     .saryText(.micro, weight: .medium)
                                     .foregroundStyle(on ? p.onAccent.opacity(0.8) : p.textSecondary)
-                                    /* The whole line («مطر ١٢ ملم · قبل ٣ ساعات · NASA GPM IMERG»): wraps, never cut. */
+                                    /* The whole line («مطر ١٢ ملم • قبل ٣ ساعات • NASA GPM IMERG»): wraps, never cut. */
                                     .lineLimit(4)
                                     .fixedSize(horizontal: false, vertical: true)
                             }

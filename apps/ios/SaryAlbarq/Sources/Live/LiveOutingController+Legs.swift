@@ -159,7 +159,7 @@ extension LiveOutingController {
             if let d = legs.picked ?? planModel?.plan.destination {
                 await beginLeg(to: d)
             } else {
-                toast("بدأت الطلعة · وين رايحين؟")
+                toast("بدأت الطلعة • وين رايحين؟")
             }
         }
     }

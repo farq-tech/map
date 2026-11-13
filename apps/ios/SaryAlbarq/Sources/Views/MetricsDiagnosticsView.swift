@@ -105,7 +105,7 @@ enum MetricsLabels {
         let kind = s.kind == .daily ? "تقرير يومي" : "تشخيص"
         let day = (s.periodEnd ?? s.periodStart).map { String($0.prefix(10)) } ?? ""
         let build = s.appBuild.map { b in " (\(b))" } ?? ""
-        let ver = s.appVersion.map { v in " · نسخة \(v)\(build)" } ?? ""
+        let ver = s.appVersion.map { v in " • نسخة \(v)\(build)" } ?? ""
         return "\(kind) \(day)\(ver)"
     }
 
@@ -114,10 +114,10 @@ enum MetricsLabels {
         func add(_ label: String, _ value: String?) {
             if let value, !value.isEmpty { out.append(Line(label: label, value: value)) }
         }
-        /// "a · b · c", skipping the missing parts.
+        /// "a • b • c", skipping the missing parts.
         func join(_ parts: [String?]) -> String? {
             let kept = parts.compactMap { $0 }
-            return kept.isEmpty ? nil : kept.joined(separator: " · ")
+            return kept.isEmpty ? nil : kept.joined(separator: " • ")
         }
 
         if let m = s.firstDrawMedianMs {
@@ -147,11 +147,11 @@ enum MetricsLabels {
         add("إضاءة الشاشة (متوسط)", s.displayAverageLuminance.map { v in num(v) })
         if let bars = s.cellularBars {
             let rows = bars.keys.sorted().map { k in "\(k): \(bars[k] ?? 0)" }
-            add("الشبكة الخلوية حسب الإشارة", rows.joined(separator: " · "))
+            add("الشبكة الخلوية حسب الإشارة", rows.joined(separator: " • "))
         }
         if s.cellularDownloadMB != nil || s.cellularUploadMB != nil {
             let down = num(s.cellularDownloadMB ?? 0), up = num(s.cellularUploadMB ?? 0)
-            add("بيانات الجوال", "تنزيل \(down) ميغا · رفع \(up) ميغا")
+            add("بيانات الجوال", "تنزيل \(down) ميغا • رفع \(up) ميغا")
         }
         add("الكتابة على التخزين", s.diskWritesMB.map { v in "\(num(v)) ميغا" })
         if let ex = s.exits {
@@ -183,7 +183,7 @@ enum MetricsLabels {
             "backgroundFetchCompletionTimeout": "خلصت مهلة التحديث بالخلفية",
         ]
         let reason = parts.count > 1 ? parts[1] : key
-        return "\(side) · \(names[reason] ?? reason)"
+        return "\(side) • \(names[reason] ?? reason)"
     }
 
     static func signpost(_ name: String) -> String {

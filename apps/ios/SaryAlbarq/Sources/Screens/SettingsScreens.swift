@@ -149,7 +149,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("طريقة اللاسلكي").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
                             Text(talkMode == .notes ? "اضغط وسجّل، ثم «أرسل»: توصل لكل اللي على ترددك ولو انقطع النت شوي"
-                                                    : "امسك الزر وتكلم مباشرة · يحتاج شبكة قوية عند الكل")
+                                                    : "امسك الزر وتكلم مباشرة • يحتاج شبكة قوية عند الكل")
                                 .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
                         }
                     }
@@ -579,7 +579,7 @@ struct AdvancedSettingsView: View {
                 }
                 ForEach(Array(gpx.enumerated()), id: \.offset) { n, item in
                     ShareLink(item: item.url) {
-                        SaryButtonLabel(title: n == 0 ? "صدّر سجل المسار" : "صدّر سجل المسار · \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
+                        SaryButtonLabel(title: n == 0 ? "صدّر سجل المسار" : "صدّر سجل المسار • \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("about.gpx.\(n)")

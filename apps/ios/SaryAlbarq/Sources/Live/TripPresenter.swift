@@ -117,14 +117,14 @@ enum TripPresenter {
         return (Geo.haversineMeters(p, Geo.LatLng(lat: d.lat, lng: d.lng)), false)
     }
 
-    /// For the Live Activity and CarPlay: «قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م».
+    /// For the Live Activity and CarPlay: «قطعنا ٦٢٪ • باقي ١٢ كم • نوصل ٤:٣٠ م».
     static func shortLine(_ ui: TripPanelUI) -> String? {
         switch ui.phase {
         case .arrived: return "وصلت \(ui.destinationName)"
         case .ended: return nil
         case .underway:
             let parts = [ui.progressLine, ui.remainingLine, ui.etaLine].compactMap { $0 }
-            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+            return parts.isEmpty ? nil : parts.joined(separator: " • ")
         default: return nil
         }
     }

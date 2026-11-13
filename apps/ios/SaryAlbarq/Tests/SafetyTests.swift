@@ -171,7 +171,7 @@ final class StuckLogicTests: XCTestCase {
         XCTAssertEqual(StuckLogic.summary(rep), "ما رد أحد بعد")
         XCTAssertFalse(StuckLogic.helpComing(rep))
         rep.replies = ["c": .cant, "a": .coming, "b": .coming, "d": .have_rope]
-        XCTAssertEqual(StuckLogic.summary(rep), "٢ جايين · ١ معه حبل · ١ ما يقدر")
+        XCTAssertEqual(StuckLogic.summary(rep), "٢ جايين • ١ معه حبل • ١ ما يقدر")
         XCTAssertTrue(StuckLogic.helpComing(rep))
         let names = ["a": "سعد", "b": "أبو فهد", "c": "نورة", "d": "سلطان"]
         let lines = StuckLogic.replyLines(rep, name: { names[$0] }, color: { _ in 0 })

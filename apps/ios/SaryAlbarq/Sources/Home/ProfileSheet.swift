@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The profile button's sheet (after Hudhud's): who I am, then مفضلتك · نشاطك ·
-/// الإعدادات · المساعدة · الشروط. Each row opens its page behind the sheet.
+/// The profile button's sheet (after Hudhud's): who I am, then مفضلتك • نشاطك ·
+/// الإعدادات • المساعدة • الشروط. Each row opens its page behind the sheet.
 struct ProfileSheet: View {
     var open: (HomeRoute) -> Void
     @EnvironmentObject private var model: AppModel

@@ -56,7 +56,7 @@ struct SaryNameChip: View {
                 if let s = chip.silentSince {
                     SarySilentBadge(since: s, now: chip.now, compact: true, reason: chip.silentReason)
                 } else if NameChipAge.shows(chip.presence, now: chip.now) {
-                    /* «تخفيف الزحمة» ٩ (Lovable: «خالد · قبل ٤ د»): the age only once it is worth saying. */
+                    /* «تخفيف الزحمة» ٩ (Lovable: «خالد • قبل ٤ د»): the age only once it is worth saying. */
                     Text(style.label(now: chip.now))
                         .saryText(.caption, weight: .medium)
                         .foregroundStyle(p.textSecondary)

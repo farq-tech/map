@@ -24,7 +24,7 @@ struct WeatherHourUI: Equatable, Identifiable {
 struct WeatherArrivalUI: Equatable {
     /// «الوصول المتوقع ٤:٣٠ م».
     var etaText: String
-    /// «٣٢ كم بخط مستقيم · بسرعتكم الأخيرة ٦٠ كم/س» or «… بافتراض ٥٠ كم/س».
+    /// «٣٢ كم بخط مستقيم • بسرعتكم الأخيرة ٦٠ كم/س» or «… بافتراض ٥٠ كم/س».
     var basis: String
     /// The forecast hour at arrival, nil when arrival is beyond the forecast.
     var hour: WeatherHourUI?
@@ -82,7 +82,7 @@ enum WeatherProvenance {
         var s = d < 1000
             ? "نقطة التوقع على بعد أقل من ١ كم \(reference.label)"
             : "نقطة التوقع على بعد \(SaryFormat.distance(meters: d)) \(reference.label)"
-        if r.area.precision == .area { s += " · منطقة تقريبية" }
+        if r.area.precision == .area { s += " • منطقة تقريبية" }
         return s
     }
 }
@@ -150,7 +150,7 @@ enum WeatherPresenter {
     /// The forecast at the estimated arrival time.
     static func arrival(_ est: ArrivalEstimate.Result, report r: WeatherReport?, now: Date) -> WeatherArrivalUI {
         let speed = est.assumedSpeed ? "بافتراض \(WeatherFormat.speed(est.speedKmh))" : "بسرعتكم الأخيرة \(WeatherFormat.speed(est.speedKmh))"
-        let basis = "\(SaryFormat.distance(meters: est.distanceM)) بخط مستقيم · \(speed)"
+        let basis = "\(SaryFormat.distance(meters: est.distanceM)) بخط مستقيم • \(speed)"
         let etaText = est.eta.timeIntervalSince(now) < 5 * 60 ? "الوصول خلال دقائق" : "الوصول المتوقع \(WeatherFormat.clock(est.eta))"
         guard let r, let h = WeatherRules.hour(containing: est.eta, in: r) else {
             return WeatherArrivalUI(etaText: etaText, basis: basis, hour: nil, condition: r == nil ? nil : "وقت الوصول بعد نهاية التوقعات المتاحة")
@@ -160,6 +160,6 @@ enum WeatherPresenter {
         if let w = h.windKmh { bits.append("رياح \(WeatherFormat.speed(w))") }
         if let p = h.precipitationProbability, p >= 10 { bits.append("مطر \(SaryFormat.percent(Int(p.rounded())))") }
         if let d = DustLevel.of(h.dust), d >= .light { bits.append(d.label) }
-        return WeatherArrivalUI(etaText: etaText, basis: basis, hour: hourUI(h, label: WeatherFormat.hour(h.time)), condition: bits.joined(separator: " · "))
+        return WeatherArrivalUI(etaText: etaText, basis: basis, hour: hourUI(h, label: WeatherFormat.hour(h.time)), condition: bits.joined(separator: " • "))
     }
 }

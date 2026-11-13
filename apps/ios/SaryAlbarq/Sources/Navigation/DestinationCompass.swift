@@ -290,12 +290,12 @@ enum CompassRain {
         return pool.min { PlanGeo.meters(me, $0.position) < PlanGeo.meters(me, $1.position) }
     }
 
-    /// «مطر ١٢ ملم · قبل ٣ ساعات».
+    /// «مطر ١٢ ملم • قبل ٣ ساعات».
     static func line(_ c: CompassRainCell) -> String {
         let mm = "مطر \(SaryFormat.number(max(1, Int(c.mm.rounded())))) ملم"
         guard let h = c.hoursAgo, h.isFinite, h >= 0 else { return mm }
         let ago = h < 1 ? "قبل أقل من ساعة" : "قبل \(CloudOutlookPresenter.ageText(Int(h.rounded()) * 60))"
-        return "\(mm) · \(ago)"
+        return "\(mm) • \(ago)"
     }
 }
 
@@ -370,9 +370,9 @@ enum CompassSpring {
         return placed.min(by: { $0.distanceM < $1.distanceM }) ?? nearest
     }
 
-    /// «روضة خريم · ربيع واضح · ٦ كم²» (without a place: «ربيع واضح · ٦ كم²»).
+    /// «روضة خريم • ربيع واضح • ٦ كم²» (without a place: «ربيع واضح • ٦ كم²»).
     static func line(_ p: CompassSpringPick) -> String {
         let area = "\(SaryFormat.number(max(1, Int(p.areaKm2.rounded())))) كم²"
-        return [p.placeName, p.label.flatMap { $0.isEmpty ? nil : $0 }, area].compactMap { $0 }.joined(separator: " · ")
+        return [p.placeName, p.label.flatMap { $0.isEmpty ? nil : $0 }, area].compactMap { $0 }.joined(separator: " • ")
     }
 }
