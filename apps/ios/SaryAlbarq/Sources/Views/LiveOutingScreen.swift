@@ -135,6 +135,7 @@ struct LiveOutingScreen: View {
             if controller.modal == nil { controller.modal = .campSite(id) }
         }
         .ignoresSafeArea(.keyboard)
+        .onAppear { WeatherPageRouter.open = { [weak controller] in if controller?.modal == nil { controller?.modal = .weather } } }
         /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
          * its own window (the dock's copy is hidden or covered then). */
         .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded && !controller.settingsOpen,
