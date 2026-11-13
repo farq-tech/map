@@ -62,7 +62,7 @@ enum WeatherFetchFailure: Equatable {
 /// Open-Meteo forecast + air quality (dust, PM10). Free host by default (non-commercial);
 /// pass a customer host + key for the paid plan.
 struct OpenMeteoProvider: WeatherProvider {
-    var transport: WeatherTransport = URLSessionWeatherTransport()
+    var transport: WeatherTransport = CoalescingWeatherTransport()
     /// Paid plan: e.g. "customer-api.open-meteo.com" with `apiKey`.
     var apiKey: String? = nil
     var id: WeatherProviderID { .openMeteo }

@@ -222,6 +222,8 @@ struct WeatherSheet: View {
     var changeDestination: (() -> Void)? = nil
     /// Said honestly when the destination is only on this phone.
     var destinationNote: String? = nil
+    /// W-1: the live screen's page also holds the map layers and their controls (nil model = no map on screen).
+    var showsMapControls = false
     @Environment(\.sary) private var theme
     @State private var now = Date()
     @State private var pickDeparture = false
@@ -231,6 +233,8 @@ struct WeatherSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    /* W-1: the layers come first on the live screen's page: it is what the map's chip opened it for. */
+                    if showsMapControls, let m = WeatherLegendModel.active { mapSection(m) }
                     if weather.destinationPoint != nil {
                         /* The destination first: it is what the chip on the map shows. */
                         WeatherCardView(ui: weather.destinationCard(now: now, hours: 24))
@@ -289,7 +293,36 @@ struct WeatherSheet: View {
         }
     }
 
+    @ViewBuilder
     private func arrivalCard(_ a: WeatherArrivalUI) -> some View {
+        if WeatherPageFlag.isOn {
+            /* W-4: the page's arrival card is the shared one (the outing wizard uses it too). */
+            WeatherArrivalCard(etaText: a.etaText, basis: a.basis,
+                               hourSymbol: a.hour?.symbol, hourTemp: a.hour?.temp, condition: a.condition) { departureRow }
+        } else {
+            legacyArrivalCard(a)
+        }
+    }
+
+    /// «الانطلاق»: now, or a time picked within the forecast.
+    private var departureRow: some View {
+        HStack(spacing: theme.space(.s)) {
+            Text("الانطلاق").saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+            Spacer()
+            if pickDeparture {
+                DatePicker("", selection: Binding(get: { weather.departure ?? Date() }, set: { weather.departure = $0 }),
+                           in: Date()...Date().addingTimeInterval(47 * 3600), displayedComponents: [.date, .hourAndMinute])
+                    .labelsHidden()
+                Button("الآن") { weather.departure = nil; pickDeparture = false }.saryText(.subhead, weight: .bold)
+            } else {
+                Button(weather.departure.map { WeatherFormat.clock($0) } ?? "الآن · غيّر") { pickDeparture = true }
+                    .saryText(.subhead, weight: .bold)
+                    .accessibilityIdentifier("weather.departure")
+            }
+        }
+    }
+
+    private func legacyArrivalCard(_ a: WeatherArrivalUI) -> some View {
         let p = theme.palette
         return VStack(alignment: .leading, spacing: theme.space(.s)) {
             HStack {
@@ -325,6 +358,12 @@ struct WeatherSheet: View {
         .sarySurface(radius: SaryRadius.l)
     }
 
+    private func mapSection(_ m: WeatherLegendModel) -> some View {
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            WeatherMapSection(model: m)
+        }
+    }
+
     private var wadiSection: some View {
         let p = theme.palette
         return SarySection(title: "السيول والأودية") {
@@ -351,6 +390,9 @@ struct WeatherSheet: View {
 struct WeatherPointSheet: View {
     var point: OutingDestination
     var close: () -> Void
+    /// W-2: with the unified weather on, «الجو هناك» opens the SAME page as the chip (the map's layers and their
+    /// controls first, then the point's card, the official link and the privacy line).
+    var showsMapControls = WeatherPageFlag.isOn
     @StateObject private var store = WeatherStore()
     @Environment(\.sary) private var theme
 
@@ -359,6 +401,7 @@ struct WeatherPointSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    if showsMapControls, let m = WeatherLegendModel.active { WeatherMapSection(model: m) }
                     WeatherCardView(ui: WeatherPresenter.card(title: point.name.isEmpty ? "الطقس هنا" : "الطقس في \(point.name)", report: store.report,
                                                               refreshing: store.refreshing, failed: store.lastFailed, now: Date(), hours: 24,
                                                               reference: WeatherReference(point: Geo.LatLng(lat: point.lat, lng: point.lng), label: "من النقطة")))
@@ -370,29 +413,12 @@ struct WeatherPointSheet: View {
                 .padding(theme.space(.l))
             }
             .background(p.elevated.ignoresSafeArea())
-            .navigationTitle("الطقس هنا")
+            .navigationTitle(showsMapControls ? "الطقس" : "الطقس هنا")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("خلاص", action: close) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("خلاص", action: close).accessibilityIdentifier("weather.close") } }
         }
         .task { await store.update(WeatherArea(point: point.lat, lng: point.lng)) }
-    }
-}
-
-/// The live sheet's card: the area now + next hours, and the destination line.
-struct LiveWeatherCard: View {
-    let controller: LiveOutingController
-    @ObservedObject var weather: OutingWeather
-    @Environment(\.sary) private var theme
-
-    var body: some View {
-        let now = Date()
-        VStack(spacing: theme.space(.s)) {
-            WeatherCardView(ui: weather.areaCard(now: now, hours: theme.drive ? 4 : 8), showHours: !theme.drive) { controller.modal = .weather }
-            if weather.destinationPoint != nil {
-                WeatherCardView(ui: weather.destinationCard(now: now, hours: 6), showHours: false) { controller.modal = .weather }
-            }
-        }
-        .task { controller.feedWeather() }
+        .accessibilityIdentifier(showsMapControls ? "weather.sheet" : "weather.point.sheet")
     }
 }
 
@@ -455,5 +481,48 @@ struct DetailsWeatherSection: View {
         }
         weather.setPositions(pts, me: pts.isEmpty ? me : nil)
         await weather.refresh(force: false)
+    }
+}
+
+
+/// W-4 (docs/UNIFIED-SURFACES.md): ONE arrival card for every weather surface. The weather page and the
+/// «طلعة جديدة» wizard both show it: the arrival time, how it was estimated, and the weather at that hour.
+/// (Used when the unified weather is on; the old copies stay until W-5.)
+struct WeatherArrivalCard<Footer: View>: View {
+    let etaText: String
+    let basis: String
+    var hourSymbol: String? = nil
+    var hourTemp: String? = nil
+    var condition: String? = nil
+    /// Said when there is no hour to show (the arrival is past the forecast).
+    var beyondForecastNote: String? = nil
+    @ViewBuilder var footer: () -> Footer
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            HStack {
+                Label(etaText, systemImage: "flag.checkered").saryNumber(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                Spacer()
+            }
+            Text(basis).saryNumber(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            if let symbol = hourSymbol, let temp = hourTemp {
+                HStack(spacing: theme.space(.m)) {
+                    Image(systemName: symbol).symbolRenderingMode(.multicolor).font(.system(size: 26))
+                    Text(temp).saryNumber(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
+                    Text(condition ?? "").saryNumber(.subhead, weight: .medium).foregroundStyle(p.textPrimary).fixedSize(horizontal: false, vertical: true)
+                }
+            } else if let c = condition {
+                Text(c).saryText(.subhead).foregroundStyle(p.textSecondary)
+            } else if let note = beyondForecastNote {
+                Text(note).saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            footer()
+        }
+        .padding(theme.space(.l))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sarySurface(radius: SaryRadius.l)
+        .accessibilityIdentifier("weather.arrival")
     }
 }

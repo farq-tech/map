@@ -49,7 +49,7 @@ final class WeatherOverlay {
     private var frameIndex = 0
     private var pauseTicks = 0
     let legend = WeatherLegendModel()
-    private var legendHost: UIHostingController<WeatherLegendCard>?
+    private var legendHost: UIHostingController<WeatherLegendHost>?
     private var flowHost: UIHostingController<CloudFlowHost>?
 
     private struct Drawn: Equatable {
@@ -71,6 +71,8 @@ final class WeatherOverlay {
         legend.onTogglePlay = { [weak self] in self?.togglePlay() }
         legend.onScrub = { [weak self] i in self?.seek(to: i) }
         legend.onClose = { [weak self] in self?.layers.kind = .none }
+        legend.onOpenPage = { WeatherPageRouter.open?() }
+        WeatherLegendModel.active = legend
         /* Looking around with no destination/fix: re-estimate for the new middle of the map (25 km / 10 min rules apply). */
         map.mapboxMap.onMapIdle.observe { [weak self] _ in
             guard let self, self.request.point == nil, self.effectiveKind == .clouds else { return }
@@ -97,7 +99,7 @@ final class WeatherOverlay {
         flow.view.isHidden = true
         map.addSubview(flow.view)
         flowHost = flow
-        let host = UIHostingController(rootView: WeatherLegendCard(model: legend))
+        let host = UIHostingController(rootView: WeatherLegendHost(model: legend))
         host.view.backgroundColor = .clear
         host.view.isHidden = true
         host.view.accessibilityIdentifier = "weather.legend"
@@ -359,6 +361,8 @@ final class WeatherOverlay {
         legend.outlookLoadingText = kind == .wind ? "نجيب الرياح…" : kind == .rain ? "نقدّر اتجاه المطر…" : "نقدّر اتجاه السحاب…"
         outlookTask = Task { [weak self] in
             var failed = false
+            /* Set when the server says «جارٍ التسخين» (202): wait that long, and say so meanwhile. */
+            var warmingS: Int?
             let display: CloudOutlookPresenter.Display?
             switch kind {
             case .wind:
@@ -370,19 +374,31 @@ final class WeatherOverlay {
                 failed = r == nil
                 display = r.flatMap { WindRainPresenter.rain($0, subject: subject) }
             default:
-                let o = try? await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
-                failed = o == nil
-                display = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
+                do {
+                    let o = try await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
+                    display = CloudOutlookPresenter.display(o, subject: subject)
+                } catch CloudOutlookError.warming(let s) {
+                    warmingS = s
+                    failed = true
+                    display = nil
+                } catch {
+                    failed = true
+                    display = nil
+                }
             }
             guard let self, !Task.isCancelled else { return }
             self.legend.outlookLoading = false
             self.legend.outlook = display
             if failed {
                 self.outlookFor = nil
-                /* One quiet retry a minute later (the server may have finished reading by then). */
+                if warmingS != nil {
+                    self.legend.outlookLoading = true
+                    self.legend.outlookLoadingText = "السحاب يتجه: جارٍ التسخين، نحاول بعد قليل"
+                }
+                /* One quiet retry (the server may have finished reading by then): a minute later, or as the server asked. */
                 if !self.outlookRetried {
                     self.outlookRetried = true
-                    try? await Task.sleep(nanoseconds: 60_000_000_000)
+                    try? await Task.sleep(nanoseconds: UInt64(warmingS ?? 60) * 1_000_000_000)
                     if !Task.isCancelled { self.refreshOutlook(isRetry: true) }
                 }
             } else {
@@ -577,11 +593,12 @@ final class WeatherOverlay {
         /* Never over the bottom chrome (the trip bar, the mic): slide up on a short screen. */
         let floor = map.bounds.height - request.chrome.bottom - 8
         if request.chrome.bottom > 0, y + size.height > floor { y = max(8, floor - size.height) }
-        if legend.cardMode == .hidden {
+        if WeatherPageFlag.legacyCard, legend.cardMode == .hidden {
             /* Just the restore button, on the leading edge (clear of the right-hand tool column). */
             host.view.frame = CGRect(x: 12, y: y, width: size.width, height: size.height)
         } else {
-            host.view.frame = CGRect(x: (map.bounds.width - width) / 2, y: y, width: width, height: size.height)
+            let w = WeatherPageFlag.legacyCard ? width : min(width, size.width)
+            host.view.frame = CGRect(x: (map.bounds.width - w) / 2, y: y, width: w, height: size.height)
         }
     }
 }
@@ -632,6 +649,10 @@ final class WeatherLegendModel: ObservableObject {
     }
     /// «إيقاف الطبقة»: turns the weather layer off (back on from «الطبقات» → «الطقس»).
     var onClose: () -> Void = {}
+    /// W-1: the one status chip opens the weather page.
+    var onOpenPage: () -> Void = {}
+    /// The model of the map now on screen (the page reads it; set by `WeatherOverlay`).
+    static weak var active: WeatherLegendModel?
     var onTogglePlay: () -> Void = {}
     var onScrub: (Int) -> Void = { _ in }
 }

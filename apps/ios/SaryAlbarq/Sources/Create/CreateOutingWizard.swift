@@ -712,7 +712,27 @@ private struct WeatherStep: View {
         .accessibilityIdentifier("create.weather.wadi")
     }
 
+    @ViewBuilder
     private func arrivalCard(_ d: OutingDestination) -> some View {
+        if WeatherPageFlag.isOn {
+            /* W-4: the same arrival card as the weather page. */
+            let est = weather.estimate(departure: flow.departure)
+            let report = weather.store.report
+            let hour = report.flatMap { WeatherRules.hour(containing: est?.eta ?? flow.departure, in: $0) }
+            WeatherArrivalCard(
+                etaText: est.map { "وقت وصولكم المتوقع \(WeatherFormat.clock($0.eta))" } ?? "وقت الانطلاق \(WeatherFormat.clock(flow.departure))",
+                basis: est.map { "\(SaryFormat.distance(meters: $0.distanceM)) بخط مستقيم · بافتراض \(WeatherFormat.speed($0.speedKmh)) · تقديري" }
+                    ?? "ما نعرف موقعك، فنعرض الجو وقت الانطلاق.",
+                hourSymbol: hour.map { WeatherRules.displayCondition($0).symbol },
+                hourTemp: hour.map { WeatherFormat.temp($0.temperatureC) },
+                condition: hour.map { WeatherSummary.line($0, withTemp: false) },
+                beyondForecastNote: report != nil && hour == nil ? "وقت الوصول بعد نهاية التوقعات المتاحة (٤٨ ساعة). نحدّثها لكم قبلها." : nil) { EmptyView() }
+        } else {
+            legacyArrivalCard(d)
+        }
+    }
+
+    private func legacyArrivalCard(_ d: OutingDestination) -> some View {
         let p = theme.palette
         let est = weather.estimate(departure: flow.departure)
         let report = weather.store.report

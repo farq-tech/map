@@ -1,7 +1,8 @@
 import XCTest
 
-/// «السحاب الآن» card: a one-line strip by default; it can be expanded, hidden with a small restore
-/// button, and brought back, and hiding it does not turn the layer off.
+/// The old floating card is the default (flag off: unchanged). With the unified weather on (`-SaryUnifiedWeather`, or
+/// «الواجهة الجديدة»), the map has ONE weather chip and the layer controls (play, scrubber, direction, rain period, off)
+/// are in the weather page it opens.
 final class WeatherCardUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -25,6 +26,16 @@ final class WeatherCardUITests: XCTestCase {
     }
 
     private func any(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
+
+    /// The page is one long scroll: bring a control into reach in short steps.
+    @discardableResult
+    private func reveal(_ app: XCUIApplication, _ id: String) -> XCUIElement {
+        let el = any(app, id)
+        _ = el.waitForExistence(timeout: 10)
+        let page = any(app, "weather.sheet").scrollViews.firstMatch
+        for _ in 0..<10 where !el.isHittable { page.swipeUp(velocity: .slow) }
+        return el
+    }
 
     private func shot(_ app: XCUIApplication, _ name: String) {
         let s = app.screenshot()
@@ -70,5 +81,46 @@ final class WeatherCardUITests: XCTestCase {
         any(app, "weather.legend.off").tap()
         XCTAssertFalse(any(app, "weather.legend.restore").waitForExistence(timeout: 3), "layer off: no card, no restore button")
         XCTAssertFalse(any(app, "weather.legend.strip").exists)
+    }
+
+    func testOneChipOnTheMapAndNoFloatingCard() {
+        let app = launch(["-SaryUnifiedWeather"])
+        let chip = any(app, "weather.status.chip")
+        XCTAssertTrue(chip.waitForExistence(timeout: 15), "the one weather chip")
+        XCTAssertLessThan(chip.frame.height, 80)
+        for id in ["weather.legend.strip", "weather.legend.expand", "weather.legend.hide", "weather.legend.restore", "weather.clouds.playpause", "weather.clouds.scrubber"] {
+            XCTAssertFalse(any(app, id).exists, "\(id) is no longer on the map")
+        }
+        shot(app, "page-chip-only")
+    }
+
+    func testChipOpensThePageWithEverythingWeather() {
+        let app = launch(["-SaryUnifiedWeather"])
+        any(app, "weather.status.chip").tap()
+        XCTAssertTrue(any(app, "weather.sheet").waitForExistence(timeout: 10), "the chip opens the weather page")
+        shot(app, "page-open-top")
+        XCTAssertTrue(any(app, "weather.page.map").waitForExistence(timeout: 5), "the layers live in the page")
+        XCTAssertTrue(reveal(app, "weather.layer.clouds").exists)
+        XCTAssertTrue(any(app, "weather.layer.rain").exists)
+        XCTAssertTrue(reveal(app, "weather.clouds.playpause").exists, "play / pause is in the page")
+        XCTAssertTrue(reveal(app, "weather.clouds.scrubber").exists, "the time scrubber is in the page (frames are stubbed)")
+        shot(app, "page-open-map")
+    }
+
+    func testRainPeriodAndLayerOffFromThePage() {
+        let app = launch(["-SaryUnifiedWeather"])
+        any(app, "weather.status.chip").tap()
+        let rain = reveal(app, "weather.layer.rain")
+        XCTAssertTrue(rain.isHittable, "rain is reachable in the page")
+        rain.tap()
+        let week = app.buttons["weather.rain.days.7"].firstMatch
+        XCTAssertTrue(week.waitForExistence(timeout: 5), "the rain period picker is in the page")
+        week.tap()
+        XCTAssertTrue(week.isSelected)
+        reveal(app, "weather.layer.none").tap()
+        let close = any(app, "weather.close")
+        for _ in 0..<6 where !close.isHittable { any(app, "weather.sheet").scrollViews.firstMatch.swipeDown() }
+        close.tap()
+        XCTAssertFalse(any(app, "weather.status.chip").waitForExistence(timeout: 3), "layer off: the chip goes away")
     }
 }

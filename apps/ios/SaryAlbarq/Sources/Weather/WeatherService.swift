@@ -15,6 +15,29 @@ struct URLSessionWeatherTransport: WeatherTransport {
     }
 }
 
+/// W-4 (docs/UNIFIED-SURFACES.md): ONE fetch path for every weather reader. The outing area, the destination,
+/// a picked point («الجو هناك») and the place brief each keep their own model, but when two of them ask Open-Meteo
+/// for the very same URL at the same moment they share ONE request (no result is kept afterwards: a refresh is
+/// always a real refresh, and the on-disk `WeatherCache` stays the offline memory). Nothing different is sent.
+actor WeatherFetchCoalescer {
+    static let shared = WeatherFetchCoalescer()
+    private var inflight: [URL: Task<Data, Error>] = [:]
+
+    func data(from url: URL, base: any WeatherTransport) async throws -> Data {
+        if let running = inflight[url] { return try await running.value }
+        let task = Task { try await base.data(from: url) }
+        inflight[url] = task
+        defer { inflight[url] = nil }
+        return try await task.value
+    }
+}
+
+/// The shared transport the stores and the place brief use by default (tests inject their own fake).
+struct CoalescingWeatherTransport: WeatherTransport {
+    var base: any WeatherTransport = URLSessionWeatherTransport()
+    func data(from url: URL) async throws -> Data { try await WeatherFetchCoalescer.shared.data(from: url, base: base) }
+}
+
 /// The last good response per area, on disk, so the desert (no signal) still
 /// shows the last forecast — with its real age.
 final class WeatherCache: @unchecked Sendable {
@@ -82,7 +105,7 @@ final class WeatherStore: ObservableObject {
     /// After a failure, wait this long before trying the network again.
     static let retryS: TimeInterval = 5 * 60
 
-    init(transport: WeatherTransport = URLSessionWeatherTransport(), cache: WeatherCache = WeatherCache(), clock: @escaping () -> Date = Date.init) {
+    init(transport: WeatherTransport = CoalescingWeatherTransport(), cache: WeatherCache = WeatherCache(), clock: @escaping () -> Date = Date.init) {
         self.transport = transport
         self.cache = cache
         self.clock = clock

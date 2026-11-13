@@ -145,6 +145,11 @@ enum CloudOutlookPresenter {
     }
 }
 
+/// «السحاب يمشي وين؟» is still being read on the server for this cell: say so, retry soon, never show an error.
+enum CloudOutlookError: Error, Equatable {
+    case warming(retryAfterS: Int)
+}
+
 extension WeatherLayerAPI {
     static func cloudOutlook(lat: Double, lng: Double, base: URL = Endpoints.apiBase, session: URLSession = .shared) async throws -> CloudOutlook {
         var c = URLComponents(url: base.appendingPathComponent("api/weather/clouds/outlook"), resolvingAgainstBaseURL: false)!
@@ -153,7 +158,14 @@ extension WeatherLayerAPI {
         var req = URLRequest(url: c.url!, timeoutInterval: 240)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, resp) = try await session.data(for: req)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+        let status = (resp as? HTTPURLResponse)?.statusCode
+        /* The server answers 202 {error:"warming", retry_after_s} while it reads the satellite pictures of a cold cell
+         * (PR #267): that is «جارٍ التسخين», not a failure. */
+        if status == 202 {
+            let retry = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["retry_after_s"] as? Int ?? 30
+            throw CloudOutlookError.warming(retryAfterS: min(max(retry, 10), 120))
+        }
+        guard status == 200 else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode(CloudOutlook.self, from: data)
     }
 }
