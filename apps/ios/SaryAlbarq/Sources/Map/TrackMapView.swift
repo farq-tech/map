@@ -26,7 +26,7 @@ struct TrackMapView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> MapView {
-        let start = line.points.first?.coordinate ?? CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753)
+        let start = line.points.first?.coordinate ?? MapOpening.center().coordinate
         let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: CameraOptions(center: start, zoom: 13), styleURI: MapLayer.satellite.styleURI))
         map.accessibilityIdentifier = "track.map"
         map.ornaments.options.scaleBar.visibility = interactive ? .adaptive : .hidden

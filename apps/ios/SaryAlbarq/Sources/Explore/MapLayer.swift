@@ -153,7 +153,7 @@ struct SatelliteImageryProbe: UIViewRepresentable {
         let a = ProcessInfo.processInfo.arguments
         let at = a.firstIndex(of: "-SaryImageryAt").flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil }?
             .split(separator: ",").compactMap { Double($0) } ?? []
-        let center = CLLocationCoordinate2D(latitude: at.count > 1 ? at[0] : 24.7136, longitude: at.count > 1 ? at[1] : 46.6753)
+        let center = at.count > 1 ? CLLocationCoordinate2D(latitude: at[0], longitude: at[1]) : MapOpening.center().coordinate
         let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: CameraOptions(center: center, zoom: at.count > 2 ? at[2] : 16)))
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: MapLayer.satellite.maxZoom))
         let raw = a.contains("-SaryImageryRaw")

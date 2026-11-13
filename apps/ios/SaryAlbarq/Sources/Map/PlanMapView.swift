@@ -304,12 +304,12 @@ struct PlanCamera: Equatable {
     var kind: Kind
     var id: Int
 
-    /// Where to open: the route, else the destination, else the picked point, else Riyadh.
+    /// Where to open: the route, else the destination, else the picked point, else where I am (live fix / last known place), Riyadh only as the last resort.
     static func initial(route: [LngLat], destination: OutingDestination?, picked: LngLat?) -> LngLat {
         if let p = picked { return p }
         if let f = route.first { return f }
         if let d = destination { return LngLat(lng: d.lng, lat: d.lat) }
-        return LngLat(lng: 46.6753, lat: 24.7136)
+        return MapOpening.center()
     }
 }
 

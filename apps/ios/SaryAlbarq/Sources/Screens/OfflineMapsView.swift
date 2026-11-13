@@ -294,7 +294,7 @@ struct AreaPickerMap: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> MapView {
-        let start = initial?.center ?? LngLat(lng: 46.6753, lat: 24.7136)
+        let start = initial?.center ?? MapOpening.center()
         let cam = CameraOptions(center: start.coordinate, zoom: 11)
         let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: cam, styleURI: ArabicBasemap.cachedJSON == nil ? OutingMapboxView.styleURI : nil))
         if let json = ArabicBasemap.cachedJSON { map.mapboxMap.loadStyle(json) }
