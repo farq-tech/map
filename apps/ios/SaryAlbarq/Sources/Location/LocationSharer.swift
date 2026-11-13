@@ -575,16 +575,12 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         guard let f = fix else { gate.countInvalid(); return publishStats(nil, source: source, nowMs: nowMs) }
         guard case let .accept(ok) = gate.judge(f, nowMs: nowMs) else { return publishStats(f, source: source, nowMs: nowMs) }
         lastFix = ok
-<<<<<<< HEAD
         MapOpening.remember(LngLat(lng: ok.lng, lat: ok.lat))
-        displayFix = smoother.update(ok)
-=======
         var shown = smoother.update(ok)
         let est = carHeading.ingest(ok)
         /* The arrow follows the estimate when it is good — only while the display has a course at all (a parked car shows none). */
         if shown.heading != nil, let h = est.goodHeading { shown.heading = h }
         displayFix = shown
->>>>>>> pr286
         if wantsFreshFix, nowMs - ok.atMs < GpsQuality.staleMs { wantsFreshFix = false; applySettings() }
         publishStats(ok, source: source, nowMs: nowMs)
         /* Every believable fix goes to the trail (raw log + its own smoother); no accuracy downgrade
