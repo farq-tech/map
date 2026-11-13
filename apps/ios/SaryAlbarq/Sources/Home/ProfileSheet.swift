@@ -69,6 +69,9 @@ struct ProfileSheet: View {
 /// «مفضلتك»: البيت، الشغل and the saved places (this phone only).
 struct FavoritesView: View {
     var back: () -> Void
+    /// Build 48.2 (root cause of «الأماكن المحفوظة ما تضغط»): the rows were plain stacks with no action. A tap now hands
+    /// the place to the home (the same path as a recent place), which shows it on the map with its «ابدأ» options.
+    var choose: (OutingDestination, String, String) -> Void = { _, _, _ in }
     @Environment(\.sary) private var theme
     @ObservedObject private var saved = SavedPlacesStore.shared
     @State private var shortcuts = HomeShortcutStore.load()
@@ -80,12 +83,22 @@ struct FavoritesView: View {
                 ForEach(Array(HomeShortcut.allCases.enumerated()), id: \.element) { i, s in
                     if i > 0 { SaryDivider() }
                     HStack(spacing: theme.space(.m)) {
-                        SaryRowIcon(systemImage: s.systemImage)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(s.label).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                            Text(shortcuts[s]?.name ?? "ما حددته بعد").saryText(.footnote).foregroundStyle(p.textSecondary)
+                        Button {
+                            if let d = shortcuts[s] { choose(d, s.label, s.systemImage) }
+                        } label: {
+                            HStack(spacing: theme.space(.m)) {
+                                SaryRowIcon(systemImage: s.systemImage)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(s.label).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                                    Text(shortcuts[s]?.name ?? "ما حددته بعد").saryText(.footnote).foregroundStyle(p.textSecondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        Spacer()
+                        .buttonStyle(.plain)
+                        .disabled(shortcuts[s] == nil)
+                        .accessibilityIdentifier("favorites.shortcut.\(s.rawValue)")
                         if shortcuts[s] != nil {
                             Button("امسح") {
                                 HomeShortcutStore.set(s, nil)
@@ -107,16 +120,23 @@ struct FavoritesView: View {
                 }
                 ForEach(Array(saved.places.enumerated()), id: \.element.id) { i, s in
                     if i > 0 { SaryDivider() }
-                    HStack(spacing: theme.space(.m)) {
-                        SaryRowIcon(systemImage: s.icon.systemImage)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(s.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
-                            Text(CoordinateShare.displayDecimal(s.position)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                    Button {
+                        choose(OutingDestination(name: s.name, lat: s.position.lat, lng: s.position.lng), "محفوظ", s.icon.systemImage)
+                    } label: {
+                        HStack(spacing: theme.space(.m)) {
+                            SaryRowIcon(systemImage: s.icon.systemImage)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(s.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                                Text(CoordinateShare.displayDecimal(s.position)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
                         }
-                        Spacer()
+                        .frame(minHeight: theme.minTarget + 8)
+                        .padding(.horizontal, theme.space(.m))
+                        .contentShape(Rectangle())
                     }
-                    .frame(minHeight: theme.minTarget + 8)
-                    .padding(.horizontal, theme.space(.m))
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier("favorites.place")
                 }
             }

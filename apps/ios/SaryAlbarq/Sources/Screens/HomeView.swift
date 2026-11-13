@@ -240,6 +240,8 @@ private struct OutingRowWeather: View {
 struct HomeRouteDestination: View {
     let route: HomeRoute
     @Binding var path: [HomeRoute]
+    /// The idle map's profile flow hands a chosen favourite to the map itself; the legacy home goes through `HomePlaceRequest`.
+    var choosePlace: ((OutingDestination) -> Void)? = nil
 
     var body: some View {
         let pop = { if !path.isEmpty { path.removeLast() } }
@@ -259,7 +261,21 @@ struct HomeRouteDestination: View {
         case .advanced: AdvancedSettingsView(back: pop)
         case .convoyAlerts: ConvoyAlertSettingsView(back: pop)
         case .blocked: BlockedUsersView(back: pop)
-        case .favorites: FavoritesView(back: pop)
+        case .favorites:
+            FavoritesView(back: pop, choose: { d, subtitle, icon in
+                if let choosePlace { choosePlace(d); return }
+                path.removeAll()
+                HomePlaceRequest.post(d, subtitle: subtitle, icon: icon)
+            })
         }
+    }
+}
+
+/// A place chosen on another page (the favourites) that the home map should show: posted here, picked up by
+/// `MapHomeScreen` once the route stack has popped back to it.
+enum HomePlaceRequest {
+    static let name = Notification.Name("sary.home.placeRequest")
+    static func post(_ d: OutingDestination, subtitle: String, icon: String) {
+        NotificationCenter.default.post(name: name, object: nil, userInfo: ["dest": d, "subtitle": subtitle, "icon": icon])
     }
 }

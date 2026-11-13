@@ -103,7 +103,10 @@ struct IdleSheetContent: View {
         }
         .sheet(isPresented: $creating) { CreateOutingWizard().saryPresented(appearance) }
         .sheet(isPresented: $joining) { JoinByLinkSheet().saryPresented(appearance) }
-        .fullScreenCover(isPresented: $profileOpen) { IdleProfileFlow().saryPresented(appearance) }
+        .fullScreenCover(isPresented: $profileOpen) { IdleProfileFlow(pick: { d in
+            profileOpen = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.idlePickPlace(d) }
+        }).saryPresented(appearance) }
         /* Queued: shown once no other sheet of the idle map is up (`IdleMapRules.idlePresentsNotifyExplainer`). */
         .sheet(isPresented: Binding(
             get: {
@@ -294,6 +297,8 @@ struct IdleSheetContent: View {
 
 /// «حسابي» from the idle map: the profile sheet with the home's pages behind it (favorites, activity, settings, help…).
 struct IdleProfileFlow: View {
+    /// A favourite chosen on the «مفضلتك» page: the host closes the flow and shows it on the map.
+    var pick: (OutingDestination) -> Void = { _ in }
     @State private var path: [HomeRoute] = []
 
     var body: some View {
@@ -301,7 +306,7 @@ struct IdleProfileFlow: View {
             ProfileSheet(open: { path.append($0) })
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: HomeRoute.self) { route in
-                    HomeRouteDestination(route: route, path: $path)
+                    HomeRouteDestination(route: route, path: $path, choosePlace: pick)
                         .navigationBarBackButtonHidden(true)
                 }
         }

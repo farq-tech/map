@@ -112,6 +112,10 @@ final class AppModel: ObservableObject {
             if !arguments.contains("-SaryAPIBase") { UserDefaults.standard.removeObject(forKey: Endpoints.debugKey) }
             #endif
         }
+        #if DEBUG
+        /* Queued behind the wipe's own main-actor task (`LocalAccountData.wipe`), so the seed survives it. */
+        Task { @MainActor in SavedPlacesStore.shared.seedForTests(arguments: arguments) }
+        #endif
         /* After the -resetState wipe, so it reads what is really left on disk. */
         outbox = OutingActionOutbox.live(api: api)
         /* v1 consent was not tied to an identity: never honour it. */

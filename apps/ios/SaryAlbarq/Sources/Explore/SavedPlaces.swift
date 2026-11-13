@@ -87,6 +87,19 @@ final class SavedPlacesStore: ObservableObject {
         load()
     }
 
+    #if DEBUG
+    /// UI tests: `-SarySeedPlace "name,lat,lng"` puts one place in the list (memory only, never saved). Called after the
+    /// `-resetState` wipe, which would otherwise erase it.
+    func seedForTests(arguments: [String] = ProcessInfo.processInfo.arguments) {
+        if let i = arguments.firstIndex(of: "-SarySeedPlace"), i + 1 < arguments.count {
+            let f = arguments[i + 1].split(separator: ",").map(String.init)
+            if f.count == 3, let lat = Double(f[1]), let lng = Double(f[2]), !places.contains(where: { $0.id == "seed-\(f[0])" }) {
+                places.insert(SavedPlace(id: "seed-\(f[0])", name: f[0], icon: .star, lat: lat, lng: lng, createdAt: Date()), at: 0)
+            }
+        }
+    }
+    #endif
+
     private func load() {
         guard let url, let d = try? Data(contentsOf: url) else { return }
         let dec = JSONDecoder()

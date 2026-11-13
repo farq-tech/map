@@ -142,6 +142,11 @@ struct MapHomeScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: .saryRecentPlacesChanged)) { _ in
             recent = RecentPlaces.load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: HomePlaceRequest.name)) { n in
+            guard let d = n.userInfo?["dest"] as? OutingDestination else { return }
+            pick(.init(destination: d, subtitle: n.userInfo?["subtitle"] as? String,
+                       icon: (n.userInfo?["icon"] as? String) ?? "star.fill"))
+        }
         .onChange(of: locator.fix) { old, fix in
             if old == nil, fix != nil, selected == nil { recenter(zoom: 12) }
             if newHome, let me = myPoint { homeBrief.load(me, knownName: "موقعي") }
