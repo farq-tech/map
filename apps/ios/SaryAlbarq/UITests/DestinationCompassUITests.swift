@@ -27,4 +27,21 @@ final class DestinationCompassUITests: XCTestCase {
         XCTAssertTrue(compass.waitForExistence(timeout: 5))
         XCTAssertTrue(compass.label.hasPrefix("القبلة:"), compass.label)
     }
+
+    /// Stopped (the simulator's location has no speed and no magnetometer): the dial is still up, reads a direction
+    /// to the target, and keeps doing so after a while — it never goes missing when the GPS course is untrusted.
+    func testCompassStaysUpWhenStoppedAndReadsADirection() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryWeather", "none", "-SaryScheme", "dark",
+                               "-SaryDrive", "1", "-SaryContext", "driving", "-SaryNewUI"]
+        app.launch()
+        app.allowLocationIfAsked()
+        let compass = el(app, "live.compass")
+        guard compass.waitForExistence(timeout: 25) else { throw XCTSkip("no recent GPS fix in this run: the compass is hidden") }
+        XCTAssertTrue(compass.label.contains("باتجاه"), compass.label)
+        Thread.sleep(forTimeInterval: 4)
+        XCTAssertTrue(compass.exists)
+        XCTAssertTrue(compass.label.contains("باتجاه"), compass.label)
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); a.name = "compass-stopped"; a.lifetime = .keepAlways; add(a)
+    }
 }

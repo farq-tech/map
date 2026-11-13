@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 
 // MARK: - Lookups: «أقرب مطر» and «أقرب ربيع»
@@ -117,6 +118,50 @@ final class CompassNearbyStore: ObservableObject {
     }
 }
 
+// MARK: - The phone's compass
+
+/// The phone's magnetometer heading for «البوصلة» when the GPS course is not trusted (slow or stopped), so the
+/// needle keeps following the car's turning. Heading only (its own `CLLocationManager`, never location), on only
+/// while the dial is on screen. True north when known, magnetic otherwise. `heading` is nil when there is no
+/// magnetometer (the simulator), or the reading is invalid / too rough (`HeadingChooser.compassMaxErrorDeg`):
+/// then the dial stays north-up. The calibration figure-8 is never shown over the driver's map.
+@MainActor
+final class DeviceHeading: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published private(set) var heading: Double?
+    private var manager: CLLocationManager?
+
+    /// Rule for one reading: nil when invalid (negative accuracy) or rougher than the limit.
+    nonisolated static func accept(trueHeading: Double, magneticHeading: Double, accuracy: Double) -> Double? {
+        guard accuracy >= 0, accuracy <= HeadingChooser.compassMaxErrorDeg else { return nil }
+        let v = trueHeading >= 0 ? trueHeading : magneticHeading
+        guard v.isFinite, v >= 0 else { return nil }
+        return v.truncatingRemainder(dividingBy: 360)
+    }
+
+    func start() {
+        guard manager == nil, CLLocationManager.headingAvailable() else { return }
+        let m = CLLocationManager()
+        m.delegate = self
+        m.headingFilter = 2
+        m.headingOrientation = .portrait
+        m.startUpdatingHeading()
+        manager = m
+    }
+
+    func stop() {
+        manager?.stopUpdatingHeading()
+        manager = nil
+        heading = nil
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading h: CLHeading) {
+        let v = Self.accept(trueHeading: h.trueHeading, magneticHeading: h.magneticHeading, accuracy: h.headingAccuracy)
+        Task { @MainActor in self.heading = v }
+    }
+
+    nonisolated func locationManagerShouldDisplayHeadingCalibration(_ manager: CLLocationManager) -> Bool { false }
+}
+
 // MARK: - The host: targets from the live outing
 
 /// Builds the compass from the live outing: my fix, the targets, the path for «على المسار».
@@ -131,6 +176,8 @@ struct DestinationCompassHost: View {
     /// The dial's top edge on the screen (the screen's own `compass` chrome frame): the open list is capped from here.
     var dialTop: CGFloat? = nil
     @EnvironmentObject private var location: LocationSharer
+    /// The phone's compass: the car's heading when the GPS course is not trusted (slow / stopped).
+    @StateObject private var deviceHeading = DeviceHeading()
 
     var body: some View {
         if let raw = location.lastFix, let me = Self.position(controller.session.smoothedFix(raw)) {
@@ -223,7 +270,7 @@ struct DestinationCompassHost: View {
                 credit = CompassSpring.credit
             }
         }
-        let reading = DestinationCompass.reading(me: me, course: raw.heading, speed: raw.speed, target: point, kind: target, guide: guide)
+        let reading = DestinationCompass.reading(me: me, course: raw.heading, speed: raw.speed, compass: deviceHeading.heading, target: point, kind: target, guide: guide)
         let detail = [subtitle, credit].compactMap { $0 }.joined(separator: " · ")
 
         let options: [DestinationCompassView.Option] = [
@@ -239,6 +286,8 @@ struct DestinationCompassHost: View {
         return DestinationCompassView(reading: reading, subtitle: subtitle, accessibility: DestinationCompass.accessibility(reading, detail: detail),
                                       options: options, dialTopHint: dialTop, pick: { chosen = $0 })
             .chromeFrame("compass")
+            .onAppear { deviceHeading.start() }
+            .onDisappear { deviceHeading.stop() }
             .task(id: refreshKey(me)) { nearby.refresh(me: me, online: online) }
     }
 }
@@ -434,7 +483,7 @@ struct DestinationCompassView: View {
             }
             .rotationEffect(.degrees(roseAngle))
             if let m = reading.markerDegrees {
-                /* The target itself, in a straight line (only while a path leads the needle). */
+                /* Where the path leads (the lookahead point), only while there is a path; the needle is the target itself. */
                 Circle()
                     .fill(p.textSecondary)
                     .frame(width: 7, height: 7)

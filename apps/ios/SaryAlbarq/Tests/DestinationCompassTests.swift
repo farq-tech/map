@@ -59,6 +59,84 @@ final class DestinationCompassTests: XCTestCase {
         XCTAssertEqual(DestinationCompass.unwrap(previous: 720, next: 90), 810, accuracy: 1e-9)
     }
 
+
+    // MARK: the needle is the target relative to the car
+
+    func testCarTurnsLeftDestinationOnRightNeedleTurnsRight() {
+        let target = offset(riyadh, 5000, bearing: 90)           // due east
+        let ahead = DestinationCompass.reading(me: riyadh, course: 90, speed: 20, target: target, kind: .destination)
+        XCTAssertEqual(ahead.needleDegrees, 0, accuracy: 0.5)     // facing it: straight up
+        let left = DestinationCompass.reading(me: riyadh, course: 45, speed: 20, target: target, kind: .destination)
+        XCTAssertEqual(left.needleDegrees, 45, accuracy: 0.5)     // the car turned left: the needle moves right
+        let lefter = DestinationCompass.reading(me: riyadh, course: 0, speed: 20, target: target, kind: .destination)
+        XCTAssertEqual(lefter.needleDegrees, 90, accuracy: 0.5)
+        XCTAssertGreaterThan(lefter.needleDegrees, left.needleDegrees)
+    }
+
+    func testDestinationAheadIsZero() {
+        let r = DestinationCompass.reading(me: riyadh, course: 30, speed: 20, target: offset(riyadh, 4000, bearing: 30), kind: .destination)
+        XCTAssertEqual(r.needleDegrees, 0, accuracy: 0.5)
+        XCTAssertEqual(r.headingSource, .course)
+    }
+
+    func testStoppedUsesTheMagnetometer() {
+        let target = offset(riyadh, 3000, bearing: 90)
+        let r = DestinationCompass.reading(me: riyadh, course: 200, speed: 0.2, compass: 0, target: target, kind: .destination)
+        XCTAssertTrue(r.headingUp)
+        XCTAssertEqual(r.headingSource, .magnetometer)
+        XCTAssertEqual(r.needleDegrees, 90, accuracy: 0.5)
+        XCTAssertEqual(r.roseDegrees, 0, accuracy: 1e-9)
+        let turned = DestinationCompass.reading(me: riyadh, course: nil, speed: nil, compass: 270, target: target, kind: .destination)
+        XCTAssertEqual(abs(turned.needleDegrees), 180, accuracy: 0.5)
+        XCTAssertEqual(turned.roseDegrees, 90, accuracy: 1e-9)
+        /* A trusted course wins over the magnetometer. */
+        let moving = DestinationCompass.reading(me: riyadh, course: 90, speed: 20, compass: 270, target: target, kind: .destination)
+        XCTAssertEqual(moving.headingSource, .course)
+        XCTAssertEqual(moving.needleDegrees, 0, accuracy: 0.5)
+        /* Neither: north up. */
+        let none = DestinationCompass.reading(me: riyadh, course: nil, speed: 0, compass: nil, target: target, kind: .destination)
+        XCTAssertEqual(none.headingSource, .none)
+        XCTAssertFalse(none.headingUp)
+        XCTAssertEqual(none.needleDegrees, 90, accuracy: 0.5)
+    }
+
+    func testMagnetometerFilter() {
+        XCTAssertEqual(DeviceHeading.accept(trueHeading: 123, magneticHeading: 120, accuracy: 10), 123)
+        XCTAssertEqual(DeviceHeading.accept(trueHeading: -1, magneticHeading: 120, accuracy: 10), 120)
+        XCTAssertNil(DeviceHeading.accept(trueHeading: 123, magneticHeading: 120, accuracy: -1))
+        XCTAssertNil(DeviceHeading.accept(trueHeading: 123, magneticHeading: 120, accuracy: 80))
+    }
+
+    func testNeedleTakesTheShortArcAcrossNorth() {
+        let target = offset(riyadh, 4000, bearing: 0)
+        let a = DestinationCompass.reading(me: riyadh, course: 359, speed: 20, target: target, kind: .destination)
+        let b = DestinationCompass.reading(me: riyadh, course: 1, speed: 20, target: target, kind: .destination)
+        XCTAssertEqual(a.needleDegrees, 1, accuracy: 0.5)
+        XCTAssertEqual(b.needleDegrees, -1, accuracy: 0.5)
+        /* The animated angle moves 2°, not 358°. */
+        XCTAssertEqual(DestinationCompass.unwrap(previous: a.needleDegrees, next: b.needleDegrees), -1, accuracy: 0.5)
+        XCTAssertEqual(DestinationCompass.unwrap(previous: a.roseDegrees, next: b.roseDegrees), -1, accuracy: 0.01)
+        XCTAssertEqual(DestinationCompass.unwrap(previous: 359, next: 1), 361, accuracy: 1e-9)
+    }
+
+    func testRolesSwapNeedleIsTargetMarkerIsPath() throws {
+        /* Path north 1 km then east 1 km; I am at the start, facing north. */
+        let corner = offset(riyadh, 1000, bearing: 0)
+        let path = northPath(1000) + stride(from: 100.0, through: 1000, by: 100).map { offset(corner, $0, bearing: 90) }
+        let g = try XCTUnwrap(DestinationCompass.guide(path: path, me: riyadh, speedMps: 20))
+        let r = DestinationCompass.reading(me: riyadh, course: 0, speed: 20, target: path[path.count - 1], kind: .destination, guide: g)
+        XCTAssertEqual(r.needleDegrees, 45, accuracy: 1, "the needle is the straight line to the target")
+        XCTAssertEqual(try XCTUnwrap(r.markerDegrees), 0, accuracy: 1, "the small marker is the path's lookahead")
+        let noPath = DestinationCompass.reading(me: riyadh, course: 0, speed: 20, target: path[path.count - 1], kind: .destination)
+        XCTAssertNil(noPath.markerDegrees)
+        XCTAssertEqual(noPath.needleDegrees, r.needleDegrees, accuracy: 1e-9)
+    }
+
+    func testQiblaNeedleFollowsTheCar() {
+        let r = DestinationCompass.reading(me: riyadh, course: nil, speed: 0, compass: 244, target: DestinationCompass.kaaba, kind: .qibla)
+        XCTAssertEqual(r.needleDegrees, 0, accuracy: 2)
+    }
+
     // MARK: path lookahead
 
     private func northPath(_ m: Double) -> [LngLat] {
@@ -94,7 +172,9 @@ final class DestinationCompassTests: XCTestCase {
         XCTAssertEqual(PlanGeo.meters(riyadh, g.aim), 1000, accuracy: 3)
         XCTAssertEqual(g.remainingM, 1400, accuracy: 5)
         let r = DestinationCompass.reading(me: me, course: 0, speed: 20, target: path[path.count - 1], kind: .destination, guide: g)
-        XCTAssertEqual(r.needleDegrees, -90, accuracy: 1)
+        /* The needle is the target itself (1 km north, 0.4 km west of me: about −22°); the marker leads back onto the path (west). */
+        XCTAssertEqual(r.needleDegrees, -21.8, accuracy: 1)
+        XCTAssertEqual(try XCTUnwrap(r.markerDegrees), -90, accuracy: 1)
         XCTAssertEqual(DestinationCompass.caption(r), "ارجع للمسار")
     }
 
@@ -104,15 +184,15 @@ final class DestinationCompassTests: XCTestCase {
     }
 
     func testOnPathReadingShowsAlongDistanceAndMarker() throws {
-        /* An L-shaped path: north 1 km, then east 1 km. The needle leads up the path, the marker points at the end. */
+        /* An L-shaped path: north 1 km, then east 1 km. The needle points at the end (the target), the marker leads up the path. */
         let corner = offset(riyadh, 1000, bearing: 0)
         let path = northPath(1000) + stride(from: 100.0, through: 1000, by: 100).map { offset(corner, $0, bearing: 90) }
         let end = path[path.count - 1]
         let g = try XCTUnwrap(DestinationCompass.guide(path: path, me: riyadh, speedMps: 20))
         let r = DestinationCompass.reading(me: riyadh, course: 0, speed: 20, target: end, kind: .destination, guide: g)
         XCTAssertTrue(r.onPath)
-        XCTAssertEqual(r.needleDegrees, 0, accuracy: 1)
-        XCTAssertEqual(try XCTUnwrap(r.markerDegrees), 45, accuracy: 1)
+        XCTAssertEqual(r.needleDegrees, 45, accuracy: 1)
+        XCTAssertEqual(try XCTUnwrap(r.markerDegrees), 0, accuracy: 1)
         XCTAssertEqual(r.distanceM, 2000, accuracy: 5)
         XCTAssertEqual(DestinationCompass.caption(r), "على المسار")
         XCTAssertTrue(DestinationCompass.accessibility(r).hasPrefix("الوجهة: باقي ٢ كم على المسار، الوجهة نفسها باتجاه"))
