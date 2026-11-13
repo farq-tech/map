@@ -272,7 +272,7 @@ struct CampSiteCard: View {
                 }
                 Spacer(minLength: 0)
                 Button(action: go) { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
-                    .buttonStyle(.sary(.primary, width: .hug, compact: true))
+                    .buttonStyle(.sary(NewScreens.campGoIsPrimary(rank: rank) ? .primary : .secondary, width: .hug, compact: true))
                     .accessibilityIdentifier("camp.go.\(rank)")
             }
             if let night {
