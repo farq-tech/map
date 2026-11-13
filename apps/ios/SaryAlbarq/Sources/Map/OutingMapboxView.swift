@@ -625,6 +625,9 @@ struct OutingMapboxView: UIViewRepresentable {
                 try? m.addSource(withId: "mapbox-dem", properties: ["type": "raster-dem", "url": "mapbox://mapbox.mapbox-terrain-dem-v1", "tileSize": 512, "maxzoom": 14])
             }
             try? m.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": terrainExaggeration])
+            /* Real elevations for the off-route shortcut (`NavRejoin`): nil while the tile is not loaded. */
+            let ex = terrainExaggeration
+            NavRejoinLive.elevation = { [weak m] p in m?.elevation(at: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lng)).map { $0 / ex } }
             if layer == .topo, m.layerExists(withId: TopoLabels.contourLabelLayer) {
                 /* Contour heights in metres with Arabic-Indic digits («٦٢٠ م»), from the style's own data. */
                 try? m.setLayerProperty(for: TopoLabels.contourLabelLayer, property: "text-field", value: TopoLabels.textField)
@@ -1117,7 +1120,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 let c = compass.reading
                 let bearing = headingSource.update(speedKmh: kmh, course: r.heading, compass: c?.heading, compassError: c?.error)
                     ?? followSmoother.shown?.bearing ?? m.cameraState.bearing
-                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: FollowZoom.carScreenShare)
+                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h,
+                                             share: FollowZoom.carShare(clear: h - Double(chrome.top) - Double(chrome.bottom)))
                 target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: MapTiltModel.shared.pitch(.navigation),
                                           topPadding: pad.top, bottomPadding: pad.bottom)
             default:

@@ -102,6 +102,12 @@ struct DebugScreen: View {
         case "plan-me-stale":
             SaryPage(title: "") { PointCard(subject: .me(.init(point: LngLat(lng: 46.67530, lat: 24.71360), accuracyM: 8, at: Date().addingTimeInterval(-300)))).sarySurface(radius: SaryRadius.m) }
         case "weather-here": WeatherPointSheet(point: OutingDestination(name: "نفود الثويرات", lat: 25.7712, lng: 45.1043), close: {})
+        /* Build 47 group C (use with -SaryNewUI for the new look). */
+        case "qr-scan": QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال أمير الطلعة.", found: { _ in }, cancel: {})
+        case "enjad", "enjad-solo", "enjad-nophone":
+            EnjadSheet(input: Enjad.Input(situation: .stuck, name: "فهد", phone: name == "enjad-nophone" ? nil : "0500000000", fix: nil, now: Date(),
+                                          batteryPercent: 62, memberCount: 4, car: nil, leaderName: "أبو فهد", leaderPhone: nil),
+                       online: true, addPhone: {}, close: {}, official911First: name == "enjad-solo")
         default: HomeView()
         }
     }

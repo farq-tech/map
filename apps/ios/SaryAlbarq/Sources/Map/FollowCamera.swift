@@ -243,6 +243,15 @@ enum FollowZoom {
     static let headingPitch = 58.0
     /// «باتجاهي»: the car sits this far down the clear area (0 = top, 1 = bottom).
     static let carScreenShare = 0.74
+    /// Room kept under the car for its «أنت» chip and the car's own half (pt): the chip never touches the bottom bar. On a small
+    /// phone (iPhone SE) the clear area is short, so 74 % of it left only ~50 pt (owner review, 2026-11-13).
+    static let carLabelClearance = 92.0
+
+    /// The car's share of the clear area: `carScreenShare`, lifted just enough to keep `carLabelClearance` under the car (never above the middle).
+    static func carShare(clear: Double) -> Double {
+        guard clear > 1 else { return carScreenShare }
+        return min(carScreenShare, max(0.5, 1 - carLabelClearance / clear))
+    }
     /// «تتبعني» keeps the person's zoom, but never further out than this.
     static let northMinZoom = 14.0
 

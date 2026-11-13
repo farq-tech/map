@@ -284,6 +284,7 @@ final class AppearanceSettings {
         } else {
             prefs = AppearancePreferences()
         }
+        themeChoice = defaults.string(forKey: SaryThemeChoice.key).flatMap(SaryThemeChoice.init(rawValue:)) ?? .auto
     }
 
     func save() {
@@ -292,6 +293,27 @@ final class AppearanceSettings {
     }
 
     func reset() { prefs = AppearancePreferences() }
+
+    /// The new UI's theme (auto / dark / light / dim). Only read while `NewUI.enabled`.
+    var themeChoice: SaryThemeChoice {
+        didSet { if themeChoice != oldValue { defaults.set(themeChoice.rawValue, forKey: SaryThemeChoice.key) } }
+    }
+
+    /// What the theme resolver uses: with the new UI the choice decides scheme and dim; the legacy UI keeps
+    /// the old rules (system / light / dark + night tri-mode).
+    var uiNight: Bool {
+        NewUI.enabled ? themeChoice.resolve(autoNight: autoNight, driving: isDriving).night : isNight
+    }
+    /// Forced colour scheme (nil = follow the system, legacy only).
+    var uiScheme: ColorScheme? {
+        if NewUI.enabled { return themeChoice.resolve(autoNight: autoNight, driving: isDriving).scheme }
+        if isNight { return .dark }
+        switch prefs.colorScheme {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
 
     /// Night / drive resolved with the automatic context.
     var isNight: Bool { prefs.nightMode.resolve(auto: autoNight) }

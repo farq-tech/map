@@ -228,6 +228,7 @@ struct WeatherSheet: View {
 
     var body: some View {
         let p = theme.palette
+        if NewUI.enabled { newBody } else {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
@@ -271,6 +272,56 @@ struct WeatherSheet: View {
             await weather.refresh(force: false)
             now = Date()
         }
+        .accessibilityIdentifier("weather.sheet")
+        }
+    }
+
+    /// Build 47: the same content under the unified window header (title right, round ✕ left).
+    private var newBody: some View {
+        let p = theme.palette
+        return VStack(spacing: 0) {
+            NewPageHeader(title: "الطقس", subtitle: nil, back: nil, close: close, closeID: "weather.close") {
+                Button { Task { await weather.refresh(force: true); now = Date() } } label: {
+                    Group { if weather.area.refreshing { ProgressView() } else { Image(systemName: SaryIcon.retry) } }
+                        .foregroundStyle(p.textPrimary)
+                        .frame(width: SaryMetrics.minHit, height: SaryMetrics.minHit)
+                        .background(Circle().fill(p.surface))
+                        .overlay(Circle().strokeBorder(p.stroke, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("حدّث"))
+                .accessibilityIdentifier("weather.refresh")
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    if weather.destinationPoint != nil {
+                        WeatherCardView(ui: weather.destinationCard(now: now, hours: 24))
+                        if let a = weather.arrival(now: now) { arrivalCard(a) }
+                        destinationActions
+                        WeatherCardView(ui: weather.areaCard(now: now, hours: 12))
+                    } else {
+                        WeatherCardView(ui: weather.areaCard(now: now, hours: 24))
+                        destinationActions
+                    }
+                    if weather.showsWadi { wadiSection }
+                    officialSection
+                    Text("نرسل لـOpen-Meteo إحداثيات تقريبية لمنطقة الطلعة (مقرّبة لنحو ١١ كم)\(weather.destinationPoint != nil ? "، وإحداثيات الوجهة كما حُددت" : ""). لا نرسل مواقع الأعضاء ولا اسمك أو حسابك.")
+                        .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
+                    Link(destination: OpenMeteo.siteURL) {
+                        Text("\(OpenMeteo.attribution) (CC BY 4.0) · نماذج توقعات، لا قراءات محطات")
+                            .saryText(.footnote, weight: .bold).foregroundStyle(p.accentText)
+                    }
+                }
+                .padding(.horizontal, theme.space(.l))
+                .padding(.bottom, theme.space(.xxl))
+            }
+        }
+        .background(p.background.ignoresSafeArea())
+        .task {
+            await weather.refresh(force: false)
+            now = Date()
+        }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("weather.sheet")
     }
 

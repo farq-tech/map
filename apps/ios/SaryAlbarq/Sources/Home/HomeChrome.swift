@@ -193,6 +193,9 @@ struct HomeBottomCard: View {
     var onStart: () -> Void
     var onTile: (HomeTile) -> Void
     var onLast: () -> Void
+    /// What the old home said in its collapsed sheet and must still say here: the running / upcoming outing, an invite, a failed
+    /// list, the offline strip (nothing is lost in the redesign). Nil when there is none.
+    var extra: AnyView? = nil
     /// The bottom safe area: inside the card (its fill runs to the screen edge).
     var bottomInset: CGFloat = 0
     @Environment(\.sary) private var theme
@@ -212,7 +215,7 @@ struct HomeBottomCard: View {
         }
         .padding(.bottom, bottomInset)
         .frame(maxWidth: 560)
-        .background(shape.fill(p.background).shadow(color: .black.opacity(0.25), radius: 14, y: -2))
+        .background(shape.fill(p.background).shadow(color: p.shadow, radius: 14, y: -2))
         .overlay(shape.stroke(p.stroke, lineWidth: 0.5))
         .background(GeometryReader { r in Color.clear.preference(key: HomeCardHeightKey.self, value: r.size.height) })
         .frame(maxWidth: .infinity)
@@ -234,7 +237,29 @@ struct HomeBottomCard: View {
 
     @ViewBuilder
     private func content(weatherRow: Bool, lastRow: Bool) -> some View {
+        HomeCardContent(weather: weather, maghrib: maghrib, last: last, weatherRow: weatherRow, lastRow: lastRow,
+                        onStart: onStart, onTile: onTile, onLast: onLast, extra: extra)
+    }
+}
+
+/// The card's body, shared by the home map's bottom card and the idle map's sheet (one component, two hosts):
+/// the weather / Maghrib line, the big primary «＋ ابدأ طلعة», the four tiles and the «آخر طلعة» row.
+struct HomeCardContent: View {
+    var weather: String?
+    var maghrib: String?
+    var last: HomeLastOuting?
+    var weatherRow = true
+    var lastRow = true
+    var onStart: () -> Void
+    var onTile: (HomeTile) -> Void
+    var onLast: () -> Void
+    var extra: AnyView? = nil
+    @Environment(\.sary) private var theme
+    @Environment(\.dynamicTypeSize) private var type
+
+    var body: some View {
         VStack(spacing: theme.space(.m)) {
+            if let extra { extra }
             if weatherRow, weather != nil || maghrib != nil { infoRow }
             startButton
             tiles
@@ -343,4 +368,32 @@ struct HomeBottomCard: View {
 struct HomeCardHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// «٢٤٫٥٠٠٠٠، ٤٥٫٠٠٠٠٠ · الارتفاع ٦٠٠ م» under a picked spot's name: the elevation comes from the map's DEM tiles once they
+/// have loaded (a few tries), else «الارتفاع غير متاح». Nothing is made up.
+struct HomeElevationLine: View {
+    var point: LngLat
+    var showCoordinates: Bool
+    @State private var elevation: String = "الارتفاع …"
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let coords = showCoordinates ? CoordinateShare.displayDecimal(point) + " · " : ""
+        Text(coords + elevation)
+            .saryNumber(.footnote)
+            .foregroundStyle(theme.palette.textSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .accessibilityIdentifier("home.place.elevation")
+            .task(id: "\(point.lat),\(point.lng)") {
+                elevation = "الارتفاع …"
+                for _ in 0..<10 {
+                    let t = MapTerrainProbe.sample(point)
+                    if t.elevationM != nil { elevation = PlaceBriefRules.elevationText(t); return }
+                    try? await Task.sleep(nanoseconds: 700_000_000)
+                }
+                elevation = PlaceBriefRules.elevationText(.unavailable)
+            }
+    }
 }
