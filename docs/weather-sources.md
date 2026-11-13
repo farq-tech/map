@@ -154,6 +154,26 @@
 }
 ```
 
+### `GET /api/weather/green/regions?bbox=w,s,e,n[&include_farms=1]` («أقرب ربيع»)
+مناطق خضرة متصلة لبوصلة القيادة، لا بكسلات مفردة (`apps/api/lib/weather/green-regions.js`). تُقرأ الخضرة بدقتها الأصلية (خطوة ٠٫٠١° ≈ بكسل VIIRS)، وتُبقى الخلايا التي ارتفاعها ≥ ٠٫٠٦، وتُجمع بالجوار الثماني، وتُحذف المناطق الأصغر من ٣ كم². المستوى يُحسب من `mean_rise` بحدود المفتاح (٠٫٠٦ / ٠٫١٢ / ٠٫٢). و`place` هي أقرب روضة أو فيضة من OSM على بُعد ٥ كم أو أقل من المنطقة، ولا تُستعمل صفوف `gm:` أبدًا. و`points` عيّنة (٦٠ نقطة أو أقل، الحواف أولًا) يحسب منها الجوال أقرب نقطة من المنطقة إليه. الترتيب بحسب `area_km2 × mean_rise × (1.5 إن وُجد place)`، والحد ٤٠ منطقة.
+
+`bbox` مطلوبة، وكل ضلع منها ٣° أو أقل. إذا غابت أو كانت خارج المملكة يرجع 400 `bad_bbox`، وإذا كانت أكبر يرجع 400 `bbox_too_large`. وأثناء التسخين يرجع **202** `warming` (مع `Retry-After: 30`) بدل أي 5xx، ويُبنى الجواب في الخلفية. التخزين المؤقت: الصندوق يُوسَّع إلى شبكة ٠٫٥° (فيُشارك الجواب أكثر من جوال)، والجواب طازج ٦ ساعات، وحتى ١٤ يومًا يُخدَم فورًا بعلامة `stale: true` مع إعادة بنائه في الخلفية. وهناك تسخين دوري لصناديق القصيم (عنيزة وبريدة والرس) والرياض وحائل والمدينة والدمام (`GREEN_REGIONS_WARM=0` يوقفه، و`GREEN_REGIONS_WARM_CELLS="lat,lng;…"` يغيّر الخلايا).
+
+**الصدق:** الجواب رصد حالي بالأقمار (`is_forecast: false`) وليس تنبؤًا. والمناطق التي كانت **خضراء في الصيف** (NDVI ‏≥ ٠٫١٥ في ٥٠٪ فأكثر من خلاياها، وغالبًا مزارع مروية) توسَم `kind: "likely_farm"` وتُستبعد افتراضيًا (`farms_excluded` يعدّها، و`include_farms=1` يعيدها بعنوان «خضرة جديدة (قد تكون مزارع)» ولا تُسمّى ربيعًا أبدًا). و`summer_green_share` و`mean_baseline` يوضحان السبب، و`kind` إمّا `rain_fed` أو `likely_farm` أو `unknown`.
+```json
+{
+  "ok": true, "layer": "green_regions", "composite_date": "2026-11-05",
+  "attribution": "NASA VIIRS NOAA-20 NDVI (8-day) via NASA GIBS", "place_attribution": "© OpenStreetMap contributors",
+  "rule": { "step_deg": 0.01, "min_rise": 0.06, "min_area_km2": 3, "connectivity": 8, "place_max_km": 5 },
+  "regions": [{
+    "id": "gr_7a3d24857c", "centroid": [46.5001, 25.4936], "bbox": [46.455, 25.465, 46.545, 25.525],
+    "area_km2": 31.4, "cells": 28, "mean_rise": 0.155, "max_rise": 0.25, "level": "clear", "label_ar": "ربيع واضح",
+    "points": [[46.46, 25.47], [46.47, 25.47]],
+    "place": { "name": "روضة خريم", "kind": "rawdah", "distance_km": 1.2 }
+  }]
+}
+```
+
 ### `GET /api/desert/categories/search?q=مطر|ربيع&near=lat,lng[&radius_km=250][&limit=20]`
 يربط هذا المسار رقاقات الفئات في التطبيق عبر البروتوكول `DesertCategoryService`. قيم `q` المفهومة:
 - `مطر`، `سيل`، `أمطار` → `rain`؛

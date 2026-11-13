@@ -13,6 +13,8 @@
  *   GET /api/weather/rain/tile/:days/:z/:x/:y.png
  *   GET /api/weather/green?bbox=w,s,e,n
  *   GET /api/weather/green/tile/:z/:x/:y.png
+ *   GET /api/weather/green/regions?bbox=w,s,e,n[&include_farms=1]  connected greened areas (≥ 3 km², each side ≤ 3°)
+ *                                                 for «أقرب ربيع», named by the nearest OSM روضة/فيضة; farms left out
  *   GET /api/desert/categories/search?q=مطر|ربيع&near=lat,lng[&radius_km=250&limit=20]
  * Contract: docs/weather-sources.md (§ API).
  */
@@ -26,6 +28,7 @@ const rain = require('../lib/weather/rain');
 const rainMotion = require('../lib/weather/rain-motion');
 const wind = require('../lib/weather/wind');
 const green = require('../lib/weather/green');
+const greenRegions = require('../lib/weather/green-regions');
 const desert = require('../lib/weather/desert-search');
 const { KSA, parseBbox, parseNear, inKsa } = require('../lib/weather/mercator');
 
@@ -153,6 +156,23 @@ function createWeatherRouter() {
     return sendJson(req, res, body, 3600);
   }));
 
+  /* «أقرب ربيع»: connected greened areas (observed now, never a forecast). A cold box answers 202 `warming` at once
+   * (never a 5xx, never a long wait) and the answer builds in the background; warm boxes are served from the cache. */
+  router.get('/weather/green/regions', wrap(async (req, res) => {
+    const bbox = req.query.bbox ? parseBbox(req.query.bbox) : null;
+    if (!bbox) return res.status(400).json({ ok: false, error: 'bad_bbox', message_ar: 'حدّد منطقة داخل المملكة (bbox=w,s,e,n).' });
+    if (greenRegions.tooLarge(bbox)) {
+      return res.status(400).json({ ok: false, error: 'bbox_too_large', message_ar: 'المنطقة كبيرة، صغّرها إلى ٣ درجات × ٣ درجات أو أقل.' });
+    }
+    const body = await greenRegions.regions({ bbox, includeFarms: req.query.include_farms === '1' });
+    if (!body.ok) {
+      res.set('Cache-Control', 'no-store');
+      res.set('Retry-After', String(body.retry_after_s || 30));
+      return res.status(202).json(body);
+    }
+    return sendJson(req, res, body, body.stale ? 60 : 600);
+  }));
+
   router.get('/weather/green/tile/:z/:x/:y.png', wrap(async (req, res) => {
     return sendTile(res, await green.tile(int(req.params.z), int(req.params.x), int(req.params.y)), 3600);
   }));
@@ -189,6 +209,13 @@ module.exports.startWarm = () => {
   const runClouds = () => clouds.warm().catch(() => {});
   setTimeout(runClouds, 5_000).unref();
   setInterval(runClouds, 5 * 60_000).unref();
+  /* «أقرب ربيع»: keep a last-good answer for the key boxes (Qassim first) so no phone ever waits on NASA. */
+  if (process.env.GREEN_REGIONS_WARM !== '0') {
+    const runRegions = () => greenRegions.warmRegions().catch(() => {});
+    setTimeout(runRegions, 45_000).unref();
+    setTimeout(runRegions, 4 * 60_000).unref(); // again once the greenness pictures are surely in
+    setInterval(runRegions, 3 * 3600_000).unref();
+  }
   /* «السحاب يمشي وين؟»: keep a last-good window for the key cells (Qassim first), so no request is ever cold. */
   if (process.env.CLOUD_OUTLOOK_WARM !== '0') {
     const runOutlook = () => cloudOutlook.warmOutlook().catch(() => {});
