@@ -414,6 +414,7 @@
 		A2AE10BAB94101F5D5AB58B3 /* MediaViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F5993C0F0F60CC8AE723E7A /* MediaViews.swift */; };
 		A37E8B1D950B1FFE39C69A24 /* AlwaysLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B192EF8661150F1AD7319221 /* AlwaysLiveTests.swift */; };
 		A40E031E53B785E3B4ADB5A1 /* intro-score.m4a in Resources */ = {isa = PBXBuildFile; fileRef = BE4DDA7CF82DF4BA61AEF4D1 /* intro-score.m4a */; };
+		A4BCBD4B3C5D738C1AF853C0 /* NavRejoin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D7A7BAF19A6034E55F3A139 /* NavRejoin.swift */; };
 		A5E8ED3F4BD60EAE89A4B616 /* CampSuggestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1FD44E9AEFDE68A1AD8C33C /* CampSuggestSheet.swift */; };
 		A7F4AD5D6CF4BCD5C02A66F5 /* Tajawal-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2131F99E5536E594F29D904 /* Tajawal-Regular.ttf */; };
 		A807800E233BEB9EBDA2D968 /* NavPictureInPicture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DB7E17BECD126DB7A02890D /* NavPictureInPicture.swift */; };
@@ -585,6 +586,7 @@
 		ECE110260157B7D1C1846BCF /* YouTubeLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31FFBAC2CB2F8F7492FDCF05 /* YouTubeLink.swift */; };
 		ED6D175FC9CA16C2A063A563 /* ExploreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6558BFB75AEEDE9786B61197 /* ExploreTests.swift */; };
 		ED70ADD0AABE3D5CC74F14DE /* Tajawal-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */; };
+		EE01C410F54C268C92E20A2F /* NavConnectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 466F7F9E01C54F8F7E60385A /* NavConnectorTests.swift */; };
 		EE133A4EEAB990C0B47A68C7 /* Vehicle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2A85914500826197C7FB0F /* Vehicle.swift */; };
 		EE4C6E9A9111813F2B32CA5D /* SaryInputs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F06019237C8C995F9E23ABB /* SaryInputs.swift */; };
 		EF4D309AF067FE4352114398 /* RoadSnap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */; };
@@ -770,6 +772,7 @@
 		2CCC91C98DF0E4D15B63D3EC /* EnjadUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnjadUITests.swift; sourceTree = "<group>"; };
 		2D15C0180B74A77828B624AD /* TripHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripHeader.swift; sourceTree = "<group>"; };
 		2D77AB2FE12C808F3B14703D /* DestinationCompassView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationCompassView.swift; sourceTree = "<group>"; };
+		2D7A7BAF19A6034E55F3A139 /* NavRejoin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavRejoin.swift; sourceTree = "<group>"; };
 		2D946A6C4BA372259FDBA0CB /* OutingSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingSheets.swift; sourceTree = "<group>"; };
 		2DED3769D02399F05F0B28F1 /* LiveOutingController+FixWait.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveOutingController+FixWait.swift"; sourceTree = "<group>"; };
 		2E6DA5CD2131BB21430FC238 /* StoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryTests.swift; sourceTree = "<group>"; };
@@ -835,6 +838,7 @@
 		44FCA409C1EA244DFDF28518 /* LiveEndedUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEndedUITests.swift; sourceTree = "<group>"; };
 		451DB4BDF5127BA1A32183E3 /* SaryVoice */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SaryVoice; path = Resources/SaryVoice; sourceTree = SOURCE_ROOT; };
 		4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyTests.swift; sourceTree = "<group>"; };
+		466F7F9E01C54F8F7E60385A /* NavConnectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavConnectorTests.swift; sourceTree = "<group>"; };
 		46E9A24AE0838E89CB099C32 /* HiResSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiResSettings.swift; sourceTree = "<group>"; };
 		471FE3D33FBD794FC1A7E01C /* VoiceNotesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceNotesUITests.swift; sourceTree = "<group>"; };
 		4848F0CE919477A276D09440 /* NavPromptBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavPromptBudgetTests.swift; sourceTree = "<group>"; };
@@ -1389,6 +1393,7 @@
 				7E93B21DF625D320A704ACF1 /* NavOptionsSheet.swift */,
 				6DB7E17BECD126DB7A02890D /* NavPictureInPicture.swift */,
 				E6A1A341CA1EBEB68894BA94 /* NavPromptTiming.swift */,
+				2D7A7BAF19A6034E55F3A139 /* NavRejoin.swift */,
 				4E4DA569491A9F892B75F507 /* NavRouting.swift */,
 				B0FB42D448CC3008D403F34D /* NavSession.swift */,
 				09CC2A7D1B405A7068A2C693 /* NavTargets.swift */,
@@ -1725,6 +1730,7 @@
 				6A9F72A4E7942FD403937496 /* MapVisualsTests.swift */,
 				2E8157241C66D62BF5D9F505 /* MediaTests.swift */,
 				8723F363C9B425AF658764E3 /* MemberSilenceTests.swift */,
+				466F7F9E01C54F8F7E60385A /* NavConnectorTests.swift */,
 				5CBE2BEF803804412018999A /* NavDeviceTraceTests.swift */,
 				FE9BC401E005AFE8C3788F3C /* NavETATests.swift */,
 				16F28414F943B3349E130B6F /* NavigationTests.swift */,
@@ -2816,6 +2822,7 @@
 				937BD488B8CF7F675E025386 /* MapVisualsTests.swift in Sources */,
 				4BA4A96DCCC4A72FE59AF238 /* MediaTests.swift in Sources */,
 				0581A59CAA10795150F85050 /* MemberSilenceTests.swift in Sources */,
+				EE01C410F54C268C92E20A2F /* NavConnectorTests.swift in Sources */,
 				A8F89144E5681E7CF7E290B7 /* NavDeviceTraceTests.swift in Sources */,
 				235C2F94568E11CD370A89F6 /* NavETATests.swift in Sources */,
 				3D8EF5F74D8A6181A2CBD867 /* NavPromptBudgetTests.swift in Sources */,
@@ -3059,6 +3066,7 @@
 				B03944730428454F4F738462 /* NavOptionsSheet.swift in Sources */,
 				A807800E233BEB9EBDA2D968 /* NavPictureInPicture.swift in Sources */,
 				C4934B1F49DD44C1EE865DCD /* NavPromptTiming.swift in Sources */,
+				A4BCBD4B3C5D738C1AF853C0 /* NavRejoin.swift in Sources */,
 				A161B401ABEDFA53A89FCBC9 /* NavRouting.swift in Sources */,
 				9E79D9373490DDA940293CB7 /* NavSession.swift in Sources */,
 				73A75CCABECCE3E63B17E334 /* NavTargets.swift in Sources */,

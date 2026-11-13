@@ -33,6 +33,8 @@ struct MapNavDrawing: Equatable {
     var routes: [Line] = []
     /// From the road's end to the target (straight, dashed). Never a road.
     var offRoad: [LngLat]? = nil
+    /// From the car to the nearest point of the route while it is off the track (dashed, same layer).
+    var connector: [LngLat]? = nil
     var target: LngLat? = nil
     var targetName = ""
     /// «آخر موقع معروف · قبل ١٤ د» under the name for a last-known target (never shown as live).
@@ -51,7 +53,7 @@ struct MapNavDrawing: Equatable {
     /// Bumps to re-run a one-shot `fit`.
     var cameraKey = 0
 
-    var isEmpty: Bool { routes.isEmpty && offRoad == nil && target == nil }
+    var isEmpty: Bool { routes.isEmpty && offRoad == nil && connector == nil && target == nil }
 }
 
 /// Which navigation GeoJSON sources must be sent again (pure, unit-tested). During guidance the
@@ -67,7 +69,7 @@ struct NavSourceChanges: Equatable {
     /// `drawn`: what the sources hold now; nil when unknown (new style, new layers): everything.
     static func between(drawn: MapNavDrawing?, next: MapNavDrawing) -> NavSourceChanges {
         guard let drawn else { return .all }
-        return NavSourceChanges(routes: drawn.routes != next.routes, offRoad: drawn.offRoad != next.offRoad,
+        return NavSourceChanges(routes: drawn.routes != next.routes, offRoad: drawn.offRoad != next.offRoad || drawn.connector != next.connector,
                                 maneuver: drawn.maneuver != next.maneuver)
     }
 }
@@ -381,6 +383,7 @@ final class NavMapDrawer {
         if changes.offRoad {
             var off: [Feature] = []
             if let o = drawing.offRoad, o.count >= 2 { off.append(Feature(geometry: .lineString(LineString(o.map(\.coordinate))))) }
+            if let c = drawing.connector, c.count >= 2 { off.append(Feature(geometry: .lineString(LineString(c.map(\.coordinate))))) }
             m.updateGeoJSONSource(withId: Self.offSource, geoJSON: .featureCollection(FeatureCollection(features: off)))
         }
         if changes.maneuver {

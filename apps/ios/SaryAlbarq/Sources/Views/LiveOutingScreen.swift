@@ -96,7 +96,7 @@ struct LiveOutingScreen: View {
                     onLongPress: { controller.planLongPress($0, at: $1) },
                     onWaterways: { controller.weather.setWaterways($0) },
                     nav: controller.mapNav,
-                    onSelectRoute: { controller.nav.select($0) },
+                    onSelectRoute: { if controller.nav.phase == .planning { controller.nav.select($0) } },
                     /* The chosen layer and the 3D view are exploration's; the trip map stays on satellite
                      * (the layer offline areas always cover). */
                     layer: exploring ? controller.mapLayer : .satellite,

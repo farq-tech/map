@@ -647,6 +647,9 @@ struct OutingMapboxView: UIViewRepresentable {
                 try? m.addSource(withId: "mapbox-dem", properties: ["type": "raster-dem", "url": "mapbox://mapbox.mapbox-terrain-dem-v1", "tileSize": 512, "maxzoom": 14])
             }
             try? m.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": terrainExaggeration])
+            /* Real elevations for the off-route shortcut (`NavRejoin`): nil while the tile is not loaded. */
+            let ex = terrainExaggeration
+            NavRejoinLive.elevation = { [weak m] p in m?.elevation(at: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lng)).map { $0 / ex } }
             if layer == .topo, m.layerExists(withId: TopoLabels.contourLabelLayer) {
                 /* Contour heights in metres with Arabic-Indic digits («٦٢٠ م»), from the style's own data. */
                 try? m.setLayerProperty(for: TopoLabels.contourLabelLayer, property: "text-field", value: TopoLabels.textField)
