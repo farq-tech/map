@@ -376,6 +376,19 @@ struct LiveSearchSheet: View {
             searching = false
             return
         }
+        /* «أي رابط، أي عنوان»: a short / name-only maps link or a national address code is resolved (LinkResolver). */
+        if LinkResolver.needsResolution(t) {
+            searching = true
+            let linkNear = self.near
+            job = Task {
+                let r = await LinkResolver.lookup(t, near: linkNear)
+                guard !Task.isCancelled else { return }
+                results = r.places
+                searchError = r.error
+                searching = false
+            }
+            return
+        }
         searching = true
         let near = self.near
         job = Task {
