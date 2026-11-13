@@ -94,6 +94,7 @@ struct SaryFoundationButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let p = theme.palette
         let primary = kind == .primary
+        let tall = primary || kind == .destructive
         let shape = RoundedRectangle(cornerRadius: SaryRadius.control, style: .continuous)
         configuration.label
             .saryType(.headline)
@@ -101,11 +102,12 @@ struct SaryFoundationButtonStyle: ButtonStyle {
             .multilineTextAlignment(.center)
             .padding(.horizontal, SarySpace.l.rawValue)
             .frame(maxWidth: .infinity,
-                   minHeight: max(primary ? SaryMetrics.primaryHeight : SaryMetrics.secondaryHeight,
+                   minHeight: max(tall ? SaryMetrics.primaryHeight : SaryMetrics.secondaryHeight,
                                   theme.minTarget))
-            .foregroundStyle(primary ? p.onAccent : p.textPrimary)
+            .foregroundStyle(primary ? p.onAccent : (kind == .destructive ? p.onEmergency : p.textPrimary))
             .background {
                 if primary { shape.fill(p.accent) }
+                else if kind == .destructive { shape.fill(p.emergency) }
                 else { shape.fill(p.surface).overlay(shape.strokeBorder(p.stroke, lineWidth: 1)) }
             }
             .contentShape(shape)

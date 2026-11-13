@@ -34,9 +34,72 @@ struct EnjadSheet: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
+        if NewUI.enabled { newBody } else { legacyBody }
+    }
+
+    /// New interface (Build 47, group C): «طوارئ»; one red button per screen (solo: «اتصل ٩١١», else
+    /// «اطلب إنجاد»), the rest are calm secondary rows; the message is a card.
+    private var newBody: some View {
         let p = theme.palette
         let text = Enjad.message(input)
-        SaryPage(title: official911First ? SoloCopy.sosTitle : "اطلب إنجاد", subtitle: official911First ? nil : "جمعية إنجاد للبحث والإنقاذ", close: close) {
+        return SaryScreenScaffold(title: official911First ? SoloCopy.sosTitle : "اطلب إنجاد",
+                           subtitle: official911First ? nil : "جمعية إنجاد للبحث والإنقاذ",
+                           closeID: "enjad.close", onClose: close) {
+          VStack(alignment: .leading, spacing: SarySpace.l.rawValue) {
+            if official911First {
+                SaryListGroup {
+Group {
+                    Text(SoloCopy.sosNote).saryType(.body).foregroundStyle(p.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("solo.sos.note")
+                }
+.padding(SarySpace.m.rawValue).frame(maxWidth: .infinity, alignment: .leading)
+}
+                Button { openURL(Enjad.officialCallURL) } label: { SaryButtonLabel(title: SoloCopy.call911, systemImage: SaryIcon.phone) }.buttonStyle(.sary(.destructive)).accessibilityIdentifier("solo.sos.call911")
+            }
+            if !Enjad.hasPhone(input) {
+                SaryBanner(text: "رقم جوالك غير مضاف: أضفه قبل الإرسال ليتواصلون معك، أو اكتبه في الرسالة بنفسك.", tone: .warning, systemImage: "phone.badge.plus")
+                SarySecondaryButton("أضف رقمي", systemImage: "phone.badge.plus", id: "enjad.addPhone", action: addPhone)
+            }
+            let whatsapp = { () -> Void in
+                let wa = UIApplication.shared.canOpenURL(Enjad.whatsappScheme)
+                openURL(Enjad.sendURL(text, whatsappInstalled: wa, online: online))
+            }
+            if official911First {
+                SarySecondaryButton("اطلب إنجاد (واتساب)", systemImage: "message.fill", id: "enjad.whatsapp", action: whatsapp)
+            } else {
+                Button(action: whatsapp) { SaryButtonLabel(title: "اطلب إنجاد (واتساب)", systemImage: "message.fill") }.buttonStyle(SaryFoundationButtonStyle(kind: .destructive)).accessibilityIdentifier("enjad.whatsapp")
+            }
+            SarySecondaryButton("اتصل بإنجاد", systemImage: "phone.fill", id: "enjad.call") { openURL(Enjad.callURL) }
+            Button { openURL(Enjad.smsURL(text)) } label: { SaryButtonLabel(title: "أرسل رسالة نصية بدل واتساب", systemImage: "text.bubble") }
+                .buttonStyle(.sary(.plain))
+                .accessibilityIdentifier("enjad.sms")
+            VStack(alignment: .leading, spacing: SarySpace.s.rawValue) {
+                Text("الرسالة").saryType(.headline).foregroundStyle(p.textPrimary)
+                SaryListGroup {
+Group {
+                    Text(text).saryType(.body).foregroundStyle(p.textPrimary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("enjad.message")
+                }
+.padding(SarySpace.m.rawValue).frame(maxWidth: .infinity, alignment: .leading)
+}
+                Text("تفتح في واتساب (أو الرسائل) جاهزة، وأنت اللي ترسلها. ما نرسل شيئًا عنك.")
+                    .saryType(.caption).foregroundStyle(p.textTertiary)
+            }
+            Text(Enjad.note).saryType(.caption).foregroundStyle(p.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("enjad.note")
+          }
+        }
+        .accessibilityIdentifier("enjad.sheet")
+    }
+
+    private var legacyBody: some View {
+        let p = theme.palette
+        let text = Enjad.message(input)
+        return SaryPage(title: official911First ? SoloCopy.sosTitle : "اطلب إنجاد", subtitle: official911First ? nil : "جمعية إنجاد للبحث والإنقاذ", close: close) {
             if official911First {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     Text(SoloCopy.sosNote).saryText(.subhead, weight: .medium).foregroundStyle(p.textSecondary)

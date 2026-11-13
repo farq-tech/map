@@ -333,7 +333,7 @@ struct ReturnTimerCard: View {
                     .accessibilityIdentifier("timer-unavailable")
             case .none:
                 HStack(spacing: theme.space(.m)) {
-                    header("مؤقت الرجوع", safety.localOnly ? "منبّه على جوالك يذكّرك بوقت رجوعك. ما يوصل لأحد." : "قل لأحد من أهلك متى ترجع. إذا تأخرت يوصله تنبيه.")
+                    header("مؤقت الرجوع", safety.localOnly ? (NewUI.enabled ? "منبّه على جوالك فقط. يذكّرك بوقت رجوعك، وما يوصل لأحد." : "منبّه على جوالك يذكّرك بوقت رجوعك. ما يوصل لأحد.") : "قل لأحد من أهلك متى ترجع. إذا تأخرت يوصله تنبيه.")
                     Button { safety.editorOpen = true } label: { SaryButtonLabel(title: "اضبط", systemImage: "plus") }
                         .buttonStyle(.sary(.primary, width: .hug, compact: true))
                         .accessibilityIdentifier("timer-set")
@@ -418,9 +418,93 @@ struct ReturnTimerEditor: View {
     @State private var contact = ""
 
     var body: some View {
+        if NewUI.enabled { newBody } else { legacyBody }
+    }
+
+    /// New interface (Build 47, group C): the unified window title, the ONE primary «اضبط المنبّه» /
+    /// «اضبط وأرسل الرابط» pinned at the bottom; a solo outing says «منبّه على جوالك فقط».
+    private var newBody: some View {
         let n = safety.now()
         let p = theme.palette
-        ScrollView {
+        return SaryScreenScaffold(title: "مؤقت الرجوع", closeID: "timer-close", onClose: { safety.editorOpen = false }) {
+          VStack(alignment: .leading, spacing: SarySpace.l.rawValue) {
+            Text(safety.localOnly
+                 ? "منبّه على جوالك فقط: يذكّرك بوقت رجوعك، وما يوصل لأحد. إذا تحتاج مساعدة اتصل بـ٩١١."
+                 : "حدد متى ترجع، وأرسل رابطًا لأحد من أهلك. إذا ما ضغطت «وصلت» قبل الوقت، يوصله تنبيه.")
+                .saryType(.body).foregroundStyle(p.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("timer-note")
+            VStack(alignment: .leading, spacing: SarySpace.s.rawValue) {
+                Text("وقت الرجوع").saryType(.headline).foregroundStyle(p.textPrimary)
+                HStack(spacing: SarySpace.s.rawValue) {
+                    ForEach([2, 3, 5], id: \.self) { h in
+                        Button(SafetyFormat.span(minutes: h * 60)) { due = ReturnTimerLogic.clampDue(n.addingTimeInterval(TimeInterval(h * 3600)), now: n) }
+                            .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                            .accessibilityIdentifier("timer-quick-\(h)")
+                    }
+                }
+                SaryListGroup {
+Group {
+                    VStack(alignment: .leading, spacing: SarySpace.s.rawValue) {
+                        DatePicker("اليوم والساعة", selection: $due, in: n.addingTimeInterval(ReturnTimerLogic.minLead)...n.addingTimeInterval(ReturnTimerLogic.maxLead),
+                                   displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.compact)
+                            .environment(\.locale, Locale(identifier: "ar-SA@calendar=gregorian;numbers=arab"))
+                            .saryType(.headline)
+                            .tint(p.accent)
+                            .accessibilityIdentifier("timer-due")
+                        Text("\(SafetyFormat.dueLabel(due, now: n)) · \(SafetyFormat.remaining(until: due, now: n))")
+                            .saryType(.numeric).foregroundStyle(p.accentText)
+                    }
+                }
+.padding(SarySpace.m.rawValue).frame(maxWidth: .infinity, alignment: .leading)
+}
+            }
+            if !safety.localOnly {
+                SaryTextField(title: "اسم اللي يتابعك", placeholder: "مثل: أم فهد", text: $contact, id: "timer-contact", maxLength: ReturnTimerLogic.contactMax)
+                VStack(alignment: .leading, spacing: SarySpace.s.rawValue) {
+                    Text("وش يشوف من الرابط؟").saryType(.headline).foregroundStyle(p.textPrimary)
+                    SaryListGroup {
+Group {
+                        VStack(alignment: .leading, spacing: SarySpace.m.rawValue) {
+                            bullet("person.2.fill", "اسم الطلعة وأسماء اللي معك ووقت رجوعك.")
+                            bullet("eye.slash.fill", "ما يشوف مواقعكم ما دام الوقت ما خلص.")
+                            bullet(SafetyIcon.overdue, "إذا تأخرتوا يوصله تنبيه، ويظهر له آخر موقع معروف وقت التأخير لمن يشارك موقعه.")
+                            bullet(SafetyIcon.arrived, "إذا ضغطت «وصلت» يوصله «وصلوا بالسلامة».")
+                        }
+                    }
+.padding(SarySpace.m.rawValue).frame(maxWidth: .infinity, alignment: .leading)
+}
+                }
+            }
+            Text("نذكّرك قبل الموعد بـ٣٠ دقيقة و١٠ دقائق.").saryType(.caption).foregroundStyle(p.textTertiary)
+          }
+        } bottom: {
+            Button { Task { await safety.arm(due: due, contact: contact) } } label: {
+                SaryButtonLabel(title: safety.localOnly ? "اضبط المنبّه" : "اضبط وأرسل الرابط",
+                                systemImage: safety.localOnly ? SafetyIcon.timer : SaryIcon.share, busy: safety.timerBusy, busyTitle: "جارٍ الضبط…")
+            }
+            .buttonStyle(SaryFoundationButtonStyle(kind: .primary))
+            .disabled((!safety.localOnly && ReturnTimerLogic.cleanContact(contact) == nil) || safety.timerBusy)
+            .accessibilityIdentifier("timer-save")
+        }
+        .onAppear { prefill(n) }
+    }
+
+    private func prefill(_ n: Date) {
+        if let t = safety.timer, t.state == .armed || t.state == .overdue {
+            contact = t.contact_name
+            due = ReturnTimerLogic.clampDue(ReturnTimerLogic.due(t) ?? ReturnTimerLogic.suggestedDue(now: n), now: n)
+        } else {
+            due = ReturnTimerLogic.suggestedDue(now: n)
+            if let last = safety.timer?.contact_name, !last.isEmpty { contact = last }
+        }
+    }
+
+    private var legacyBody: some View {
+        let n = safety.now()
+        let p = theme.palette
+        return ScrollView {
             VStack(alignment: .leading, spacing: theme.space(.l)) {
                 HStack {
                     Text("مؤقت الرجوع").saryText(.title2).foregroundStyle(p.textPrimary)

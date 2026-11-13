@@ -140,7 +140,7 @@ struct ChatHomeView: View {
 
     private var list: some View {
         let p = theme.palette
-        return SaryPage(title: "المحادثات", subtitle: context.outingName, close: close) {
+        return ChatHomePage(outingName: context.outingName, count: context.members.count, close: close) {
             if context.ended {
                 SaryInlineMessage(text: retentionText, tone: .info).accessibilityIdentifier("chat.retention")
             }
@@ -264,8 +264,14 @@ struct ChatThreadView: View {
                                 .accessibilityIdentifier("chat.older")
                         }
                         if thread.loaded && thread.messages.isEmpty {
-                            Text(with.isGroup ? "ما فيه رسائل بعد. قل هلا 👋" : "ابدأ المحادثة مع \(title).")
-                                .saryText(.subhead).foregroundStyle(p.textSecondary).padding(.top, theme.space(.xl))
+                            if NewUI.enabled {
+                                SaryStateView(kind: .empty(title: with.isGroup ? "ما فيه رسائل بعد" : "ابدأ المحادثة مع \(title)",
+                                                           message: "اكتب أول رسالة", systemImage: "bubble.left.and.bubble.right"))
+                                    .accessibilityIdentifier("chat.empty")
+                            } else {
+                                Text(with.isGroup ? "ما فيه رسائل بعد. قل هلا 👋" : "ابدأ المحادثة مع \(title).")
+                                    .saryText(.subhead).foregroundStyle(p.textSecondary).padding(.top, theme.space(.xl))
+                            }
                         }
                         ForEach(thread.messages, id: \.key) { m in
                             bubble(m).id(m.key)
@@ -321,6 +327,8 @@ struct ChatThreadView: View {
             settled = false
         }
         .onChange(of: context.moving) { _, moving in if moving { focused = false } }
+        /* New UI: the container id must not replace the ids of the controls inside (chat.back, chat.close…). */
+        .modifier(ContainChildrenIfNewUI())
         .accessibilityIdentifier("chat.thread")
     }
 
@@ -332,8 +340,8 @@ struct ChatThreadView: View {
                 SaryAvatar(name: title, color: context.color(peer), size: 32)
             }
             VStack(alignment: .leading, spacing: 0) {
-                Text(title).saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
-                Text(with.isGroup ? "\(SaryFormat.digits(String(context.members.count))) أعضاء" : "رسالة خاصة")
+                Text(title).saryText(NewUI.enabled ? .title2 : .headline, weight: .bold).foregroundStyle(p.textPrimary).saryLongName(lines: 1, minScale: 0.7)
+                Text(with.isGroup ? (NewUI.enabled ? "\(SaryFormat.digits(String(context.members.count))) في الطلعة" : "\(SaryFormat.digits(String(context.members.count))) أعضاء") : "رسالة خاصة")
                     .saryText(.caption).foregroundStyle(p.textSecondary)
             }
             Spacer(minLength: 0)
@@ -502,7 +510,7 @@ struct ChatThreadView: View {
                 quickRow
                 if ChatRules.canType(moving: context.moving) {
                     HStack(alignment: .bottom, spacing: theme.space(.s)) {
-                        TextField("اكتب رسالة…", text: $draft, axis: .vertical)
+                        TextField(NewUI.enabled && thread.loaded && thread.messages.isEmpty ? "اكتب أول رسالة…" : "اكتب رسالة…", text: $draft, axis: .vertical)
                             .lineLimit(1...5)
                             .saryText(.body)
                             .foregroundStyle(p.textPrimary)
@@ -591,5 +599,13 @@ struct ChatThreadView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
+    }
+}
+
+
+/// New UI only: keeps child accessibility ids under a container id; the old UI is left exactly as it was.
+private struct ContainChildrenIfNewUI: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if NewUI.enabled { content.accessibilityElement(children: .contain) } else { content }
     }
 }
