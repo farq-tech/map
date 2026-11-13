@@ -10,6 +10,9 @@ struct PersonalInvitesSection<Legacy: View>: View {
     @ObservedObject var model: PersonalInvitesModel
     var canLead: Bool
     var ended: Bool = false
+    /// «اختر من جهات الاتصال» is the accent button; false where the screen already has its primary
+    /// (the create wizard's pinned «ابدأ الطلعة»).
+    var pickIsPrimary = true
     @ViewBuilder var legacy: Legacy
     @Environment(\.sary) private var theme
     @State private var picking = false
@@ -30,7 +33,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                     Button {
                         if let s = ContactPicker.stub { adding = s } else { picking = true }
                     } label: { SaryButtonLabel(title: "اختر من جهات الاتصال", systemImage: "person.crop.circle.badge.plus") }
-                        .buttonStyle(.sary(.primary))
+                        .buttonStyle(.sary(pickIsPrimary ? .primary : .secondary))
                         .accessibilityIdentifier("invite.pickContact")
                     Button { adding = PickedContact(name: "", phone: nil) } label: {
                         SaryButtonLabel(title: "اكتب الاسم والرقم", systemImage: "keyboard")
@@ -40,7 +43,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                 }
                 if let e = model.errorText { SaryInlineMessage(text: e, tone: .error) }
                 if model.invites.isEmpty {
-                    Text("ما دعيت أحد بعد.").saryText(.footnote).foregroundStyle(p.textTertiary)
+                    SaryInlineState(systemImage: "person.crop.circle.badge.plus", text: ended ? "ما دعيت أحد في هالطلعة." : "ما دعيت أحد بعد. اختر من جهات الاتصال أو اكتب الاسم والرقم.")
                         .accessibilityIdentifier("invite.list.empty")
                 } else {
                     VStack(spacing: 0) {
@@ -86,7 +89,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                             titleVisibility: .visible) {
             Button("ألغِ الدعوة", role: .destructive) { if let i = confirmRevoke { Task { await model.revoke(i) } } }
             Button("إلغاء", role: .cancel) {}
-        } message: { Text("الرابط يتوقف فورًا. تقدر ترسل له دعوة جديدة متى شئت.") }
+        } message: { Text("الرابط يتوقف فورًا. تقدر ترسل له دعوة جديدة متى ما بغيت.") }
         .task { await model.load() }
     }
 
@@ -95,7 +98,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
         let busy = model.busy.contains(i.id)
         return HStack(spacing: theme.space(.m)) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(i.invitee_name).saryText(.bodyStrong).foregroundStyle(p.textPrimary).lineLimit(1)
+                Text(i.invitee_name).saryText(.bodyStrong).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                 HStack(spacing: 6) {
                     SaryInviteStatusPill(text: PersonalInviteStatusText.label(i), tone: PersonalInviteStatusText.tone(i))
                         .accessibilityIdentifier("invite.status.\(i.status.rawValue)")
@@ -122,7 +125,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                         Text("انضم بهذا الاسم")
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle").font(.system(size: 22)).foregroundStyle(p.accentText)
+                    Image(systemName: "ellipsis.circle").saryGlyph(22, relativeTo: .title3).foregroundStyle(p.accentText)
                         .frame(width: theme.minTarget, height: theme.minTarget)
                 }
                 .disabled(busy)

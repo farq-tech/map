@@ -54,7 +54,9 @@ struct RecoveryRestoreScreen: View {
             case .restored(let name):
                 VStack(spacing: theme.space(.l)) {
                     Image(systemName: SaryIcon.checkCircle).font(.system(size: 56)).foregroundStyle(p.liveText)
+                        .accessibilityHidden(true)
                     Text("أهلًا \(name)").saryText(.title, weight: .bold).foregroundStyle(p.textPrimary)
+                        .lineLimit(2).minimumScaleFactor(0.85)
                     Text("رجعت طلعاتك على هذا الجهاز. جوالك القديم خرج من الحساب، والرمز الذي استخدمته انتهى — احفظ رمزًا جديدًا من «ملفي».")
                         .saryText(.callout).foregroundStyle(p.textSecondary).multilineTextAlignment(.center)
                     Button(action: close) { SaryButtonLabel(title: "متابعة") }
@@ -83,7 +85,7 @@ struct RecoveryRestoreScreen: View {
                 SarySection(title: "من وين أجيب الرمز؟") {
                     VStack(alignment: .leading, spacing: theme.space(.s)) {
                         Text("في جوالك القديم: «ملفي» ← «رمز الاسترجاع». يظهر الرمز ورمز QR مرة واحدة عند إنشائه.")
-                        Text("إذا ما حفظت رمزًا من قبل، لا يمكن استرجاع الحساب — ابدأ باسم جديد، وأمير الطلعة يرسل لك دعوة.")
+                        Text("إذا ما حفظت رمز من قبل، ما نقدر نسترجع الحساب. ابدأ باسم جديد، وأمير الطلعة يرسل لك دعوة.")
                     }
                     .saryText(.subhead)
                     .foregroundStyle(p.textSecondary)
@@ -95,7 +97,7 @@ struct RecoveryRestoreScreen: View {
             QRScanSheet(title: "امسح رمز الاسترجاع", hint: "وجّه الكاميرا لرمز QR في «ملفي» على جوالك القديم.") { text in
                 scanning = false
                 code = RecoveryCodeFormat.grouped(text)
-                if RecoveryCodeFormat.isComplete(text) { submit(text) } else { phase = .error("هذا الرمز ليس رمز استرجاع.") }
+                if RecoveryCodeFormat.isComplete(text) { submit(text) } else { phase = .error("هذا مو رمز استرجاع. امسح الرمز اللي في «ملفي» بجوالك القديم.") }
             } cancel: { scanning = false }
             .rtl()
         }
@@ -110,7 +112,7 @@ struct RecoveryRestoreScreen: View {
             } catch let e as OutingAPIError {
                 phase = .error(e.arabic)
             } catch {
-                phase = .error("تعذّر الاسترجاع. أعد المحاولة.")
+                phase = .error("ما قدرنا نسترجع الحساب. جرّب مرة ثانية.")
             }
         }
     }
@@ -210,9 +212,10 @@ struct QRScanSheet: View {
             VStack(spacing: theme.space(.l)) {
                 Group {
                     if AVCaptureDevice.default(for: .video) == nil {
-                        SaryStateView(kind: .error(title: "ما فيه كاميرا", message: "اكتب الرمز بيدك بدل المسح."))
+                        SaryStateView(kind: .error(title: "ما فيه كاميرا", message: "اكتب الرمز بيدك بدل المسح."),
+                                      actionTitle: "اكتب الرمز بيدك", actionIcon: "keyboard", action: cancel)
                     } else if status == .denied || status == .restricted {
-                        SaryStateView(kind: .error(title: "الكاميرا غير مسموحة", message: "اسمح بها من إعدادات iOS ← سَرى البارق، أو اكتب الرمز بيدك."),
+                        SaryStateView(kind: .error(title: "الكاميرا مقفلة عن التطبيق", message: "اسمح بها من إعدادات iOS ← سَرى البارق، أو اكتب الرمز بيدك."),
                                       actionTitle: "افتح الإعدادات") {
                             if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
                         }

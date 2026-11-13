@@ -26,7 +26,7 @@ struct OutingDetailsView: View {
             case .loading:
                 SaryStateView(kind: .loading("نجيب تفاصيل الطلعة…"))
             case .failed(let m):
-                SaryStateView(kind: model.online ? .error(title: "تعذّر التحميل", message: m) : .offline(message: nil),
+                SaryStateView(kind: model.online ? .error(title: "ما قدرنا نجيب الطلعة", message: m) : .offline(message: nil),
                               actionTitle: "حاول مرة ثانية", actionID: "details.retry") { Task { await load() } }
             case .loaded(let s):
                 HStack(spacing: theme.space(.s)) {
@@ -59,6 +59,7 @@ struct OutingDetailsView: View {
                             SaryAvatar(name: m.display_name, color: colors[m.user_id] ?? CarColors.palette[i % CarColors.palette.count], photo: AvatarCodec.image(from: m.avatar), size: 36)
                             Text(m.user_id == s.me.user_id ? "\(m.display_name) (أنت)" : m.display_name)
                                 .saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                                .lineLimit(1).minimumScaleFactor(0.85)
                             Spacer()
                             if m.user_id == s.outing.owner_id { SaryRoleChip(role: .leader) } else if m.co_leader == true { SaryRoleChip(role: .coLeader) }
                         }
@@ -111,6 +112,7 @@ struct OutingDetailsView: View {
             Text(k).saryText(.body).foregroundStyle(theme.palette.textSecondary)
             Spacer()
             Text(v).saryText(.body, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.85)
         }
         .frame(minHeight: theme.minTarget)
     }
@@ -155,7 +157,7 @@ struct TripSummaryView: View {
             case .loading:
                 SaryStateView(kind: .loading("نجهّز الملخص…"))
             case .failed(let m):
-                SaryStateView(kind: model.online ? .error(title: "تعذّر التحميل", message: m) : .offline(message: nil),
+                SaryStateView(kind: model.online ? .error(title: "ما قدرنا نجيب الملخص", message: m) : .offline(message: nil),
                               actionTitle: "حاول مرة ثانية", actionID: "summary.retry") { Task { await load() } }
             case .loaded(let s):
                 let shares = s.summaries ?? []
@@ -185,13 +187,14 @@ struct TripSummaryView: View {
                     TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
                     SarySection(title: "ملخصات شاركها الأصدقاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                         if shares.isEmpty {
-                            Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
+                            SaryInlineState(systemImage: "person.2.slash", text: "ما شارك أحد ملخصه للحين. أول ما يشاركون يطلع هنا.")
                         }
                         ForEach(Array(shares.enumerated()), id: \.element.id) { i, t in
                             if i > 0 { SaryDivider() }
                             HStack(spacing: theme.space(.m)) {
                                 Text(SaryFormat.number(i + 1)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textTertiary).frame(width: 18)
                                 Text(t.user_id == s.me.user_id ? "\(t.display_name) (أنت)" : t.display_name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                                    .lineLimit(1).minimumScaleFactor(0.85)
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text(SaryFormat.distance(meters: t.distance_m)).saryNumber(.body, weight: .bold).foregroundStyle(p.textPrimary)
@@ -298,15 +301,16 @@ struct TripSummaryView: View {
                     } label: { SaryButtonLabel(title: "اسحب ملخصي", busy: busy) }
                         .buttonStyle(.sary(.plainDestructive))
                 } else if local == nil {
-                    Text("ما شاركت موقعك في هذه الطلعة من هذا الجوال، فما فيه ملخص لك.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
+                    SaryInlineState(systemImage: "location.slash", text: "ما شاركت موقعك في هالطلعة من هالجوال، فما فيه ملخص لك.")
                 } else if !open {
-                    Text("مضى أكثر من أسبوع على نهاية الطلعة؛ يبقى ملخصك على جوالك فقط.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
+                    SaryInlineState(systemImage: "lock.fill", text: "مر أكثر من أسبوع على نهاية الطلعة، فيبقى ملخصك على جوالك بس.")
                 } else {
                     Button {
                         busy = true
                         Task { if await model.shareSummary(outingId) != nil { await load() }; busy = false }
                     } label: { SaryButtonLabel(title: "شارك ملخصي مع الأصدقاء", systemImage: "square.and.arrow.up.on.square", busy: busy) }
-                        .buttonStyle(.sary(.primary))
+                        /* Secondary: «اصنع قصة الطلعة» is this page's one primary. */
+                        .buttonStyle(.sary(.secondary))
                         .accessibilityIdentifier("summary.shareMine")
                 }
             }
@@ -329,7 +333,7 @@ struct TripSummaryView: View {
 
     private func stat(_ icon: String, _ k: String, _ v: String) -> some View {
         VStack(alignment: .leading, spacing: theme.space(.xs)) {
-            Image(systemName: icon).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.palette.accentText)
+            Image(systemName: icon).saryGlyph(15, weight: .semibold, relativeTo: .subheadline).foregroundStyle(theme.palette.accentText)
             Text(v).saryNumber(.title2, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(1).minimumScaleFactor(0.7)
             Text(k).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
         }
@@ -534,7 +538,7 @@ struct TripSummarySection: View {
                         if i > 0 { SaryDivider() }
                         HStack(spacing: theme.space(.m)) {
                             Text(SaryFormat.number(i + 1)).saryNumber(.headline, weight: .heavy).foregroundStyle(i == 0 ? p.accentText : p.textTertiary).frame(width: 22)
-                            Text(e.name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                            Text(e.name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                             Spacer()
                             Text(NavText.clock(Date(timeIntervalSince1970: e.atMs / 1000))).saryNumber(.subhead).foregroundStyle(p.textSecondary)
                         }

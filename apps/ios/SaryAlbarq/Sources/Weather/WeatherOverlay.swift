@@ -655,7 +655,8 @@ struct WeatherLegendCard: View {
             Image(systemName: systemImage)
                 .font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
                 .frame(width: 30, height: 30).background(Circle().fill(p.sunken))
-                .contentShape(Circle())
+                /* 30 pt circle, 44 pt touch area (the row keeps its height). */
+                .contentShape(Rectangle().inset(by: -7))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
@@ -738,8 +739,16 @@ struct WeatherLegendCard: View {
                 Text(model.time).saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .accessibilityIdentifier("weather.legend.time")
-                chip("chevron.down", id: "weather.legend.collapse", label: "تصغير البطاقة") { model.cardMode = .collapsed }
-                chip("xmark", id: "weather.legend.hide", label: "إخفاء البطاقة (الطبقة تبقى على الخريطة)") { model.cardMode = .hidden }
+                Button { model.onClose() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
+                        .frame(width: 26, height: 26).background(Circle().fill(p.sunken))
+                        /* 26 pt circle, 44 pt touch area (the row keeps its height). */
+                        .contentShape(Rectangle().inset(by: -9))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("weather.legend.close")
+                .accessibilityLabel(Text("إغلاق طبقة الطقس"))
             }
             if model.kind == .clouds {
                 HStack(spacing: 8) {
@@ -747,6 +756,8 @@ struct WeatherLegendCard: View {
                         Image(systemName: model.playing ? "pause.fill" : "play.fill")
                             .font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentText)
                             .frame(width: 26, height: 26).background(Circle().fill(p.accent.opacity(0.2)))
+                            /* 26 pt circle, 44 pt touch area (the row keeps its height). */
+                            .contentShape(Rectangle().inset(by: -9))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("weather.clouds.playpause")

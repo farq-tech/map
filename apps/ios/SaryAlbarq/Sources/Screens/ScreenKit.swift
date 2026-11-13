@@ -140,13 +140,14 @@ struct SaryNavRow: View {
                 SaryRowIcon(systemImage: systemImage, color: destructive ? p.emergency : tint)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).saryText(.body, weight: .medium).foregroundStyle(destructive ? p.emergencyText : p.textPrimary)
+                        .lineLimit(2).minimumScaleFactor(0.85)
                     if let detail {
                         Text(detail).saryText(.footnote).foregroundStyle(p.textSecondary).multilineTextAlignment(.leading)
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.forward")
-                    .font(.system(size: 13, weight: .bold))
+                Image(systemName: SaryIcon.disclosure)
+                    .saryGlyph(13, weight: .bold, relativeTo: .footnote)
                     .foregroundStyle(p.textTertiary)
                     .accessibilityHidden(true)
             }

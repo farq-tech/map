@@ -304,7 +304,7 @@ struct SaryVoiceBanner: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text(clip.senderName).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text(clip.senderName).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.85)
                     Spacer(minLength: 4)
                     Text(SaryFormat.clock(seconds: playing ? Int(Double(clip.durationSeconds) * progress) : clip.durationSeconds))
                         .saryNumber(.footnote, weight: .medium)
